@@ -5105,7 +5105,7 @@ app.whenReady().then(async () => {
     const sessionpageIdentityDeps = sessionpageIdentityHost.provisionDeps
     emdash.setSessionIdentityHost(sessionpageIdentityHost)
     emdash.setTaskNamer({
-      defaultName: (provider, taken) => sessionpageIdentityHost.defaultTaskName(provider, taken),
+      defaultName: (provider, taken, options) => sessionpageIdentityHost.defaultTaskName(provider, taken, options),
       // A task rename renames its agent: the shell's contacts re-read the published name.
       renameBound: async (sessionId, agentUserId, name, source) => {
         await sessionpageIdentityHost.renameBound(sessionId, agentUserId, name)

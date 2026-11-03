@@ -169,8 +169,14 @@ export async function defaultTaskAgentName(
   taken: readonly string[],
   ownerUserId: string | null,
   env: NodeJS.ProcessEnv = process.env,
+  options: { scoped?: boolean } = {},
 ): Promise<string> {
   const label = getAgentTypeLabel(normalizeAgentType(providerId))
+  // Scoped (`taken` is one project / the implicit task workspace): the account-wide roster and the
+  // account serial floor belong to another visible scope and must not advance this counter.
+  if (options.scoped) {
+    return nextAgentDefaultName([], label, { reservedNames: taken })
+  }
   const roster = await listAgents(env, { includeGuests: true })
   const owned = ownerUserId ? agentsForOwner(roster, ownerUserId) : roster
   const name = nextAgentDefaultName(owned.map((a) => ({ display_name: a.name })), label, {

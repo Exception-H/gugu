@@ -1,4 +1,4 @@
-import { taskNameFor } from '../task-name';
+import { assertNoTaskNameConflict, TaskNameConflictError, taskNameFor } from '../task-name';
 import { mcpLibraryService } from '@main/core/mcp-library/service';
 import type { AgentProviderId } from '@gugu/session-plugins/agents';
 import { eq } from 'drizzle-orm';
@@ -238,7 +238,7 @@ export async function prepareResidentSession(
     id: params.agent.id,
     projectId: params.projectId,
     workspaceId,
-    agentDisplayName: await taskNameFor(params.agent.provider, params.agent.displayName),
+    agentDisplayName: await taskNameFor(params.agent.provider, params.agent.displayName, params.projectId),
     provider: params.agent.provider,
     runtime: params.agent.runtime,
     origin: { kind: 'resident' },
@@ -258,6 +258,18 @@ export function commitResidentSession(
   prepared: PreparedResidentSession,
   tx: DrizzleTx
 ): SessionRow {
+  // A resident agent is created with a user-visible name before any identity exists. Two concurrent
+  // submits carrying the same name must not both land: check inside the same transaction that inserts
+  // the row (the name check and the write share one snapshot; the losing insert throws loudly).
+  const name = prepared.convInsert.config?.agentDisplayName?.trim();
+  if (name) {
+    const rows = tx
+      .select({ id: sessions.id, config: sessions.config })
+      .from(sessions)
+      .where(eq(sessions.projectId, prepared.convInsert.projectId))
+      .all();
+    assertNoTaskNameConflict(rows, name, prepared.convInsert.id, prepared.convInsert.projectId);
+  }
   const [row] = tx.insert(sessions).values(prepared.convInsert).returning().all();
   return row;
 }
@@ -296,9 +308,18 @@ export async function createResidentSession(
   if (!prepared.success) return prepared;
 
   let convRow!: SessionRow;
-  db.transaction((tx) => {
-    convRow = commitResidentSession(prepared.data, tx);
-  });
+  try {
+    db.transaction((tx) => {
+      convRow = commitResidentSession(prepared.data, tx);
+    });
+  } catch (error) {
+    // A duplicate name is a user-facing creation failure, not a half-written row: the transaction has
+    // rolled back, so report it through the same Result channel as project / workspace failures.
+    if (error instanceof TaskNameConflictError) {
+      return err({ type: 'provision-failed', message: error.message });
+    }
+    throw error;
+  }
 
   return ok(finalizeResidentSession(prepared.data, convRow));
 }

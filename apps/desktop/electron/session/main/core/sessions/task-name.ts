@@ -1,8 +1,10 @@
 import type { AgentProviderId } from '@gugu/session-plugins/agents';
 import { listAgents, onAgentsSaved, type LocalAgentRecord } from '@gugu/core/local/state/agents';
 import { agentMayBelongTo, agentOwnerUserId } from '@gugu/core/local/state/agentOwner';
+import { agentDisplayNameScope } from '@gugu/core/shared/agentDefaultName';
 import { db } from '@main/db/client';
 import { sessions } from '@main/db/schema';
+import { eq } from 'drizzle-orm';
 import { SESSIONPAGE_SESSION_CACHE_KEY } from '../sessionpage/sessionpage-session-agent';
 
 /**
@@ -11,12 +13,21 @@ import { SESSIONPAGE_SESSION_CACHE_KEY } from '../sessionpage/sessionpage-sessio
  * session has a name from its first row and provisioning only ever binds the name the session carries.
  * Binding clears the record (renameSession.ts); unbinding writes the identity's last name back.
  */
+export type TaskNameScopeOptions = {
+  /**
+   * `true` = `taken` already holds every name in the visible scope (a project, or the implicit task
+   * workspace). The host must not mix in account-wide roster names or the account serial floor:
+   * those would leak another project's numbering into this scope.
+   */
+  scoped?: boolean;
+};
+
 export interface TaskNamer {
   /**
    * The engine default (`<engine label> <serial>`), numbered and reserved by the identity host past
    * every bound identity and `taken` (the names this host's sessions already carry).
    */
-  defaultName(provider: AgentProviderId, taken: readonly string[]): Promise<string>;
+  defaultName(provider: AgentProviderId, taken: readonly string[], options?: TaskNameScopeOptions): Promise<string>;
   /**
    * Rename a bound session's identity: written on the roster first (pending until published), then
    * published to the cloud identity. A failed publish keeps the local name pending; it never throws
@@ -36,15 +47,84 @@ export function taskNamer(): TaskNamer {
   return namer;
 }
 
-export async function taskNameFor(provider: AgentProviderId, chosen?: string | null): Promise<string> {
+/**
+ * The one name of a task: the chosen name as typed (Chinese included, never slugified), or the engine
+ * default counted **inside the task's visible scope** — a project, or the implicit task workspace.
+ * A caller that has no scope (legacy paths) keeps the old account-wide default.
+ */
+export async function taskNameFor(
+  provider: AgentProviderId,
+  chosen?: string | null,
+  projectId?: string | null,
+): Promise<string> {
   const name = chosen?.trim();
   if (name) return name;
-  const taken = (await db.select({ config: sessions.config }).from(sessions))
-    .map((row) => row.config?.agentDisplayName?.trim() ?? '')
-    .filter(Boolean);
-  const fallback = (await taskNamer().defaultName(provider, taken)).trim();
+  const scope = projectId === undefined ? undefined : agentDisplayNameScope(projectId);
+  const base = db.select({ id: sessions.id, projectId: sessions.projectId, config: sessions.config }).from(sessions);
+  const rows = scope === undefined ? await base : await base.where(eq(sessions.projectId, scope));
+  const taken = rows
+    .map((row) => knownTaskName(row))
+    .filter((value): value is string => Boolean(value));
+  const fallback = (await taskNamer().defaultName(
+    provider,
+    taken,
+    scope === undefined ? undefined : { scoped: true },
+  )).trim();
   if (!fallback) throw new Error(`Task namer returned an empty default name for ${provider}`);
   return fallback;
+}
+
+/** A manual rename collided with another task in the same visible scope. */
+export class TaskNameConflictError extends Error {
+  readonly code = 'task-name-taken';
+  constructor(readonly displayName: string, readonly projectId: string) {
+    super(`Task name "${displayName}" is already taken in ${projectId === agentDisplayNameScope(null) ? 'the task workspace' : 'this project'}`);
+    this.name = 'TaskNameConflictError';
+  }
+}
+
+/**
+ * Serialises name changes in this process: check-then-write must not interleave with another rename
+ * (a bound rename writes the roster, so it cannot use one synchronous SQLite transaction end-to-end).
+ */
+let taskNameQueue: Promise<unknown> = Promise.resolve();
+
+export function withTaskNameLock<T>(run: () => Promise<T>): Promise<T> {
+  const next = taskNameQueue.then(run, run);
+  taskNameQueue = next.then(() => undefined, () => undefined);
+  return next;
+}
+
+/**
+ * Persistence-first check for a manual rename. Reads the session rows of the scope (bound names come
+ * from the roster projection, unbound from `config.agentDisplayName`); the caller still writes inside
+ * one SQLite transaction / the process lock so two concurrent renames cannot both pass.
+ */
+export function assertTaskNameAvailable(
+  projectId: string | null | undefined,
+  name: string,
+  exceptSessionId?: string,
+): void {
+  const scope = agentDisplayNameScope(projectId);
+  const rows = db
+    .select({ id: sessions.id, config: sessions.config })
+    .from(sessions)
+    .where(eq(sessions.projectId, scope))
+    .all();
+  assertNoTaskNameConflict(rows, name, exceptSessionId, scope);
+}
+
+/** Same check over rows already read inside a transaction (the write shares that snapshot). */
+export function assertNoTaskNameConflict(
+  rows: readonly { id: string; config?: { agentDisplayName?: string } | null }[],
+  name: string,
+  exceptSessionId: string | undefined,
+  projectId: string,
+): void {
+  for (const row of rows) {
+    if (row.id === exceptSessionId) continue;
+    if (knownTaskName(row) === name) throw new TaskNameConflictError(name, projectId);
+  }
 }
 
 /**

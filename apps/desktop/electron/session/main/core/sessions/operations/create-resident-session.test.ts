@@ -63,10 +63,14 @@ const params: CreateResidentSessionParams = {
   },
 };
 
-/** `db.select()` has two shapes in the code under test: awaited directly (task-name) and `.where().limit(1)`. */
+/** `select()` has three shapes in the code under test: awaited directly, `.where().limit(1)`, and `.where().all()`. */
 function rowsChain(rows: unknown[]) {
-  const whereResult = Promise.resolve(rows) as Promise<unknown[]> & { limit: () => Promise<unknown[]> };
+  const whereResult = Promise.resolve(rows) as Promise<unknown[]> & {
+    limit: () => Promise<unknown[]>;
+    all: () => unknown[];
+  };
   whereResult.limit = async () => rows;
+  whereResult.all = () => rows;
   const fromResult = Promise.resolve(rows) as Promise<unknown[]> & { where: () => typeof whereResult };
   fromResult.where = () => whereResult;
   return { from: () => fromResult };
@@ -77,6 +81,8 @@ function setupTransactionMock() {
   mocks.transaction.mockImplementation((cb: (tx: unknown) => void) => {
     captured.length = 0;
     cb({
+      // The resident insert re-checks the display name inside the same transaction.
+      select: () => rowsChain(mocks.rows),
       insert: () => ({
         values: (vals: unknown) => {
           captured.push(vals);

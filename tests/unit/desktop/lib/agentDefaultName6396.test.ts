@@ -101,6 +101,22 @@ describe('#6396 默认序号 = 用过的最大号 + 1', () => {
     expect(agentNameSerial('Gemini CLI 3', 'Gemini CLI')).toBe(3)
   })
 
+  it('作用域隔离:只数同一个 project 的名字,另一个项目的高号不推进本项目', () => {
+    const scoped = [
+      { display_name: '新助手 1', projectId: 'project-a' },
+      { display_name: '新助手 4', projectId: 'project-a' },
+      { display_name: '新助手 9', projectId: 'project-b' },
+    ]
+    expect(nextAgentDefaultName(scoped, '新助手', { scope: 'project-a' })).toBe('新助手 5')
+    expect(nextAgentDefaultName(scoped, '新助手', { scope: 'project-b' })).toBe('新助手 10')
+    // 空/缺省 = 隐式任务工作区,不是「所有项目」。
+    expect(nextAgentDefaultName(
+      [...scoped, { display_name: '新助手 2' }, { display_name: '新助手 6', projectId: '' }],
+      '新助手',
+      { scope: null },
+    )).toBe('新助手 7')
+  })
+
   it('建号前两路取数任何一路失败都不挡建号:名单退回快照、账本退回 0', async () => {
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined)
     try {

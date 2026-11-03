@@ -80,7 +80,7 @@ export interface SessionpageSessionStartFacts {
 export interface SessionpageIdentityHost extends SessionIdentityHost {
   readonly provisionDeps: SessionpageProvisionDeps
   /** The default name a new task is created with on this host (task-name.ts `TaskNamer`). */
-  defaultTaskName(providerId: string, taken: readonly string[]): Promise<string>
+  defaultTaskName(providerId: string, taken: readonly string[], options?: { scoped?: boolean }): Promise<string>
   /** Rename a bound session's identity locally first, then publish it (task-name.ts `TaskNamer`). */
   renameBound(sessionId: string, agentUserId: string, name: string): Promise<void>
   /** Publish every pending local name of the signed-in owner's agents. */
@@ -217,8 +217,8 @@ export function createSessionpageIdentityHost(deps: SessionpageIdentityHostDeps)
         throw new Error('Restoring this task requires a new identity')
       }
     },
-    async defaultTaskName(providerId, taken) {
-      return defaultTaskAgentName(providerId, taken, (await deps.getAuth())?.userId ?? null, env)
+    async defaultTaskName(providerId, taken, options) {
+      return defaultTaskAgentName(providerId, taken, (await deps.getAuth())?.userId ?? null, env, options)
     },
     async agentCard(sessionId) {
       // 名片按当下登录的账号解析(#4277):网页版换账号不重启宿主,不收紧就会把上一个账号的号递给现在这位。
