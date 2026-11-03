@@ -34,6 +34,8 @@ export type BuildSessionRowInput = {
   automationRunId?: string;
   provider: AgentProviderId;
   runtime: SessionRuntime;
+  /** 建来常驻、等第一条消息才启动:不记首轮,出生即 idle。 */
+  resident?: boolean;
   /**
    * 这条会话是怎么来的。**分叉与导入必须显式说**;新建可以不写 —— 见下面 firstUtterance 的口径。
    */
@@ -129,6 +131,7 @@ export function buildSessionRow(input: BuildSessionRowInput): SessionInsert {
       ? {
           version: '1',
           type: 'acp',
+          ...(input.resident && { resident: true as const }),
           ...(input.permissionMode !== undefined && { permissionMode: input.permissionMode }),
           ...(input.model && { model: input.model }),
           ...(input.effort && { effort: input.effort }),
@@ -153,6 +156,7 @@ export function buildSessionRow(input: BuildSessionRowInput): SessionInsert {
       : {
           version: '1',
           type: 'pty',
+          ...(input.resident && { resident: true as const }),
           ...(input.permissionMode !== undefined && { permissionMode: input.permissionMode }),
           ...(input.model && { model: input.model }),
           ...(input.effort && { effort: input.effort }),

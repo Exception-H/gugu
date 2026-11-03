@@ -1,4 +1,5 @@
 import type { CreateSessionParams } from '@shared/core/sessions/create-session';
+import type { CreateResidentSessionParams } from '@shared/core/sessions/create-resident-session';
 import { createRPCController } from '@shared/lib/ipc/rpc';
 import { generateSessionName } from './name-generation/generateSessionName';
 import { getProjectWorkspaces } from './operations/getProjectWorkspaces';
@@ -8,6 +9,10 @@ import { admitFirstMessages } from './session-life-creation';
 export const sessionCreateController = createRPCController({
   async createSession(params: CreateSessionParams) {
     return sessionService.createSession(params);
+  },
+  // 常驻 Agent:只建一行可列出、可打开、可恢复的会话,不发送首轮、不铸身份、不进群、不起进程。
+  async createResidentSession(params: CreateResidentSessionParams) {
+    return sessionService.createResidentSession(params);
   },
   async getProjectWorkspaces(projectId: string) {
     return getProjectWorkspaces(projectId);

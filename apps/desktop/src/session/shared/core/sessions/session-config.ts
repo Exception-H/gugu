@@ -99,6 +99,8 @@ const ptyConfigV1 = z.object({
   subscriptionConnectionId: z.string().optional(),
   version: z.literal('1'),
   type: z.literal('pty'),
+  /** 建来常驻、等第一条消息才启动；没有首轮。 */
+  resident: z.literal(true).optional(),
   permissionMode: z.enum(GUGU_PERMISSION_MODES).optional(),
   /** Initial prompt to deliver on first spawn (delivered once, gated on sessionId === null). */
   initialPrompt: z.string().optional(),
@@ -168,6 +170,8 @@ const acpConfigV1 = z.object({
   subscriptionConnectionId: z.string().optional(),
   version: z.literal('1'),
   type: z.literal('acp'),
+  /** 建来常驻、等第一条消息才启动；没有首轮。 */
+  resident: z.literal(true).optional(),
   permissionMode: z.enum(GUGU_PERMISSION_MODES).optional(),
   /** @deprecated Use initialQueue; kept so older in-progress ACP configs remain readable. */
   initialPrompt: z.string().optional(),
