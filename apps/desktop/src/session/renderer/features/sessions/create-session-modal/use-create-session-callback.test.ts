@@ -324,7 +324,7 @@ describe('useCreateSessionCallback ordinary messaging', () => {
     await act(async () => root.render(React.createElement(Probe, { birthChatId: 'chat-group-1' })));
     act(() => latest?.handleCreateSession());
     await act(async () => {});
-    expect(mocks.createSession.mock.calls[0]?.[0]).toEqual(expect.objectContaining({ birthGroup: { chatId: 'chat-group-1', asTask: false } }));
+    expect(mocks.createSession.mock.calls[0]?.[0]).toEqual(expect.objectContaining({ birthGroup: { chatId: 'chat-group-1', asTask: false, requestedBy: 'human' } }));
   });
 
   // gugu-dev#181:对话里派的新任务(带着任务卡的落点)坐任务座位(不发入群提示)。
@@ -332,7 +332,7 @@ describe('useCreateSessionCallback ordinary messaging', () => {
     await act(async () => root.render(React.createElement(Probe, { birthChatId: 'chat-group-1', taskChatId: 'chat-group-1' })));
     act(() => latest?.handleCreateSession());
     await act(async () => {});
-    expect(mocks.createSession.mock.calls[0]?.[0]).toEqual(expect.objectContaining({ birthGroup: { chatId: 'chat-group-1', asTask: true } }));
+    expect(mocks.createSession.mock.calls[0]?.[0]).toEqual(expect.objectContaining({ birthGroup: { chatId: 'chat-group-1', asTask: true, requestedBy: 'human' } }));
   });
 
   it('不从群里建:落库参数里没有 birthGroup', async () => {

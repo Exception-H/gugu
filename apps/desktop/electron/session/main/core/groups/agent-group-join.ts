@@ -3,6 +3,9 @@ import type Database from 'better-sqlite3'
 import type { PendingRequest } from '@gugu/session-core/session-record/contract'
 import type { GroupJoinAuthorization as GroupJoinPermission, GroupJoinReceipt } from '@gugu/core/cloud/groupAdmin'
 import { GROUP_JOIN_CONSENT_HUMAN_WINDOW_MS } from '@main/core/asks/sources'
+import { createLogger } from '../../../../lib/logger'
+
+const log = createLogger('agent-group-join')
 
 /** The approval options this ask exposes; the record settles only on one of them. */
 export const GROUP_JOIN_ALLOW_OPTION = 'group-join:allow'
@@ -196,7 +199,10 @@ function outcomeOf(row: AgentGroupJoinRow): AgentGroupJoinOutcome {
     return { ...base, status, receipt: { chat_id: row.chatId, status } }
   }
   if (row.status === 'denied' || row.status === 'expired' || row.status === 'withdrawn') return { ...base, status: row.status }
-  if (row.status === 'failed') return { ...base, status: 'failed', error: row.lastError ?? 'the group did not confirm membership' }
+  if (row.status === 'failed') {
+    // The internal reason stays on the row and in the log; the answer only says what the person can do next.
+    return { ...base, status: 'failed', error: 'the group did not confirm the membership' }
+  }
   return { ...base, status: 'in_progress' }
 }
 
@@ -290,7 +296,15 @@ async function execute(
     const message = error instanceof Error ? error.message : String(error)
     // A human said yes; the database still said no (role, group rules, offline). No membership is invented.
     applyFailure(deps.sqlite, row.id, message)
-    return { status: 'failed', operationId: row.id, chatId: row.chatId, targetAgentId: row.targetAgentId, error: message }
+    // The raw message is the reason for the log and the row; the answer points at what the person can change.
+    log.warn({ operationId: row.id, chatId: row.chatId, reason: message }, 'agent group join refused after approval')
+    return {
+      status: 'failed',
+      operationId: row.id,
+      chatId: row.chatId,
+      targetAgentId: row.targetAgentId,
+      error: 'the group refused the membership — check the agent role and the group rules',
+    }
   }
 }
 
@@ -334,10 +348,12 @@ async function askAndSettle(
     })
   } catch (error) {
     // No answer surface: keep the record pending (it may be asked again while it is still inside its deadline).
-    return {
-      status: 'unavailable', operationId: row.id, chatId: row.chatId, targetAgentId: row.targetAgentId,
-      reason: error instanceof Error ? error.message : String(error),
-    }
+    // The reason for the log; the caller only learns the state, and a retry re-asks the same durable operation.
+    log.warn(
+      { operationId: row.id, err: error instanceof Error ? error.message : String(error) },
+      'group join ask has no answer surface',
+    )
+    return { status: 'unavailable', operationId: row.id, chatId: row.chatId, targetAgentId: row.targetAgentId }
   }
   if (result === 'unavailable') {
     return { status: 'unavailable', operationId: row.id, chatId: row.chatId, targetAgentId: row.targetAgentId }

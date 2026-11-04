@@ -7,7 +7,7 @@ import type { NewSessionConfig } from '@shared/core/sessions/new-session-config'
 export function buildInitialSession(
   state: InitialSessionState,
   /** `id`:这条会话的 id(新建会话的 id 就是它)。附件在点「创建」之前就按它落盘,所以由调用方预留。 */
-  options: { startupOrigin?: 'session-page'; id?: string } = {},
+  options: { startupOrigin?: 'session-page'; id?: string; title?: string } = {},
 ): NonNullable<NewSessionConfig['initialSession']> | undefined {
   const { provider } = state;
   if (!provider) return undefined;
@@ -15,6 +15,7 @@ export function buildInitialSession(
   // 手机新建页走的是同一个函数,两个入口对同一份输入必然得到同一份文档。这里只做 composer 状态 → 输入的映射。
   return buildInitialSessionDocument({
     ...(options.id ? { id: options.id } : {}),
+    ...(options.title?.trim() ? { title: options.title.trim() } : {}),
     provider,
     sessionView: state.sessionView,
     prompt: state.prompt,

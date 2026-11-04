@@ -53,14 +53,17 @@ it('opens an actual project on the assistant device and retains its project cont
     await act(async () => root.render(<SidebarProjectItem projectId="business" />));
     expect(host.querySelector('[data-context-disabled="false"]')).not.toBeNull();
     expect(host.querySelector('[aria-label="sidebar.newSessionIn"]')).not.toBeNull();
+    expect(host.querySelector('[data-testid="project-new-agent"]')).not.toBeNull();
     await act(async () => (host.querySelector('[data-project-row="business"]') as HTMLElement).click());
     expect(state.navigate).toHaveBeenCalledWith('project', { projectId: 'business' });
     expect(state.expand).toHaveBeenCalledWith('business');
     expect(state.toggle).not.toHaveBeenCalled();
+    await act(async () => (host.querySelector('[data-testid="project-new-agent"]') as HTMLElement).click());
+    expect(state.navigate).toHaveBeenCalledWith('new-agent', { projectId: 'business' });
     state.screen = true;
     await act(async () => host.querySelector('[data-project-row="business"]')!.dispatchEvent(new MouseEvent('click', { bubbles: true, metaKey: true })));
     expect(state.beside).toHaveBeenCalledWith({ kind: 'project', projectId: 'business' });
-    expect(state.navigate).toHaveBeenCalledTimes(1);
+    expect(state.navigate).toHaveBeenCalledTimes(2);
   } finally {
     state.screen = false;
     await act(async () => root.unmount());

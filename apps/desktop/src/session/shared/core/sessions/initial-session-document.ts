@@ -14,6 +14,8 @@ export type InitialSessionDocument = NonNullable<NewSessionConfig['initialSessio
 export type InitialSessionInput = {
   /** 会话 id;不给就现生成。 */
   id?: string;
+  /** 调用方指定的显示名；缺席 = 由创建入口按作用域生成（task-name.ts）。 */
+  title?: string;
   provider: AgentProviderId;
   sessionView: SessionView;
   prompt: string;
@@ -46,6 +48,7 @@ export function buildInitialSessionDocument(
   const firstUtterance = typedUtterance || (input.attachmentNames ?? []).join(' ');
   return {
     id: input.id ?? crypto.randomUUID(),
+    ...(input.title?.trim() ? { title: input.title.trim() } : {}),
     provider: input.provider,
     // spec session-resume:新建 = 带着第一句话开一件活。
     origin: { kind: 'create' as const, firstUtterance },

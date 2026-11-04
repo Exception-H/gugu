@@ -116,7 +116,11 @@ describe('P0-2.1 agent group join: pending before membership', () => {
   it('an approval still goes through the database membership check, and its refusal is not success', async () => {
     const addAgent = vi.fn(async () => { throw new Error('group_manager_required') })
     const result = await requestAgentGroupJoin(INPUT, depsFor(fixture, approving(), addAgent))
-    expect(result).toMatchObject({ status: 'failed', error: 'group_manager_required' })
+    // The person-facing answer points at what to change; the raw refusal stays on the row for audit.
+    expect(result).toMatchObject({
+      status: 'failed',
+      error: 'the group refused the membership — check the agent role and the group rules',
+    })
     expect(readAgentGroupJoin(fixture.sqlite, 'operation-1')).toMatchObject({ status: 'failed', lastError: 'group_manager_required' })
   })
 

@@ -1,4 +1,4 @@
-import { FolderClosed, ShieldAlert, TriangleAlert, Zap } from '@/lib/icons'
+import { FolderClosed, ShieldAlert, Sparkles, TriangleAlert, Zap } from '@/lib/icons'
 import { observer } from 'mobx-react-lite';
 import React, { useCallback, useEffect } from 'react';
 import { useConfirmDeleteProject } from '@renderer/features/projects/hooks/use-confirm-delete-project';
@@ -297,6 +297,31 @@ export const SidebarProjectItem = observer(function SidebarProjectItem({
                 }
               />
               <TooltipContent>{translate('sidebar.newSession')}</TooltipContent>
+            </Tooltip>
+            <Tooltip>
+              <TooltipTrigger
+                className="h-6"
+                render={
+                  <SidebarItemMiniButton
+                    type="button"
+                    aria-label={translate('sidebar.newAgentIn', { project: projectLabel })}
+                    data-testid="project-new-agent"
+                    className={
+                      'opacity-0 transition-opacity duration-[var(--dur-fast,120ms)] group-hover/row:opacity-100'
+                    }
+                    onPointerEnter={() => prefetchRepository()}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      sessionKeyboardNav.syncCursorFromPointer({ kind: 'project', projectId });
+                      navigate('new-agent', { projectId });
+                    }}
+                    disabled={project.state === 'unregistered'}
+                  >
+                    <Sparkles className="h-4 w-4" />
+                  </SidebarItemMiniButton>
+                }
+              />
+              <TooltipContent>{translate('sidebar.newAgentTip')}</TooltipContent>
             </Tooltip>
         </SidebarMenuRow>
     </ProjectRowContextMenu>

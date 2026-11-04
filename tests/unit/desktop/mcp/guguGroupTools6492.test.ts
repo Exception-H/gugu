@@ -143,7 +143,6 @@ describe('group_add_agent through the shared actor door', () => {
     }
   })
   test('a refusal from the confirmed operation adds nobody and is returned as denied', async () => {
-    const h = harness()
     // Replace the host's answer with a person declining: no add_group_agent RPC may happen.
     const call = async (name: string, args: Record<string, unknown>) => {
       const context = {

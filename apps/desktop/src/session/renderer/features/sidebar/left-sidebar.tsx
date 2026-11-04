@@ -38,6 +38,7 @@ import { useSidebarDrop } from './use-sidebar-drop';
 import { useSessionMessages } from '@renderer/localization/use-session-messages';
 import { useNativeConversationChat } from '@/hooks/useNativeConversationChat';
 import { screenLayout } from '@renderer/app/screen-layout';
+import { NewAgentSidebarEntry } from '@renderer/features/sessions/new-agent/new-agent-entry';
 
 // 侧栏自上而下:布局 / 折叠 / 搜索 →「项目 | 对话」→ 三行入口 → 置顶 → 列表,两页同一副骨架。
 // 三行入口的第一行都是「新建任务」;项目页另两行是会话历史、已安排,对话页是新建群聊、添加联系人。
@@ -193,6 +194,7 @@ export const LeftSidebar: React.FC = observer(function LeftSidebar() {
                   <span className="truncate">{translate('sidebar.newTask')}</span>
                 </span>
               </SidebarMenuButton>
+              <NewAgentSidebarEntry active={isCurrentView(currentView, 'new-agent')} />
               {showProjects ? (
                 <>
                   <SidebarMenuButton

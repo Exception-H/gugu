@@ -7,6 +7,7 @@ import { chatView } from '@renderer/features/chats/view';
 import { libraryView } from '@renderer/features/library/library-view';
 import { projectView } from '@renderer/features/projects/view';
 import { sessionHistoryView } from '@renderer/features/session-history/session-history-view';
+import { newAgentView } from '@renderer/features/sessions/new-agent/new-agent-page';
 import { NewSessionPage } from '@renderer/features/sessions/new-session-page';
 import { ShellTitlebar } from '@renderer/lib/components/titlebar/shell-titlebar';
 import { sessionView } from '@renderer/features/sessions/view';
@@ -28,6 +29,7 @@ export const views = {
   'session-history': sessionHistoryView,
   session: sessionView,
   'new-session': { TitlebarSlot: ShellTitlebar, MainPanel: NewSessionPage },
+  'new-agent': newAgentView,
   apps: appsView,
   app: appView,
 } satisfies Record<string, ViewDefinition<any>>;
