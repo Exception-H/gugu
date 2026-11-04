@@ -191,7 +191,21 @@ import { getDraggedScreenContent } from '@renderer/lib/drag-screen-content';
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
+/**
+ * 会话里看过的每张附件图都会在这里留一份 base64。不设上限的话,翻过的会话越多内存越高,
+ * 关掉会话也不释放 —— 「用一阵子就变卡」多半是从这儿开始的。
+ * Map 按插入顺序迭代,超了就从最旧的那张出局(先进先出,不做访问刷新)。
+ */
+const ATTACHMENT_DATA_URL_CACHE_LIMIT = 24;
 const attachmentDataUrlCache = new Map<string, Promise<string | null>>();
+function rememberAttachmentDataUrl(id: string, promise: Promise<string | null>): void {
+  attachmentDataUrlCache.set(id, promise);
+  while (attachmentDataUrlCache.size > ATTACHMENT_DATA_URL_CACHE_LIMIT) {
+    const oldest = attachmentDataUrlCache.keys().next();
+    if (oldest.done) break;
+    attachmentDataUrlCache.delete(oldest.value);
+  }
+}
 /** `/mcp` 这条自有命令的匹配 —— 与 agent 命令同一口径:空查询全列,否则按名字包含。 */
 function commandMatchesClientQuery(normalized: string): boolean {
   return normalized.length === 0 || 'mcp'.includes(normalized);
@@ -259,7 +273,7 @@ function resolveAttachmentDataUrl(store: AcpChatStore, id: string): Promise<stri
         log.warn('Failed to read attachment image', { path, error });
         return null;
       });
-    attachmentDataUrlCache.set(id, promise);
+    rememberAttachmentDataUrl(id, promise);
     return promise;
   }
   if (!store.session) return Promise.resolve(null);
@@ -275,7 +289,7 @@ function resolveAttachmentDataUrl(store: AcpChatStore, id: string): Promise<stri
       log.warn('Failed to resolve ACP attachment', { id, error });
       return null;
     });
-  attachmentDataUrlCache.set(id, promise);
+  rememberAttachmentDataUrl(id, promise);
   return promise;
 }
 
