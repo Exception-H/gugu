@@ -15,6 +15,8 @@ const log = rendererLogger('mobile/agent-watch/background-tasks')
 
 /** 名单还在时多久再问一次那台机器「哪些命令还活着」:命令跑完、进程没了都不会往时间线里写一行。 */
 export const BACKGROUND_TASKS_POLL_MS = 5000
+/** 那台机器已经回「一条都没在跑」之后退到这个间隔:转录里剩下的候选都是早就跑完的旧命令。 */
+const BACKGROUND_TASKS_IDLE_POLL_MS = BACKGROUND_TASKS_POLL_MS * 6
 
 export type PhoneBackgroundTasks = {
   commands: BackgroundCommandEntry[]
@@ -64,19 +66,49 @@ export function usePhoneBackgroundTasks(
   useEffect(() => {
     if (!asking) return
     let live = true
+    let timer: ReturnType<typeof setTimeout> | null = null
+    let interval = BACKGROUND_TASKS_POLL_MS
     const fetchRunningIds = fetchRunning ?? fetchBackgroundTasks
-    const ask = () => {
+    // 用 setTimeout 串下一次,不用 setInterval:请求慢的时候不会叠起来。
+    function schedule() {
+      if (!live || timer || document.visibilityState !== 'visible') return
+      timer = setTimeout(() => { timer = null; ask() }, interval)
+    }
+    function ask() {
       fetchRunningIds(deviceId, sessionId).then(
-        (value) => { if (live) setRunning({ key, ids: value.runningCommandTaskIds, canStop: true }) },
+        (value) => {
+          if (!live) return
+          setRunning({ key, ids: value.runningCommandTaskIds, canStop: true })
+          // 电脑明确回报「没有任务在跑」就退到慢速档 —— 否则只要转录里还留着旧命令,
+          // 这台手机就每 5 秒问一次,问到用户关掉这一页为止。
+          interval = value.runningCommandTaskIds !== null && value.runningCommandTaskIds.length === 0
+            ? BACKGROUND_TASKS_IDLE_POLL_MS
+            : BACKGROUND_TASKS_POLL_MS
+          schedule()
+        },
         (error: unknown) => {
           log.info({ error: String(error), deviceId }, 'that computer cannot report its running background tasks')
-          if (live) setRunning({ key, ids: null, canStop: false })
+          if (!live) return
+          setRunning({ key, ids: null, canStop: false })
+          schedule()
         },
       )
     }
+    // 页面看不见就别问:手机切走了还在后台轮询纯属白花电。
+    function onVisibilityChange() {
+      if (document.visibilityState !== 'visible') {
+        if (timer) { clearTimeout(timer); timer = null }
+        return
+      }
+      ask()
+    }
     ask()
-    const timer = setInterval(ask, BACKGROUND_TASKS_POLL_MS)
-    return () => { live = false; clearInterval(timer) }
+    document.addEventListener('visibilitychange', onVisibilityChange)
+    return () => {
+      live = false
+      if (timer) clearTimeout(timer)
+      document.removeEventListener('visibilitychange', onVisibilityChange)
+    }
   }, [asking, deviceId, sessionId, key, fetchRunning])
   return useMemo(() => {
     if (!asking) return { commands: [], subagents: [], canStop: false }
