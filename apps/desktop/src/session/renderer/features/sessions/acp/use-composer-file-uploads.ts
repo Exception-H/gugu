@@ -8,7 +8,7 @@
 import type { ComposerAttachment } from '@gugu/session-ui/react/components';
 import type { TurnFileRef } from '@gugu/session-core/session-record/contract';
 import { AttachmentsError } from '@gugu/core/cloud/attachmentsApi';
-import { useMemo, useRef, type Dispatch, type SetStateAction } from 'react';
+import { useEffect, useMemo, useRef, type Dispatch, type SetStateAction } from 'react';
 import { placeTaskAttachment, prepareTaskAttachment, type TaskAttachmentPlacement } from '@/lib/attachmentsEndpoint';
 import { selectedScreenshot, screenshotQuality, toggleScreenshotQuality, retryScreenshot, screenshotPreview, releaseScreenshotPreview } from '@/lib/pastedScreenshot';
 import { formatBytes } from '@renderer/utils/formatBytes';
@@ -211,5 +211,10 @@ export function createComposerFileUploads(readArgs: () => ComposerFileUploadArgs
 export function useComposerFileUploads(args: ComposerFileUploadArgs) {
   const latest = useRef(args);
   latest.current = args;
-  return useMemo(() => createComposerFileUploads(() => latest.current), []);
+  const uploads = useMemo(() => createComposerFileUploads(() => latest.current), []);
+  // 挂载期结束(切走会话、关掉输入框)就把还在放的上传掐掉。
+  // ❌ 只靠「移除附件」「发送成功」这些显式动作去取消,用户直接切走时传输会在后台跑到完。
+  const clear = uploads.clear;
+  useEffect(() => clear, [clear]);
+  return uploads;
 }
