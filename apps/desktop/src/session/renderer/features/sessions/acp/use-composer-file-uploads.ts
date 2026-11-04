@@ -10,7 +10,7 @@ import type { TurnFileRef } from '@gugu/session-core/session-record/contract';
 import { AttachmentsError } from '@gugu/core/cloud/attachmentsApi';
 import { useMemo, useRef, type Dispatch, type SetStateAction } from 'react';
 import { placeTaskAttachment, prepareTaskAttachment, type TaskAttachmentPlacement } from '@/lib/attachmentsEndpoint';
-import { selectedScreenshot, screenshotQuality, toggleScreenshotQuality, retryScreenshot, screenshotPreview } from '@/lib/pastedScreenshot';
+import { selectedScreenshot, screenshotQuality, toggleScreenshotQuality, retryScreenshot, screenshotPreview, releaseScreenshotPreview } from '@/lib/pastedScreenshot';
 import { formatBytes } from '@renderer/utils/formatBytes';
 import { log } from '@renderer/utils/logger';
 import type { SessionMessageLookupKey } from '@renderer/localization/messages';
@@ -150,6 +150,7 @@ export function createComposerFileUploads(readArgs: () => ComposerFileUploadArgs
     for (const [chipId, upload] of uploads) {
       if (ids.has(chipId)) continue;
       upload.controller.abort();
+      releaseScreenshotPreview(upload.file);
       uploads.delete(chipId);
     }
     for (const chipId of named.keys()) if (!ids.has(chipId)) named.delete(chipId);
@@ -183,7 +184,9 @@ export function createComposerFileUploads(readArgs: () => ComposerFileUploadArgs
 
   /** 这一枚发出去了 / 不要了:不再管(还在放就取消)。 */
   const forget = ((chipId: string) => {
-    uploads.get(chipId)?.controller.abort();
+    const upload = uploads.get(chipId);
+    upload?.controller.abort();
+    if (upload) releaseScreenshotPreview(upload.file);
     uploads.delete(chipId);
     named.delete(chipId);
   });
@@ -193,7 +196,10 @@ export function createComposerFileUploads(readArgs: () => ComposerFileUploadArgs
 
   /** 发出去了:账清空(文件留在私聊文件夹里,这一轮的引用指着它们);私聊下次再问。 */
   const clear = (() => {
-    for (const upload of uploads.values()) upload.controller.abort();
+    for (const upload of uploads.values()) {
+      upload.controller.abort();
+      releaseScreenshotPreview(upload.file);
+    }
     uploads.clear();
     named.clear();
     target.current = null;
