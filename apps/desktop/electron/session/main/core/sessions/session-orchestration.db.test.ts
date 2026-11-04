@@ -652,7 +652,7 @@ describe('session orchestration', () => {
       expect(mocks.resolveProjectWorkspace).toHaveBeenCalledWith({ projectId: 'project-2', projectPath: '' });
       expect(appRow(row.id)).toMatchObject({ provider: 'codex', runtime: 'pty', project_id: 'project-2' });
       // An App's agent is pulled into its chat on purpose: an ordinary seat, not a task seat.
-      expect(takeBirthGroup(row.id)).toEqual({ chatId: 'chat-7', asTask: false });
+      expect(takeBirthGroup(row.id)).toEqual({ chatId: 'chat-7', asTask: false, requestedBy: 'agent' });
     });
 
     // owner 10-14: started from a page an agent works — spawned by that agent, by session_spawn's rule (its child, whatever

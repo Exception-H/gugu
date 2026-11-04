@@ -41,23 +41,31 @@ function fixture(status) {
 }
 
 for (const status of ['joined', 'pending_approval']) {
-  for (const caller of [null, { agentUserId: callerId, sessionId: 'parent-session', deviceId: 'phone-device', name: 'Parent' }]) {
-    test(`birth-group ${status} uses the ${caller ? 'calling agent' : 'authenticated owner'} as actor`, async () => {
-      const fx = fixture(status)
-      const action = { harness: 'pi', prompt: 'Create one phone task', chatId: groupId }
-      const first = await fx.provision('request-1043', action, caller)
-      assert.deepEqual(fx.calls.filter(([, name]) => name === 'add_group_agent'), [[
-        'chat', 'add_group_agent', {
-          p_chat_id: groupId, p_agent_user_id: agentId, p_message: null,
-          p_as_user_id: caller?.agentUserId ?? ownerId, p_as_task: true,
-        },
-      ]])
-      assert.deepEqual(first.birth_group, { chatId: groupId, status })
-      assert.deepEqual(await fx.provision('request-1043', action, caller), first)
-      assert.equal(fx.calls.filter(([, name]) => name === 'add_group_agent').length, 1)
-    })
-  }
+  test(`birth-group ${status} at the owner's own request uses the owner as actor`, async () => {
+    const fx = fixture(status)
+    const action = { harness: 'pi', prompt: 'Create one phone task', chatId: groupId }
+    const first = await fx.provision('request-1043', action, null)
+    assert.deepEqual(fx.calls.filter(([, name]) => name === 'add_group_agent'), [[
+      'chat', 'add_group_agent', {
+        p_chat_id: groupId, p_agent_user_id: agentId, p_message: null,
+        p_as_user_id: ownerId, p_as_task: true,
+      },
+    ]])
+    assert.deepEqual(first.birth_group, { chatId: groupId, status })
+    assert.deepEqual(await fx.provision('request-1043', action, null), first)
+    assert.equal(fx.calls.filter(([, name]) => name === 'add_group_agent').length, 1)
+  })
 }
+
+test('an Agent caller cannot auto-join a group: it waits for an explicit human confirmation', async () => {
+  const fx = fixture('joined')
+  const caller = { agentUserId: callerId, sessionId: 'parent-session', deviceId: 'phone-device', name: 'Parent' }
+  const first = await fx.provision('request-agent-1043', { harness: 'pi', prompt: 'Create one phone task', chatId: groupId }, caller)
+  assert.equal(fx.calls.some(([, name]) => name === 'add_group_agent'), false)
+  assert.equal(first.birth_group.status, 'confirmation_required')
+  assert.deepEqual(await fx.provision('request-agent-1043', { harness: 'pi', prompt: 'Create one phone task', chatId: groupId }, caller), first)
+  assert.equal(fx.calls.some(([, name]) => name === 'add_group_agent'), false)
+})
 
 test('a denied birth-group request remains failed rather than claiming membership', async () => {
   const fx = fixture('denied')

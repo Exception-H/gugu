@@ -526,6 +526,45 @@ export const sessionPendingSource = sqliteTable('session_pending_source', {
 }, table => ({ source: uniqueIndex('idx_session_pending_source_identity').on(table.sessionId, table.sourceMessageId) }));
 
 /**
+ * P0-2.1: one Agent's request to join one existing group, persisted before anyone is asked.
+ *
+ * The row is the authority, not the in-memory Ask: a restart loses `hostAsks`, but this row still says pending, and a
+ * retry re-asks under the same operation id. `status` moves pending → approved only on a concrete human answer; timeout,
+ * rejection, withdrawal and offline each have their own terminal state and never reach `approved`. `operation_key`
+ * dedupes retries of the same (session, group, Agent, seat) intent; the partial unique index keeps at most one active row
+ * while allowing a fresh request after a denial or expiry.
+ *
+ * Additive: a rollback drops the table and loses only pending confirmations, never sessions or memberships.
+ */
+export const agentGroupJoinRequests = sqliteTable('agent_group_join_requests', {
+  id: text('id').primaryKey(),
+  operationKey: text('operation_key').notNull(),
+  sessionId: text('session_id').notNull().references(() => sessions.id, { onDelete: 'cascade' }),
+  chatId: text('chat_id').notNull(),
+  targetAgentId: text('target_agent_id').notNull(),
+  /** The signed-in person whose group authority the call uses (never a model-supplied value). */
+  actorUserId: text('actor_user_id').notNull(),
+  /** The Agent that started this request; the record is bound to it as well as to the target. */
+  initiatorAgentId: text('initiator_agent_id').notNull(),
+  asTask: integer('as_task', { mode: 'boolean' }).notNull().default(false),
+  status: text('status', { enum: ['pending', 'approved', 'applying', 'applied', 'denied', 'expired', 'withdrawn', 'failed'] }).notNull(),
+  /** sha256 of every binding field, handed to surfaces so an answer for another operation cannot settle this one. */
+  digest: text('digest').notNull(),
+  createdAt: integer('created_at').notNull(),
+  expiresAt: integer('expires_at').notNull(),
+  decidedAt: integer('decided_at'),
+  decidedBy: text('decided_by'),
+  appliedAt: integer('applied_at'),
+  resultStatus: text('result_status'),
+  lastError: text('last_error'),
+}, table => ({
+  key: index('idx_agent_group_join_key').on(table.operationKey, table.createdAt),
+  active: uniqueIndex('idx_agent_group_join_active')
+    .on(table.operationKey)
+    .where(sql`status IN ('pending','approved','applying','applied')`),
+}));
+
+/**
  * 会话历史的落盘（#5381）。一条已提交的回合一行，`data` 是那一回合的结构化条目
  * （消息 / 思考 / 工具调用），不是渲染好的文本。
  *

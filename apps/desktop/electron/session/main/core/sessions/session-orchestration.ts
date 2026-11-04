@@ -898,7 +898,7 @@ async function spawnSession(
     assistantWork: action.assistant_work,
     envelope: envelopeOf(await localEnvelopeSender(caller)),
     // 带 chat_id 开的子会话是派出去干活的:任务座位(不发入群提示)。
-    ...(action.chat_id ? { birthGroup: { chatId: action.chat_id, asTask: true } } : {}),
+    ...(action.chat_id ? { birthGroup: { chatId: action.chat_id, asTask: true, requestedBy: 'agent' } } : {}),
     // With no override, preserve the caller's native model. Selecting a model explicitly is a new model
     // decision; naming only a harness keeps the caller's platform model when that harness offers it
     // (carriedPlatformModel), otherwise it is that harness's own default.
@@ -1314,7 +1314,7 @@ export async function spawnSessionForApp(input: AppSessionSpawnInput): Promise<S
     envelope: input.envelope,
     model: selection.kind === 'gugu' ? undefined : selection.model,
     platformModel: selection.kind === 'gugu' ? { modelId: selection.modelId } : requestedHarness || requestedModel || last ? null : undefined,
-    ...(input.chat ? { birthGroup: { chatId: input.chat, asTask: false } } : {}),
+    ...(input.chat ? { birthGroup: { chatId: input.chat, asTask: false, requestedBy: 'agent' } } : {}),
     awaitStart: true,
     bindIdentityFirst: true,
     relations: {
@@ -2293,7 +2293,7 @@ async function spawnForRemoteCaller(
     sourceLink: action.source_link,
     assistantWork: action.assistant_work,
     envelope: envelopeOf(remoteEnvelopeSender(caller)),
-    ...(action.chat_id ? { birthGroup: { chatId: action.chat_id, asTask: true } } : {}),
+    ...(action.chat_id ? { birthGroup: { chatId: action.chat_id, asTask: true, requestedBy: 'agent' } } : {}),
     model: selection.kind === 'gugu'
       ? undefined
       : selection.model ?? (inheritModel ? caller.model ?? undefined : undefined),

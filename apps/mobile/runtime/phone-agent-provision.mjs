@@ -88,12 +88,24 @@ export function createPhoneProvisioner({ ownerId, cloud, store, deviceId, projec
       agent.knownSessions ??= {}; agent.knownSessions[caller.sessionId] = caller.deviceId
     }
     if (request.birthGroupChatId && !agent.birthGroup) {
-      try {
-        // The UI acts as the owner; an Agent caller must retain its own group authority.
-        const joined = await cloud.rpc('chat', 'add_group_agent', { p_chat_id: request.birthGroupChatId, p_agent_user_id: agent.agentUserId, p_message: null, p_as_user_id: caller?.agentUserId ?? ownerId, p_as_task: true })
-        if (!joined || !['joined', 'pending_approval'].includes(joined.status)) throw new Error('群聊没有确认 Agent 加入或待审批的状态')
-        agent.birthGroup = { chatId: request.birthGroupChatId, status: joined.status }
-      } catch (error) { agent.birthGroup = { chatId: request.birthGroupChatId, status: 'failed', error: error.message } }
+      if (caller) {
+        // P0-2.1: an Agent caller chose this group, and a phone has no Ask surface a person answers before the mint.
+        // Persist the intent on the Agent record as awaiting confirmation and add nobody; a silently added member would
+        // be consent invented by the retry path. The desktop host's pending record + Ask stays the only join door until
+        // gugu-supabase exposes a phone-readable pending operation (see .p0-recon/2.1-recon.md §5).
+        agent.birthGroup = {
+          chatId: request.birthGroupChatId,
+          status: 'confirmation_required',
+          error: '加入群聊需要主人明确确认；手机上的 Agent 发起路径在确认通道接通前不会自动入群',
+        }
+      } else {
+        try {
+          // The UI acts as the owner: the person just chose the group, so that click is the human authorization.
+          const joined = await cloud.rpc('chat', 'add_group_agent', { p_chat_id: request.birthGroupChatId, p_agent_user_id: agent.agentUserId, p_message: null, p_as_user_id: ownerId, p_as_task: true })
+          if (!joined || !['joined', 'pending_approval'].includes(joined.status)) throw new Error('群聊没有确认 Agent 加入或待审批的状态')
+          agent.birthGroup = { chatId: request.birthGroupChatId, status: joined.status }
+        } catch (error) { agent.birthGroup = { chatId: request.birthGroupChatId, status: 'failed', error: error.message } }
+      }
     }
     await store.save()
     if(request.assistantWork) {

@@ -16,6 +16,17 @@ export interface GroupInfo extends Record<string, unknown> {
 
 export type GroupMemberRole = 'admin' | 'member'
 export type GroupJoinStatus = 'joined' | 'pending_approval' | 'already_member'
+/**
+ * Why this call may add an Agent to a group it is not in yet.
+ *
+ * `human`: a person just chose it in the UI (or the system is seating an Agent in its own project group).
+ * `agent-confirmed`: an Agent asked; a host has already persisted a pending operation and a person approved that exact
+ * operation. `addAgent` refuses to run without one, so a new agent-controlled path cannot silently join a group.
+ * The database still checks the actor's membership and the group's approval rule: consent is not authorization.
+ */
+export type GroupJoinAuthorization =
+  | { kind: 'human' }
+  | { kind: 'agent-confirmed'; operationId: string }
 export interface GroupJoinReceipt extends Record<string, unknown> {
   chat_id: string
   status: GroupJoinStatus
@@ -90,8 +101,20 @@ export function createGroupAdmin(client: GroupAdminRpcClient, actor: string) {
     async decideJoin(requestId: string, accept: boolean) {
       return object('decide_group_join', client.rpc('decide_group_join', { p_request_id: requestId, p_accept: accept, p_as_user_id: actor }), { request_id: requestId, status: accept ? 'accepted' : 'rejected' })
     },
-    /** `asTask`:任务座位 —— 不发「加入了群聊」(gugu-dev#181)。 */
-    async addAgent(chatId: string, agent: string, { asTask = false }: { asTask?: boolean } = {}): Promise<GroupJoinReceipt> {
+    /** `asTask`:任务座位 —— 不发「加入了群聊」(gugu-dev#181)。Authorization is required: see `GroupJoinAuthorization`. */
+    async addAgent(
+      chatId: string,
+      agent: string,
+      options: { asTask?: boolean; authorization: GroupJoinAuthorization },
+    ): Promise<GroupJoinReceipt> {
+      // Default closed: no caller may add an Agent to an existing group without saying who decided, and why.
+      // A .mjs caller can omit the whole options object even though TypeScript requires it, so the runtime check is
+      // after the default and is the one that matters.
+      const { asTask = false, authorization } = options ?? ({} as { asTask?: boolean; authorization?: GroupJoinAuthorization })
+      if (!authorization) throw new Error('add_group_agent: an explicit human confirmation is required before an Agent joins a group')
+      if (authorization.kind === 'agent-confirmed' && !authorization.operationId.trim()) {
+        throw new Error('add_group_agent: an agent-confirmed join requires the confirmed operation id')
+      }
       const row = await object('add_group_agent', client.rpc('add_group_agent', { p_chat_id: chatId, p_agent_user_id: agent, p_message: null, p_as_user_id: actor, p_as_task: asTask }), { chat_id: chatId })
       if (!['joined', 'pending_approval', 'already_member'].includes(String(row.status))) throw new Error('add_group_agent: unexpected membership result')
       return row as GroupJoinReceipt

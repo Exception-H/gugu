@@ -67,7 +67,12 @@ export function ask(
   if (options.signal?.aborted) return Promise.resolve('withdrawn');
   if (request.origin.source === 'agent-question') rememberAgentQuestion(conversationId, request);
   const withdrawQuestions = (sessionId: string) => withdrawAll(sessionId, 'agent-question');
-  hostAskLifecycle ??= [sessionEvents.on('session:archived', withdrawQuestions)];
+  const withdrawGroupJoins = (sessionId: string) => withdrawAll(sessionId, 'group-join');
+  hostAskLifecycle ??= [
+    sessionEvents.on('session:archived', withdrawQuestions),
+    // Archiving the session that asked withdraws its join asks: a pending record must never become consent later.
+    sessionEvents.on('session:archived', withdrawGroupJoins),
+  ];
   return new Promise((resolve) => {
     let unregisterHumanTool = () => undefined as void;
     const asks = hostAsks.get(conversationId) ?? new Map<string, AskEntry>();

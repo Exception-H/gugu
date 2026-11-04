@@ -29,7 +29,15 @@ export type CreateSessionParams = {
  * spawns into a chat) joins without a join notice, like a task agent in a project group; an agent pulled in on purpose
  * (「新建 Agent」 from a group's members, an App's agent) joins with the notice. Both sit active.
  */
-export type BirthGroup = { chatId: string; asTask: boolean };
+export type BirthGroup = {
+  chatId: string;
+  asTask: boolean;
+  /**
+   * Who chose this group. `human` = a person clicked it in the composer/members panel; that click is the confirmation.
+   * `agent` (or absent, fail closed) = a tool/remote caller supplied `chat_id`; the host must ask a person before joining.
+   */
+  requestedBy?: 'human' | 'agent';
+};
 
 export type CreateSessionError =
   | { type: 'project-not-found' }
