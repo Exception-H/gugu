@@ -20,7 +20,7 @@ type Translate = (key: SessionMessageLookupKey, values?: Record<string, string |
 export type { TaskAttachmentTarget } from '@/lib/taskAttachmentTarget';
 import type { TaskAttachmentTarget } from '@/lib/taskAttachmentTarget';
 
-type Upload = { placement: TaskAttachmentPlacement; file: File; controller: AbortController; settled: Promise<boolean>; ref: TurnFileRef | null; status: 'running' | 'done' | 'failed'; confirmed: number; total: number };
+type Upload = { placement: TaskAttachmentPlacement; file: File; previewSource?: File; controller: AbortController; settled: Promise<boolean>; ref: TurnFileRef | null; status: 'running' | 'done' | 'failed'; confirmed: number; total: number };
 
 function progressMeta(sent: number, total: number): string {
   const percent = total > 0 ? Math.min(100, Math.floor((sent / total) * 100)) : 100;
@@ -62,6 +62,9 @@ export function createComposerFileUploads(readArgs: () => ComposerFileUploadArgs
   const start = (chipId: string, file: File) => {
     const controller = new AbortController();
     const previous = uploads.get(chipId);
+    // A retry or quality toggle replaces the old upload: release its preview before the new one is created, or the
+    // old blob URL is never referenced again.
+    if (previous) releaseScreenshotPreview(previous.previewSource ?? previous.file);
     const placement = previous?.placement ?? {};
     const retained = placement.upload?.started && !placement.upload.restartRequired;
     const upload: Upload = { placement, file, controller, settled: Promise.resolve(false), ref: null, status: 'running', confirmed: retained ? previous?.confirmed ?? 0 : 0, total: previous?.total ?? file.size };
@@ -84,6 +87,9 @@ export function createComposerFileUploads(readArgs: () => ComposerFileUploadArgs
       selected = source;
       total = source.size;
       const previewUrl = quality ? await screenshotPreview(source) : undefined;
+      // The preview belongs to the file it was made from (compression may have produced a new File), so remember that
+      // owner and release the URL through it rather than through the original pick.
+      if (previewUrl) upload.previewSource = source;
       controller.signal.throwIfAborted();
       if (active()) patch(chipId, { name: source.name, mimeType: source.type, ...(previewUrl ? { previewUrl } : {}) });
       progress();
@@ -121,6 +127,7 @@ export function createComposerFileUploads(readArgs: () => ComposerFileUploadArgs
     const upload = uploads.get(chipId);
     if (!upload || !readArgs().resumable || !screenshotQuality(upload.file)) return;
     upload.controller.abort();
+    releaseScreenshotPreview(upload.previewSource ?? upload.file);
     uploads.delete(chipId);
     named.delete(chipId);
     toggleScreenshotQuality(upload.file);
@@ -150,7 +157,7 @@ export function createComposerFileUploads(readArgs: () => ComposerFileUploadArgs
     for (const [chipId, upload] of uploads) {
       if (ids.has(chipId)) continue;
       upload.controller.abort();
-      releaseScreenshotPreview(upload.file);
+      releaseScreenshotPreview(upload.previewSource ?? upload.file);
       uploads.delete(chipId);
     }
     for (const chipId of named.keys()) if (!ids.has(chipId)) named.delete(chipId);
@@ -186,7 +193,7 @@ export function createComposerFileUploads(readArgs: () => ComposerFileUploadArgs
   const forget = ((chipId: string) => {
     const upload = uploads.get(chipId);
     upload?.controller.abort();
-    if (upload) releaseScreenshotPreview(upload.file);
+    if (upload) releaseScreenshotPreview(upload.previewSource ?? upload.file);
     uploads.delete(chipId);
     named.delete(chipId);
   });
@@ -198,7 +205,7 @@ export function createComposerFileUploads(readArgs: () => ComposerFileUploadArgs
   const clear = (() => {
     for (const upload of uploads.values()) {
       upload.controller.abort();
-      releaseScreenshotPreview(upload.file);
+      releaseScreenshotPreview(upload.previewSource ?? upload.file);
     }
     uploads.clear();
     named.clear();

@@ -123,6 +123,9 @@ type Row = {
 }
 
 const ACTIVE = "('pending','approved','applying','applied')"
+// `applying` means the membership RPC is (or was) in flight. The process can die at any point after the claim, so the
+// row carries a lease and another attempt may take it over only once that lease has run out.
+const APPLYING_LEASE_MS = 60_000
 const inflight = new Map<string, Promise<AgentGroupJoinOutcome>>()
 
 function rowOf(value: Row | undefined): AgentGroupJoinRow | null {
@@ -171,7 +174,10 @@ export function readAgentGroupJoin(sqlite: Database.Database, id: string): Agent
   return rowOf(sqlite.prepare('SELECT * FROM agent_group_join_requests WHERE id = ?').get(id) as Row | undefined)
 }
 
-/** Pending rows a restart may resume: still inside their deadline, not withdrawn or answered. */
+/**
+ * Rows a restart may resume: a pending ask still inside its deadline, or an `applying` claim whose lease ran out while
+ * the process was gone. The row stays for audit, but answered or terminal rows never come back here.
+ */
 export function listPendingAgentGroupJoins(sqlite: Database.Database, now = Date.now()): AgentGroupJoinRow[] {
   // An archived session's ask was withdrawn; a restart must not re-ask it. The row stays for the audit, but it is not
   // resumed and can never become consent.
@@ -179,10 +185,14 @@ export function listPendingAgentGroupJoins(sqlite: Database.Database, now = Date
     .prepare(`
       SELECT r.* FROM agent_group_join_requests r
       JOIN sessions s ON s.id = r.session_id
-      WHERE r.status = 'pending' AND r.expires_at > ? AND s.archived_at IS NULL
+      WHERE s.archived_at IS NULL
+        AND (
+          (r.status = 'pending' AND r.expires_at > ?)
+          OR (r.status = 'applying' AND COALESCE(r.decided_at, 0) <= ?)
+        )
       ORDER BY r.created_at
     `)
-    .all(now) as Row[]
+    .all(now, now - APPLYING_LEASE_MS) as Row[]
   return rows.map(row => rowOf(row)!).filter(Boolean)
 }
 
@@ -249,11 +259,18 @@ function settle(
   `).run(status, fields.decidedAt ?? null, fields.decidedBy ?? null, fields.lastError ?? null, id).changes
 }
 
+/** Take the row and stamp the lease start; an approved row or an `applying` row past its lease can be claimed. */
 function claim(
   sqlite: Database.Database,
   id: string,
+  now: number,
 ): boolean {
-  return sqlite.prepare("UPDATE agent_group_join_requests SET status = 'applying' WHERE id = ? AND status = 'approved'").run(id).changes === 1
+  return sqlite.prepare(`
+    UPDATE agent_group_join_requests
+    SET status = 'applying', decided_at = ?
+    WHERE id = ?
+      AND (status = 'approved' OR (status = 'applying' AND COALESCE(decided_at, 0) <= ?))
+  `).run(now, id, now - APPLYING_LEASE_MS).changes === 1
 }
 
 function applyResult(
@@ -276,8 +293,7 @@ async function execute(
   now: () => number,
 ): Promise<AgentGroupJoinOutcome> {
   if (row.status === 'applied') return outcomeOf(row)
-  if (row.status === 'applying') return outcomeOf(row)
-  if (!claim(deps.sqlite, row.id)) return outcomeOf(readAgentGroupJoin(deps.sqlite, row.id) ?? row)
+  if (!claim(deps.sqlite, row.id, now())) return outcomeOf(readAgentGroupJoin(deps.sqlite, row.id) ?? row)
   try {
     const receipt = await deps.addAgent({
       chatId: row.chatId,
@@ -340,9 +356,9 @@ async function askAndSettle(
   try {
     result = await deps.ask(row.sessionId, request, {
       timeoutMs: Math.max(1, row.expiresAt - now()),
-      // Only an answer that names this operation's digest may approve it. The item id already scopes the settlement;
-      // the digest additionally refuses a surface that answered from a stale payload.
-      refuse: answer => (answer.digest && answer.digest !== row.digest
+      // An answer must carry this operation's digest: a surface that answers without one (or with another operation's
+      // digest) is refused here, before settlement, so the ask stays open and the person can answer it again.
+      refuse: answer => (answer.digest !== row.digest
         ? 'This answer does not belong to the group-join operation that is waiting'
         : null),
     })
@@ -367,8 +383,8 @@ async function askAndSettle(
     settle(deps.sqlite, row.id, 'withdrawn', { decidedAt: now() })
     return outcomeOf(readAgentGroupJoin(deps.sqlite, row.id)!)
   }
-  if (result.optionId !== GROUP_JOIN_ALLOW_OPTION || (result.digest !== undefined && result.digest !== row.digest)) {
-    // An unknown option, or an answer carrying another operation's digest, is not permission either.
+  if (result.optionId !== GROUP_JOIN_ALLOW_OPTION || result.digest !== row.digest) {
+    // An unknown option, or an answer missing this operation's digest (or carrying another one), is not permission.
     settle(deps.sqlite, row.id, 'denied', { decidedAt: now(), decidedBy: result.by })
     return outcomeOf(readAgentGroupJoin(deps.sqlite, row.id)!)
   }
@@ -407,8 +423,11 @@ export async function requestAgentGroupJoin(
 
   const continueWith = (row: AgentGroupJoinRow): Promise<AgentGroupJoinOutcome> => {
     if (row.status === 'applied') return Promise.resolve(outcomeOf(row))
-    if (row.status === 'applying') return Promise.resolve(outcomeOf(row))
-    if (row.status === 'approved') return runOnce(row.id, () => execute(row, deps, now))
+    // An unexpired `applying` claim fails inside `execute` and stays `in_progress`; an expired one is re-claimed and
+    // retried, because the membership call is idempotent and a killed process must not strand the approval forever.
+    if (row.status === 'approved' || row.status === 'applying') {
+      return runOnce(row.id, () => execute(row, deps, now))
+    }
     if (row.status === 'pending') {
       if (row.expiresAt <= now()) {
         settle(deps.sqlite, row.id, 'expired', { decidedAt: now(), lastError: 'the previous ask ran out before an answer' })
@@ -456,8 +475,10 @@ export async function requestAgentGroupJoin(
 }
 
 /**
- * Resume asks that survived a process restart. The durable rows are the source; `hostAsks` was only the live view.
- * Callers pass the same dependencies they use for a fresh request (the owner's auth supplies `addAgent`).
+ * Resume rows that survived a process restart. A pending ask is asked again; an `applying` claim whose lease expired is
+ * retried directly, since its approval already happened and re-asking would invent a second decision. The durable rows
+ * are the source; `hostAsks` was only the live view. Callers pass the same dependencies they use for a fresh request
+ * (the owner's auth supplies `addAgent`).
  */
 export async function resumePendingAgentGroupJoins(
   deps: AgentGroupJoinDeps,
@@ -468,7 +489,10 @@ export async function resumePendingAgentGroupJoins(
     .filter(row => !filter.sessionId || row.sessionId === filter.sessionId)
   const outcomes: AgentGroupJoinOutcome[] = []
   for (const row of rows) {
-    outcomes.push(await runOnce(row.id, () => askAndSettle(row, deps, now)))
+    const resume = row.status === 'applying'
+      ? () => execute(row, deps, now)
+      : () => askAndSettle(row, deps, now)
+    outcomes.push(await runOnce(row.id, resume))
   }
   return outcomes
 }

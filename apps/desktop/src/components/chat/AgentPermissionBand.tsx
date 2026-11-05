@@ -16,6 +16,13 @@ import { toComposerPermission } from '@/session/renderer/features/sessions/acp/c
 
 const permissionLog = rendererLogger('chat/agent-permission-band')
 
+/** A group-join answer must carry this payload's digest: the core refuses an answer without it, so a band that omits it leaves the person's click with no effect. */
+function groupJoinDigest(origin: { source: string; payload?: unknown } | undefined): string | undefined {
+  if (origin?.source !== 'group-join') return undefined
+  const payload = origin.payload as { digest?: unknown } | null
+  return typeof payload?.digest === 'string' ? payload.digest : undefined
+}
+
 /** 会话页那条 `PermissionBand` 原样用在聊天页;数据与作答都走时间线结算(见 useSessionpageSessionTimeline),三端谁先答谁生效。 */
 export function AgentPermissionBand({ sessionId, pending, respond }: {
   /** The session asking: its computer is named when it is not this one (another desktop's session followed here). */
@@ -40,10 +47,13 @@ export function AgentPermissionBand({ sessionId, pending, respond }: {
   const machineId = sessionId ? machineRegistry.machineOf(sessionId) : null
   const machine = machineId ? remoteHostsStore.device(machineId)?.label ?? machineId : undefined
   const words = install ? appInstallWords(install, translateSessionMessage, machine) : null
-  const onResolve = (optionId: string) => void (install
-    ? answerAppInstall({ itemId: pending.itemId, ask: install, optionId, machine, respond: (answer) => respond(pending.itemId, answer.optionId, answer).then(answered) })
-    : respond(pending.itemId, optionId).then(answered)
-  ).catch(failed)
+  const onResolve = (optionId: string) => {
+    const digest = groupJoinDigest(pending.origin)
+    void (install
+      ? answerAppInstall({ itemId: pending.itemId, ask: install, optionId, machine, respond: (answer) => respond(pending.itemId, answer.optionId, answer).then(answered) })
+      : respond(pending.itemId, optionId, digest ? { digest } : undefined).then(answered)
+    ).catch(failed)
+  }
   const options = words ? pending.options.map((option) => ({ ...option, label: words.label(option.optionId) })) : pending.options
   const request = words ? { requestId: pending.itemId, title: words.title, options }
     : toComposerPermission({ requestId: pending.itemId, title: pending.title, toolCallId: pending.itemId, waitKind: 'approval', options }, translateSessionMessage)!
