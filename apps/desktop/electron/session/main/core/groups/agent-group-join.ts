@@ -340,9 +340,9 @@ async function askAndSettle(
   try {
     result = await deps.ask(row.sessionId, request, {
       timeoutMs: Math.max(1, row.expiresAt - now()),
-      // Only an answer that names this operation's digest may approve it. The item id already scopes the settlement;
-      // the digest additionally refuses a surface that answered from a stale payload.
-      refuse: answer => (answer.digest && answer.digest !== row.digest
+      // An answer must carry this operation's digest: a surface that answers without one (or with another operation's
+      // digest) is refused here, before settlement, so the ask stays open and the person can answer it again.
+      refuse: answer => (answer.digest !== row.digest
         ? 'This answer does not belong to the group-join operation that is waiting'
         : null),
     })
@@ -367,8 +367,8 @@ async function askAndSettle(
     settle(deps.sqlite, row.id, 'withdrawn', { decidedAt: now() })
     return outcomeOf(readAgentGroupJoin(deps.sqlite, row.id)!)
   }
-  if (result.optionId !== GROUP_JOIN_ALLOW_OPTION || (result.digest !== undefined && result.digest !== row.digest)) {
-    // An unknown option, or an answer carrying another operation's digest, is not permission either.
+  if (result.optionId !== GROUP_JOIN_ALLOW_OPTION || result.digest !== row.digest) {
+    // An unknown option, or an answer missing this operation's digest (or carrying another one), is not permission.
     settle(deps.sqlite, row.id, 'denied', { decidedAt: now(), decidedBy: result.by })
     return outcomeOf(readAgentGroupJoin(deps.sqlite, row.id)!)
   }
