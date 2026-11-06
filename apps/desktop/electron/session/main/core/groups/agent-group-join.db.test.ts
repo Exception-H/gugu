@@ -176,4 +176,77 @@ describe('P0-2.1 agent group join: pending before membership', () => {
     expect(resumed).toEqual([expect.objectContaining({ status: 'joined', operationId: 'operation-1' })])
     expect(addAgent).toHaveBeenCalledTimes(1)
   })
+
+  /**
+   * The cloud accepted the membership, then this device failed to write it down. That must not be reported (or stored)
+   * as a refusal, and the retry path must still be able to repair the local record.
+   */
+  const flakyAppliedWrite = (): Fixture['sqlite'] => {
+    const realPrepare = fixture.sqlite.prepare.bind(fixture.sqlite)
+    return new Proxy(fixture.sqlite, {
+      get(target, prop) {
+        if (prop === 'prepare') {
+          return (sql: string) => {
+            // Only the record that marks the operation `applied` fails — the row itself stays readable and repairable.
+            if (sql.includes("SET status = 'applied'")) throw new Error('SQLITE_IOERR: disk I/O error')
+            return realPrepare(sql)
+          }
+        }
+        const value = Reflect.get(target, prop, target)
+        return typeof value === 'function' ? value.bind(target) : value
+      },
+    }) as Fixture['sqlite']
+  }
+
+  it('cloud joined + local write failed: the row is not called failed and the message says the Agent did join', async () => {
+    const addAgent = vi.fn(async () => ({ chat_id: 'chat-1', status: 'joined' as const }))
+    const result = await requestAgentGroupJoin(
+      INPUT,
+      depsFor(fixture, approving(), addAgent, { sqlite: flakyAppliedWrite() }),
+    )
+    expect(result).toMatchObject({
+      status: 'joined',
+      operationId: 'operation-1',
+      receipt: { chat_id: 'chat-1', status: 'joined' },
+      localRecord: 'repair_pending',
+      notice: 'the Agent is in the group; this device could not save the record yet and will retry',
+    })
+    // Never the refusal wording: the group did not refuse anything.
+    expect(result).not.toHaveProperty('error')
+    expect(addAgent).toHaveBeenCalledTimes(1)
+    const row = readAgentGroupJoin(fixture.sqlite, 'operation-1')!
+    expect(row.status).not.toBe('failed')
+    expect(row).toMatchObject({ status: 'applying', resultStatus: null })
+    expect(row.lastError).toContain('membership confirmed in the cloud')
+    expect(row.lastError).toContain('SQLITE_IOERR')
+  })
+
+  it('the existing retry path repairs a local write failure instead of stranding the join', async () => {
+    const addAgent = vi.fn(async () => ({ chat_id: 'chat-1', status: 'joined' as const }))
+    await requestAgentGroupJoin(INPUT, depsFor(fixture, approving(), addAgent, { sqlite: flakyAppliedWrite() }))
+    expect(readAgentGroupJoin(fixture.sqlite, 'operation-1')?.status).toBe('applying')
+    // Past the applying lease: the row is resumed without a second ask, the idempotent RPC re-runs and the local write lands.
+    const later = Date.now() + 5 * 60_000
+    const resumed = await resumePendingAgentGroupJoins(
+      depsFor(fixture, approving(), addAgent, { now: () => later }),
+    )
+    expect(resumed).toEqual([expect.objectContaining({ status: 'joined', operationId: 'operation-1' })])
+    expect(readAgentGroupJoin(fixture.sqlite, 'operation-1')).toMatchObject({ status: 'applied', resultStatus: 'joined' })
+    expect(addAgent).toHaveBeenCalledTimes(2)
+  })
+
+  it('registers the pending record before returning when the caller does not wait for the answer', async () => {
+    const addAgent = vi.fn(async () => ({ chat_id: 'chat-1', status: 'joined' as const }))
+    let release!: (value: 'withdrawn') => void
+    const waited = new Promise<'withdrawn'>(resolve => { release = resolve })
+    const ask: AgentGroupJoinAsk = async () => waited
+    const result = await requestAgentGroupJoin(INPUT, depsFor(fixture, ask, addAgent), { awaitAnswer: false })
+    // The registration is written and readable before the ask has settled; nothing is added until the person answers.
+    expect(result).toMatchObject({ status: 'in_progress', operationId: 'operation-1' })
+    expect(readAgentGroupJoin(fixture.sqlite, 'operation-1')?.status).toBe('pending')
+    expect(addAgent).not.toHaveBeenCalled()
+    release('withdrawn')
+    await vi.waitFor(() => expect(readAgentGroupJoin(fixture.sqlite, 'operation-1')?.status).toBe('withdrawn'))
+    expect(addAgent).not.toHaveBeenCalled()
+  })
 })

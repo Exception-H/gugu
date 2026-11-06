@@ -7,6 +7,7 @@ import {
   resumePendingAgentGroupJoins,
   type AgentGroupJoinDeps,
   type AgentGroupJoinInput,
+  type AgentGroupJoinOptions,
   type AgentGroupJoinOutcome,
 } from '@main/core/groups/agent-group-join'
 
@@ -34,8 +35,9 @@ export function agentGroupJoinDepsFor(auth: AgentGroupJoinAuth): AgentGroupJoinD
 export function requestAgentGroupJoinForAuth(
   input: AgentGroupJoinInput,
   auth: AgentGroupJoinAuth,
+  options: AgentGroupJoinOptions = {},
 ): Promise<AgentGroupJoinOutcome> {
-  return requestAgentGroupJoin(input, agentGroupJoinDepsFor(auth))
+  return requestAgentGroupJoin(input, agentGroupJoinDepsFor(auth), options)
 }
 
 /** Boot hook: a pending record survives a restart; this re-asks under its original operation id. */
