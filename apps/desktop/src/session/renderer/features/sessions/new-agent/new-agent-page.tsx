@@ -70,6 +70,7 @@ import {
   fetchAgentDefaultName,
   newAgentFailureKey,
   planNewAgentSubmit,
+  residentRequestKey,
 } from './new-agent-submit';
 
 type Translate = ReturnType<typeof useSessionMessages>['translate'];
@@ -153,7 +154,7 @@ export const NewAgentPage = observer(function NewAgentPage() {
   const [defaultNameFailed, setDefaultNameFailed] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [residentFailure, setResidentFailure] = useState<SessionMessageKey | null>(null);
-  const residentIdRef = useRef<string | null>(null);
+  const residentIdRef = useRef<{ key: string; id: string } | null>(null);
 
   useEffect(() => {
     remoteHostsStore.start();
@@ -366,8 +367,21 @@ export const NewAgentPage = observer(function NewAgentPage() {
     if (plan.kind !== 'resident') return;
     const workspaceConfig = state.workspaceConfig.resolvedConfig;
     if (!workspaceConfig) return;
-    const id = residentIdRef.current ?? crypto.randomUUID();
-    residentIdRef.current = id;
+    const requestKey = residentRequestKey({
+      projectId: effectiveProjectId,
+      workspaceId: workspaceConfig.workspace.workspaceId,
+      provider: initialSession.provider,
+      runtime: sessionRuntimeOfView(initialSession.sessionView),
+      displayName: state.sessionName.effectiveSessionName,
+      permissionMode: initialSession.permissionMode,
+      model: initialSession.platformModel ? null : initialSession.model,
+      effort: initialSession.effort,
+    });
+    // 只有同一个请求的重试复用 id；名字/工作区/模型变了就是新请求，必须换新的 id。
+    const id = residentIdRef.current?.key === requestKey
+      ? residentIdRef.current.id
+      : crypto.randomUUID();
+    residentIdRef.current = { key: requestKey, id };
     setSubmitting(true);
     void createResidentAgent(rpc, {
       id,

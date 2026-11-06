@@ -7,6 +7,8 @@ import {
   fetchAgentDefaultName,
   newAgentFailureKey,
   planNewAgentSubmit,
+  residentRequestKey,
+  type ResidentRequestIdentity,
 } from './new-agent-submit';
 
 const workspaceConfig = {
@@ -23,6 +25,33 @@ const session = {
   agentStatus: 'idle',
   lastInteractedAt: '2026-11-04T00:00:00.000Z',
 } as unknown as Session;
+
+describe('residentRequestKey', () => {
+  const identity: ResidentRequestIdentity = {
+    projectId: 'project-1',
+    workspaceId: 'ws-1',
+    provider: 'codex',
+    runtime: 'acp',
+    displayName: '新助手 1',
+  };
+
+  it('同一个请求（包括首尾空格）拿到同一个 key ⇒ 失败重试复用同一个 id', () => {
+    expect(residentRequestKey(identity)).toBe(residentRequestKey({ ...identity, displayName: '  新助手 1  ' }));
+  });
+
+  it('只改名字 ⇒ 新 key，不能继续拿旧 id 去换回旧会话', () => {
+    expect(residentRequestKey(identity)).not.toBe(residentRequestKey({ ...identity, displayName: '换了名字' }));
+  });
+
+  it('只换工作区 / 项目 / 引擎 / 模型 ⇒ 各自是新 key', () => {
+    expect(residentRequestKey(identity)).not.toBe(residentRequestKey({ ...identity, workspaceId: 'ws-2' }));
+    expect(residentRequestKey(identity)).not.toBe(residentRequestKey({ ...identity, projectId: 'project-2' }));
+    expect(residentRequestKey(identity)).not.toBe(residentRequestKey({ ...identity, provider: 'claude' }));
+    expect(residentRequestKey(identity)).not.toBe(residentRequestKey({ ...identity, model: 'gpt-5' }));
+    expect(residentRequestKey(identity)).not.toBe(residentRequestKey({ ...identity, effort: 'high' }));
+    expect(residentRequestKey(identity)).not.toBe(residentRequestKey({ ...identity, permissionMode: 'edit' }));
+  });
+});
 
 describe('planNewAgentSubmit', () => {
   it('does not require a first task when the agent is resident', () => {

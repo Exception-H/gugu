@@ -76,7 +76,7 @@ function rowsChain(rows: unknown[]) {
   return { from: () => fromResult };
 }
 
-function setupTransactionMock() {
+function setupTransactionMock(options: { insertError?: unknown } = {}) {
   const captured: unknown[] = [];
   mocks.transaction.mockImplementation((cb: (tx: unknown) => void) => {
     captured.length = 0;
@@ -85,6 +85,7 @@ function setupTransactionMock() {
       select: () => rowsChain(mocks.rows),
       insert: () => ({
         values: (vals: unknown) => {
+          if (options.insertError) throw options.insertError;
           captured.push(vals);
           return { returning: () => ({ all: () => [vals] }) };
         },
@@ -274,6 +275,85 @@ describe('createResidentSession', () => {
 
     expect(result.success).toBe(false);
     expect(mocks.transaction).not.toHaveBeenCalled();
+  });
+
+  // The row a previous submit left behind. Name and workspace are part of the request identity:
+  // reusing that row for a renamed / re-targeted submit is the bug this guards.
+  const storedRow = (overrides: Record<string, unknown> = {}) => ({
+    id: 'resident-1',
+    projectId: 'project-1',
+    workspaceId: 'ws-repo-1',
+    provider: 'codex',
+    runtime: 'acp',
+    config: { version: '1', type: 'acp', resident: true, agentDisplayName: '新助手 1' },
+    ...overrides,
+  });
+
+  it('同 id 只改了名字 ⇒ 报错,不把旧会话当成新建议返回', async () => {
+    mocks.rows = [storedRow()];
+
+    const result = await createResidentSession({
+      ...params,
+      agent: { ...params.agent, displayName: '换了名字' },
+    });
+
+    expect(result.success).toBe(false);
+    if (!result.success) {
+      expect(result.error.type).toBe('provision-failed');
+      expect(result.error).toMatchObject({ message: expect.stringContaining('different creation request') });
+    }
+    expect(mocks.transaction).not.toHaveBeenCalled();
+    expect(mocks.emit).not.toHaveBeenCalled();
+  });
+
+  it('同 id 只换了工作区 ⇒ 报错,不把旧会话当成新建议返回', async () => {
+    mocks.rows = [storedRow()];
+
+    const result = await createResidentSession({
+      ...params,
+      workspaceConfig: {
+        ...workspaceConfig,
+        workspace: { ...workspaceConfig.workspace, workspaceId: 'ws-other' },
+      },
+    });
+
+    expect(result.success).toBe(false);
+    if (!result.success) expect(result.error.type).toBe('provision-failed');
+    expect(mocks.transaction).not.toHaveBeenCalled();
+    expect(mocks.emit).not.toHaveBeenCalled();
+  });
+
+  it('并发同 id:后到的撞主键时读回赢家那一行,不把数据库错误抛给调用方', async () => {
+    // First read (before prepare) sees nothing; the insert then loses the race; the re-read finds the winner.
+    mocks.select
+      .mockImplementationOnce(() => rowsChain([]))
+      .mockImplementation(() => rowsChain([storedRow()]));
+    setupTransactionMock({ insertError: new Error('UNIQUE constraint failed: sessions.id') });
+
+    const result = await createResidentSession(params);
+
+    expect(result.success).toBe(true);
+    if (result.success) expect(result.data.session.id).toBe('resident-1');
+    expect(mocks.transaction).toHaveBeenCalledTimes(1);
+    expect(mocks.emit).not.toHaveBeenCalled();
+  });
+
+  it('并发同 id 但赢家是另一个请求 ⇒ 可预期的 provision-failed,而不是主键错误', async () => {
+    mocks.select
+      .mockImplementationOnce(() => rowsChain([]))
+      .mockImplementation(() => rowsChain([
+        storedRow({ config: { version: '1', type: 'acp', resident: true, agentDisplayName: '另一个名字' } }),
+      ]));
+    setupTransactionMock({ insertError: new Error('UNIQUE constraint failed: sessions.id') });
+
+    const result = await createResidentSession(params);
+
+    expect(result.success).toBe(false);
+    if (!result.success) {
+      expect(result.error.type).toBe('provision-failed');
+      expect(result.error).toMatchObject({ message: expect.stringContaining('different creation request') });
+    }
+    expect(mocks.emit).not.toHaveBeenCalled();
   });
 });
 

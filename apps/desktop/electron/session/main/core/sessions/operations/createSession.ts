@@ -284,23 +284,53 @@ export function finalizeResidentSession(
   return { session };
 }
 
+/** The request fields that define *which* resident agent a submit asks for. */
+function sameResidentCreationRequest(
+  existing: SessionRow,
+  params: CreateResidentSessionParams
+): boolean {
+  const config = existing.config;
+  return (
+    config?.resident === true &&
+    existing.projectId === params.projectId &&
+    existing.workspaceId === params.workspaceConfig.workspace.workspaceId &&
+    existing.provider === params.agent.provider &&
+    existing.runtime === params.agent.runtime &&
+    (config.agentDisplayName ?? '').trim() === params.agent.displayName.trim() &&
+    config.permissionMode === params.agent.permissionMode &&
+    (config.model ?? null) === (params.agent.model ?? null) &&
+    (config.effort ?? null) === (params.agent.effort ?? null)
+  );
+}
+
+function differentRequestError(id: string): CreateSessionError {
+  return {
+    type: 'provision-failed',
+    message: `session ${id} already exists with a different creation request`,
+  };
+}
+
+/** Only the id primary key: a name conflict is its own error and must keep its own message. */
+function isSessionIdConflict(error: unknown): boolean {
+  return (
+    error instanceof Error &&
+    /UNIQUE constraint failed: sessions\.id|SQLITE_CONSTRAINT_PRIMARYKEY/i.test(error.message)
+  );
+}
+
+async function findSession(id: string): Promise<SessionRow | undefined> {
+  const [row] = await db.select().from(sessions).where(eq(sessions.id, id)).limit(1);
+  return row;
+}
+
 export async function createResidentSession(
   params: CreateResidentSessionParams
 ): Promise<Result<CreateResidentSessionSuccess, CreateSessionError>> {
-  // 幂等:同一次提交重试复用同一个 agent.id;已存在且是同一请求的 resident 行就原样返回。
-  const [existing] = await db.select().from(sessions).where(eq(sessions.id, params.agent.id)).limit(1);
+  // 幂等:同一次提交重试复用同一个 agent.id。只有**同一个请求**才复用已有行 ——
+  // 改名、换工作区、换 provider/模型都是另一个请求,❌ 不能拿旧会话糊弄成「新建成功」。
+  const existing = await findSession(params.agent.id);
   if (existing) {
-    const sameRequest =
-      existing.config?.resident === true &&
-      existing.projectId === params.projectId &&
-      existing.provider === params.agent.provider &&
-      existing.runtime === params.agent.runtime;
-    if (!sameRequest) {
-      return err({
-        type: 'provision-failed',
-        message: `session ${params.agent.id} already exists with a different creation request`,
-      });
-    }
+    if (!sameResidentCreationRequest(existing, params)) return err(differentRequestError(params.agent.id));
     return ok({ session: mapSessionRowToSession(existing) });
   }
 
@@ -317,6 +347,15 @@ export async function createResidentSession(
     // rolled back, so report it through the same Result channel as project / workspace failures.
     if (error instanceof TaskNameConflictError) {
       return err({ type: 'provision-failed', message: error.message });
+    }
+    // 并发同 id:两个请求都读不到行、都去 insert,后到的撞主键。这不是数据库故障,而是幂等约定里
+    // 的另一半 —— 读回赢家那一行:同一个请求就照常返回它,不同请求则给出可预期的错误。
+    if (isSessionIdConflict(error)) {
+      const winner = await findSession(params.agent.id);
+      if (winner && sameResidentCreationRequest(winner, params)) {
+        return ok({ session: mapSessionRowToSession(winner) });
+      }
+      return err(differentRequestError(params.agent.id));
     }
     throw error;
   }

@@ -123,6 +123,76 @@ describe('createResidentSession against the real database', () => {
     expect(rawConfig('resident-1').resident).toBe(true);
   });
 
+  it('完全重复(同 id、同名、同工作区、同引擎) ⇒ 幂等复用那一行,不新建、不重复发事件', async () => {
+    const first = await createResidentSession(params);
+    expect(first.success).toBe(true);
+
+    const again = await createResidentSession(params);
+
+    expect(again.success).toBe(true);
+    if (first.success && again.success) {
+      expect(again.data.session.id).toBe('resident-1');
+      expect(again.data.session.title).toBe('新助手 1');
+    }
+    expect(rowCount()).toBe(1);
+  });
+
+  it('只改名字 ⇒ 不再静默拿回旧会话:报错,原文一行未动', async () => {
+    await createResidentSession(params);
+
+    const result = await createResidentSession({
+      ...params,
+      agent: { ...params.agent, displayName: '换了个名字' },
+    });
+
+    expect(result.success).toBe(false);
+    if (!result.success) {
+      expect(result.error.type).toBe('provision-failed');
+      expect(result.error).toMatchObject({ message: expect.stringContaining('different creation request') });
+    }
+    expect(rowCount()).toBe(1);
+    expect(rawConfig('resident-1').agentDisplayName).toBe('新助手 1');
+  });
+
+  it('只换工作区 ⇒ 不再静默拿回旧会话:报错,原文一行未动', async () => {
+    await createResidentSession(params);
+
+    const result = await createResidentSession({
+      ...params,
+      workspaceConfig: {
+        ...params.workspaceConfig,
+        workspace: { ...params.workspaceConfig.workspace, workspaceId: 'ws-other' },
+      },
+    });
+
+    expect(result.success).toBe(false);
+    if (!result.success) {
+      expect(result.error.type).toBe('provision-failed');
+      expect(result.error).toMatchObject({ message: expect.stringContaining('different creation request') });
+    }
+    expect(rowCount()).toBe(1);
+    expect(fixture.sqlite.prepare('SELECT workspace_id FROM sessions WHERE id = ?').get('resident-1'))
+      .toEqual({ workspace_id: 'ws' });
+  });
+
+  it('改名后拿到新 id(渲染层 request key 变了) ⇒ 正常新建第二行,旧会话原样保留', async () => {
+    await createResidentSession(params);
+
+    const renamed = await createResidentSession({
+      ...params,
+      agent: { ...params.agent, id: 'resident-2', displayName: '换了个名字' },
+    });
+
+    expect(renamed.success).toBe(true);
+    if (renamed.success) {
+      expect(renamed.data.session.id).toBe('resident-2');
+      expect(renamed.data.session.title).toBe('换了个名字');
+    }
+    expect(rowCount()).toBe(2);
+    expect(rawConfig('resident-1').agentDisplayName).toBe('新助手 1');
+    expect(rawConfig('resident-2').agentDisplayName).toBe('换了个名字');
+  });
+
   it('普通 createSession 空首轮仍然抛,库里零行', async () => {
     await expect(createSession({
       projectId: 'p',
