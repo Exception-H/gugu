@@ -1,9 +1,9 @@
-import { useTranslation } from 'react-i18next'
+import { useSharedTranslation } from '@/i18n/react'
 import { useAssistantConversationProgress } from './assistantConversationProgressContext'
 
 /** Small evidence-backed preface; missing record data never becomes a fabricated duration. */
 export function AssistantReplyProcess({ messageId }: { messageId?: string }) {
-  const { t } = useTranslation('assistant')
+  const { t } = useSharedTranslation('assistant')
   const context = useAssistantConversationProgress()
   const process = messageId ? context?.replies.get(messageId) : null
   if (!process || (!process.thoughts && !process.tools)) return null

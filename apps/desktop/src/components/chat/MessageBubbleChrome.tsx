@@ -1,6 +1,6 @@
-import { useTranslation } from 'react-i18next'
+import { useSharedTranslation } from '@/i18n/react'
 import { Chip } from '../ui/Chip'
-import { Button } from '../ui/Button'
+import { NativeButton } from '../ui/Button'
 import { useAuth } from '../../store/auth'
 import { useAgentLook } from '../agentAvatar/useAgentLook'
 import { useIsAssistantAvatar } from '../../lib/avatarIdentity'
@@ -42,7 +42,7 @@ function ownerLabelOverflows(row: HTMLElement): boolean {
 /** 群里收到的消息、组首那一条:名字 + 归属小标签(「我的 agent」「Alice 的 agent」)。
  *  色相来自头像实际身体色;助理沿已保存的形象,亮度/彩度随主题(tokens.css)。 */
 export function BubbleSender({ member, displayName, senderId, replyMark }: { member: MemberProfileCardModel | null; displayName?: string; senderId: string | null; replyMark?: ReactNode }) {
-  const { t } = useTranslation('messaging')
+  const { t } = useSharedTranslation('messaging')
   const { user } = useAuth()
   const target = useMessageSenderTarget()
   const rowRef = useRef<HTMLDivElement>(null)
@@ -65,7 +65,7 @@ export function BubbleSender({ member, displayName, senderId, replyMark }: { mem
   }, [tag, name, hasReply, target])
   return (
     <div ref={rowRef} data-message-who="true" data-message-sender-name="true" className="msg-sender" style={{ '--member-hue': hue } as React.CSSProperties}>
-      {target ? <Button variant="ghost" size="sm" className="msg-sender-name msg-sender-link" onClick={event => { event.stopPropagation(); openMessageSender(target) }}><span className="msg-sender-name">{name}</span></Button>
+      {target ? <NativeButton variant="ghost" size="sm" className="msg-sender-name msg-sender-link" onClick={event => { event.stopPropagation(); openMessageSender(target) }}><span className="msg-sender-name">{name}</span></NativeButton>
         : <span className="msg-sender-name">{name}</span>}
       {replyMark}
       {tag && <Chip appearance="filled" data-message-agent-owner="true">{tag}</Chip>}

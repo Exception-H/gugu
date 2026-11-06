@@ -3,7 +3,7 @@ import { useShownAgentName } from '@/hooks/useShownAgentName'
 import { useAvatarIdentity } from '@/lib/avatarIdentity'
 import type { AutomationTestId } from '../lib/automationDom'
 import type { MemberProfileCardModel } from './MemberProfileCard'
-import { useTranslation } from 'react-i18next'
+import { useSharedTranslation } from '@/i18n/react'
 
 export function MemberProfileAvatarButton({
   member,
@@ -24,7 +24,7 @@ export function MemberProfileAvatarButton({
   messageSenderId?: string
   onOpen: (event: React.MouseEvent<HTMLButtonElement>) => void
 }) {
-  const { t } = useTranslation('contacts')
+  const { t } = useSharedTranslation('contacts')
   const identity = useAvatarIdentity(isAgent ? member.id : '')
   const name = useShownAgentName({ name: member.displayName, createdAt: isAgent ? identity?.created_at ?? undefined : undefined })
   return (

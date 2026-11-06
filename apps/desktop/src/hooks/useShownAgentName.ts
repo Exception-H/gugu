@@ -1,5 +1,5 @@
 import { agentNamingUntil } from '@gugu/core/shared/agentDefaultName'
-import { useTranslation } from 'react-i18next'
+import { useSharedTranslation } from '@/i18n/react'
 import { useDeadlineClock } from './useDeadlineClock'
 import { useChatClashNames } from '../components/chat/ChatClashNames'
 
@@ -13,7 +13,7 @@ type AgentNameInput = {
 export function useShownAgentName(input: AgentNameInput): string
 export function useShownAgentName(input: readonly AgentNameInput[]): string[]
 export function useShownAgentName(input: AgentNameInput | readonly AgentNameInput[]): string | string[] {
-  const { t } = useTranslation('common')
+  const { t } = useSharedTranslation('common')
   const scope = useChatClashNames()
   const names: readonly AgentNameInput[] = Array.isArray(input) ? input : [input as AgentNameInput]
   const now = Date.now()

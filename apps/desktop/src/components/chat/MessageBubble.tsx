@@ -3,7 +3,7 @@ import { useShownAgentName } from '@/hooks/useShownAgentName'
 import { useAvatarIdentity } from '@/lib/avatarIdentity'
 import { MESSAGE_BUBBLE_LAYOUT as layout } from '@gugu/core/shared/ui/messageBubbleLayout'
 import { memo, useEffect, useRef, useState } from 'react'
-import { useTranslation } from 'react-i18next'
+import { useSharedTranslation } from '@/i18n/react'
 import { useToast } from '../toastContext'; import { downloadAttachment } from '../../lib/attachmentBytes'
 import { motion, AnimatePresence } from 'framer-motion'; import { MediaAttachmentBubble } from './MediaAttachmentBubble'; import { GroupAvatarSlot } from './StickyGroupAvatar'
 import { MessageSenderAvatar } from './MessageSenderAvatar'; import { platform } from '../../platform'
@@ -47,7 +47,7 @@ function VoiceAttachmentBubble({
   transcript: string
   isMine: boolean
 }) {
-  const { t } = useTranslation('messaging')
+  const { t } = useSharedTranslation('messaging')
   const accentColor = isMine ? 'var(--text-on-bubble-strong)' : 'var(--text-link)'
   const barColor = isMine ? 'var(--text-on-bubble-muted)' : 'var(--text-quote-author)'
 
@@ -179,7 +179,7 @@ export const MessageBubble = memo(function MessageBubble({
   hideTime = false,
   showReadReceipt = true,
 }: BubbleProps) {
-  const { t } = useTranslation('messaging')
+  const { t } = useSharedTranslation('messaging')
   const { toast } = useToast()
   const copyText = msg.content_type === 'widget' ? parseWidgetMessage(msg.content)?.text ?? '[Widget]' : msg.content ?? ''
   const handleCopyText = async (content = copyText) => {
