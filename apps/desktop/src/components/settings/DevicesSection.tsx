@@ -52,6 +52,14 @@ import { DeviceMachineArchive } from '../devices/DeviceMachineArchive'
 import { DeviceRenameField } from '../devices/DeviceRenameField'
 import { useDeviceRename } from '../../hooks/useDeviceRename'
 
+/** 一次「现在重启更新」从当面确认到心跳报回结果之间的登记。 */
+type RestartEntry =
+  | { ask: true; busyAgents?: number | null }
+  | { version: string; deadline: number; before: NonNullable<DeviceRowModel['update']>; request?: number | 'pending' }
+
+/** 按 device_id 存在列表上、不挂在设备行里:设备搬进「长期离线」分组时行会重挂,重启中的登记不能跟着没了。 */
+type RestartEntries = Record<string, RestartEntry>
+
 // #1749 设备管理 → #6264 做成能上线的「设置 → 设备」:
 //  · 每行:名字、是台什么机器(本机 / 电脑 / 服务器)、系统与架构、咕咕版本 + 升级状态、在线或「上次在线」、
 //    怎么连着的(经 SSH:用户@主机 / 经云端);
@@ -107,6 +115,29 @@ export function DevicesSection({
   }, [nameWhenAppears])
   const [query, setQuery] = useState('')
   const [filter, setFilter] = useState<DeviceFilter>('all')
+  const [restartEntries, setRestartEntries] = useState<RestartEntries>({})
+  const updateRestartEntry = useCallback((deviceId: string, update: (current: RestartEntry | null) => RestartEntry | null) => {
+    setRestartEntries(current => {
+      const existing = current[deviceId] ?? null
+      const next = update(existing)
+      if (next === existing) return current
+      const rest = { ...current }
+      if (next === null) delete rest[deviceId]
+      else rest[deviceId] = next
+      return rest
+    })
+  }, [])
+  // 这台机器从列表里没了,它的「重启中」登记也跟着没了(否则被重新加回来时,旧登记会带着过期的超时冒出来)。
+  useEffect(() => {
+    setRestartEntries(current => {
+      const known = new Set(devices.map(device => device.device_id))
+      const forgotten = Object.keys(current).filter(deviceId => !known.has(deviceId))
+      if (forgotten.length === 0) return current
+      const rest = { ...current }
+      for (const deviceId of forgotten) delete rest[deviceId]
+      return rest
+    })
+  }, [devices])
   // #7199 第二步:正在看哪台设备「能做的事」(设备页里的一个内页:点设备进它的连接应用页)。
   // #7199 助理主页点了一台设备 = 一进来就是那台的「能做的事」(deviceActionsIntent)。
   const [actionsFor, setActionsFor] = useState<string | null>(() => consumeDeviceActionsIntent())
@@ -171,6 +202,8 @@ export function DevicesSection({
       onRetryUpdate={() => void requestSshServerUpgrade(device.device_id, { force: true })}
       onRetryVersionMatch={() => retryServerVersionMatch(device.device_id)}
       onRestartVersionNow={(version) => restartServerVersionNow(device.device_id, version, serverSupportsConfirmedRestart(device.capabilities))}
+      restartEntry={restartEntries[device.device_id] ?? null}
+      onRestartEntryChange={updateRestartEntry}
       onRelogin={canAddServer && addressOf(device.device_id)
         ? () => {
             setRelogin({ deviceId: device.device_id, address: addressOf(device.device_id)! })
@@ -426,6 +459,8 @@ function DeviceRow({
   upgradePercent,
   onRetryUpdate,
   onRetryVersionMatch,
+  restartEntry,
+  onRestartEntryChange,
   onRestartVersionNow,
   onRelogin,
 }: {
@@ -459,6 +494,9 @@ function DeviceRow({
   /** #6264 那台机器换成和桌面匹配的版本没成(心跳报 server_update.failed):请它再试一次。 */
   onRetryVersionMatch?: () => Promise<boolean>
   onRestartVersionNow?: (version: string) => Promise<VersionRestartResult>
+  /** 这台机器的「现在重启更新」登记:由列表按 device_id 存着,设备行重挂也还在。 */
+  restartEntry: RestartEntry | null
+  onRestartEntryChange: (deviceId: string, update: (current: RestartEntry | null) => RestartEntry | null) => void
   /** 经 SSH 重新登录(只有这台桌面记着怎么 SSH 过去的机器有)。 */
   onRelogin?: () => void
 }) {
@@ -476,9 +514,10 @@ function DeviceRow({
   const [retriedFor, setRetriedFor] = useState<string | null>(null)
   const retrying = failedUpdate !== null && retriedFor === failedUpdate
   // 「有新版本」在等空闲:人可以「现在重启更新」(先说清会中断正在跑的 agent,再点一次才发)。点过就收起,心跳报回新版本时这颗标签自己没了。
-  const [updateNow, setUpdateNow] = useState<{ ask: true; busyAgents?: number | null } | { version: string; deadline: number; before: NonNullable<DeviceRowModel['update']>; request?: number | 'pending' } | null>(null)
-  const asking = updateNow && 'ask' in updateNow ? updateNow : null
-  const restarting = updateNow && !('ask' in updateNow) ? updateNow : null
+  const updateNow = restartEntry
+  const setUpdateNow = useCallback((next: RestartEntry | null | ((current: RestartEntry | null) => RestartEntry | null)) => {
+    onRestartEntryChange(device.device_id, current => (typeof next === 'function' ? next(current) : next))
+  }, [onRestartEntryChange, device.device_id])
   const askRestart = () => {
     const question = { ask: true as const, busyAgents: null }
     setUpdateNow(question)
@@ -493,14 +532,22 @@ function DeviceRow({
   const restartable = device.is_online && canRestart && (model.update?.state === 'ready' || bootFailed)
   const outcome = device.capabilities.server_update_outcome ?? model.update?.lastOutcome
   const hostWaiting = outcome?.kind === 'waiting'
+  const requested = updateNow && !('ask' in updateNow) ? updateNow : null
   // New hosts answer this exact request. Old ACKs have no identity: yield to a changed host fact.
-  const answered = restarting && (typeof restarting.request === 'number'
-    ? outcome?.request === restarting.request && outcome.kind !== 'waiting'
-    : restarting.request === undefined && (model.update?.scope !== restarting.before.scope
-      || model.update?.state !== restarting.before.state || model.update?.version !== restarting.before.version
-      || model.update?.reason !== restarting.before.reason))
-  if ((asking && !restartable)
-    || (restarting && (model.version === restarting.version || answered))) setUpdateNow(null)
+  const answered = requested && (typeof requested.request === 'number'
+    ? outcome?.request === requested.request && outcome.kind !== 'waiting'
+    : requested.request === undefined && (model.update?.scope !== requested.before.scope
+      || model.update?.state !== requested.before.state || model.update?.version !== requested.before.version
+      || model.update?.reason !== requested.before.reason))
+  // 心跳报回了结果、换成新版本了、或这台机器已经接不了确认:这一次登记到此为止。
+  // 判定的结果是当帧就生效(下面两行),把它从列表里摸掉放到 effect 里——渲染时去改上层 state 是不允许的。
+  const settled = requested !== null && (model.version === requested.version || Boolean(answered))
+  const restarting = settled ? null : requested
+  const asking = updateNow && 'ask' in updateNow && restartable ? updateNow : null
+  const stale = updateNow !== null && (settled || (requested === null && !restartable))
+  useEffect(() => {
+    if (stale) setUpdateNow(null)
+  }, [stale, setUpdateNow])
   useEffect(() => {
     if (!restarting || !device.is_online) return
     const timer = setTimeout(() => {
@@ -508,7 +555,7 @@ function DeviceRow({
       toast(t('devices.update.restartTimeout', { name: device.label, version: restarting.version }), 'error')
     }, Math.max(0, restarting.deadline - Date.now()))
     return () => clearTimeout(timer)
-  }, [restarting, toast, t, device.label, device.is_online])
+  }, [restarting, toast, t, device.label, device.is_online, setUpdateNow])
   const signedOutText = sshLink === 'notSignedIn'
     ? t('devices.loginState.signedOut')
     : device.is_online || !signIn
@@ -557,7 +604,7 @@ function DeviceRow({
                   : t('devices.update.downloading', { version: model.update.version })}
               </Chip>
             )}
-            {device.is_online && model.update?.state === 'ready' && !hostWaiting && canRestart && onRestartVersionNow && updateNow === null && (
+            {device.is_online && model.update?.state === 'ready' && !hostWaiting && canRestart && onRestartVersionNow && asking === null && restarting === null && (
               <Button size="sm" onClick={askRestart} data-testid="settings-device-update-now">{t('devices.update.updateNow')}</Button>
             )}
             {model.notices
@@ -627,7 +674,7 @@ function DeviceRow({
             ) : failedUpdate !== null ? (
               <span className={retrying || restarting ? undefined : 'text-[var(--danger-fg)]'} data-testid="settings-device-match-failed">
                 {retrying || restarting ? t('devices.loginState.matchRetrying') : t('devices.loginState.matchFailed')}
-                {!retrying && !restarting && bootFailed && canRestart && onRestartVersionNow && updateNow === null && (
+                {!retrying && !restarting && bootFailed && canRestart && onRestartVersionNow && asking === null && (
                   <>{' '}<InlineAction onClick={askRestart} testId="settings-device-match-restart-now">{t('devices.update.updateNow')}</InlineAction></>
                 )}
                 {!retrying && !bootFailed && onRetryVersionMatch && (
