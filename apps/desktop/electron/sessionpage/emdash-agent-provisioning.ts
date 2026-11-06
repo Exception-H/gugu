@@ -442,9 +442,12 @@ async function joinBirthGroup(accessToken: string, ownerUserId: string, sessionI
       log.info({ agentUserId, chatId, asTask, status: data.status }, 'agent born in a chat: the person had chosen it, the group answered')
       return
     }
+    // The registration is awaited for BOTH kinds of caller: it must be written down before this function returns, so
+    // whoever reads the record right after provisioning sees the pending row. It is the *answer* we never wait for
+    // (`awaitAnswer: false`): the Ask outlives provisioning, and the durable row is what a restart re-asks.
     const result = await requestAgentGroupJoinForAuth({
       sessionId, chatId, targetAgentId: agentUserId, actorUserId: ownerUserId, initiatorAgentId: agentUserId, asTask,
-    }, { accessToken, userId: ownerUserId })
+    }, { accessToken, userId: ownerUserId }, { awaitAnswer: false })
     log.info({ agentUserId, chatId, asTask, operationId: result.operationId, status: result.status },
       'agent born in a chat: joining waits for an explicit human confirmation')
   } catch (error) {
@@ -1275,8 +1278,10 @@ function startCloudProvision(job: {
     // Ask outlive this function.
     if (job.birthGroup) {
       const group = await job.birthGroup()
-      const joining = joinBirthGroup(job.ownerAuth.accessToken, job.ownerAuth.userId, job.sessionId, group, job.guguAgentUserId, log)
-      if (group?.requestedBy === 'human') await joining
+      // Awaited for every caller: the join is registered (pending row written) before provisioning moves on, so anything
+      // reading this Agent's join now finds the record instead of racing its insert. A person-chosen group still awaits
+      // its membership; an Agent-originated one returns with the pending record and does not hang on the human answer.
+      await joinBirthGroup(job.ownerAuth.accessToken, job.ownerAuth.userId, job.sessionId, group, job.guguAgentUserId, log)
     }
     const current = (await listAgents(job.env, { includeGuests: true })).find((a) => a.gugu_user_id === job.guguAgentUserId)
     await updateAgent({ guguUserId: job.guguAgentUserId }, {

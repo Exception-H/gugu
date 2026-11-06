@@ -48,6 +48,12 @@ export type AgentGroupJoinOutcome =
       chatId: string
       targetAgentId: string
       receipt: GroupJoinReceipt
+      /**
+       * Set only when the cloud accepted the membership but this device could not write the record down. The join DID
+       * happen; the row stays retryable (`applying`, lease stamped) so a later attempt repairs the local record.
+       */
+      localRecord?: 'repair_pending'
+      notice?: string
     }
   | {
       status: 'denied' | 'expired' | 'withdrawn' | 'unavailable' | 'in_progress'
@@ -287,6 +293,29 @@ function applyFailure(sqlite: Database.Database, id: string, message: string): v
   sqlite.prepare("UPDATE agent_group_join_requests SET status = 'failed', last_error = ? WHERE id = ?").run(message.slice(0, 2000), id)
 }
 
+/**
+ * The membership call landed but the local `applied` write did not. Never record that as `failed` — nothing was
+ * refused — and never lose the retry: the row keeps `applying` with a fresh lease, so the next attempt re-runs the
+ * idempotent membership call and writes the result. Best effort, because the write that just failed may fail again.
+ */
+const LOCAL_REPAIR_HINT = 'membership confirmed in the cloud; this device could not write the record and will retry'
+
+function markLocalRepairPending(sqlite: Database.Database, id: string, message: string, now: number): void {
+  try {
+    sqlite.prepare(`
+      UPDATE agent_group_join_requests
+      SET status = 'applying', decided_at = ?, last_error = ?
+      WHERE id = ?
+    `).run(now, `${LOCAL_REPAIR_HINT}: ${message}`.slice(0, 2000), id)
+  } catch (error) {
+    // The row stays `applying` with its old lease, which the retry path takes over anyway.
+    log.warn(
+      { operationId: id, err: error instanceof Error ? error.message : String(error) },
+      'agent group join: could not even mark the local record for repair',
+    )
+  }
+}
+
 async function execute(
   row: AgentGroupJoinRow,
   deps: AgentGroupJoinDeps,
@@ -294,8 +323,10 @@ async function execute(
 ): Promise<AgentGroupJoinOutcome> {
   if (row.status === 'applied') return outcomeOf(row)
   if (!claim(deps.sqlite, row.id, now())) return outcomeOf(readAgentGroupJoin(deps.sqlite, row.id) ?? row)
+
+  let receipt: GroupJoinReceipt
   try {
-    const receipt = await deps.addAgent({
+    receipt = await deps.addAgent({
       chatId: row.chatId,
       targetAgentId: row.targetAgentId,
       asTask: row.asTask,
@@ -305,12 +336,10 @@ async function execute(
     if (!['joined', 'pending_approval', 'already_member'].includes(receipt.status)) {
       throw new Error('add_group_agent: unexpected membership result')
     }
-    applyResult(deps.sqlite, row.id, { status: receipt.status }, now())
-    const applied = readAgentGroupJoin(deps.sqlite, row.id)!
-    return outcomeOf(applied)
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error)
-    // A human said yes; the database still said no (role, group rules, offline). No membership is invented.
+    // The membership call itself failed: a human said yes and the database still said no (role, group rules, offline).
+    // No membership is invented.
     applyFailure(deps.sqlite, row.id, message)
     // The raw message is the reason for the log and the row; the answer points at what the person can change.
     log.warn({ operationId: row.id, chatId: row.chatId, reason: message }, 'agent group join refused after approval')
@@ -320,6 +349,33 @@ async function execute(
       chatId: row.chatId,
       targetAgentId: row.targetAgentId,
       error: 'the group refused the membership — check the agent role and the group rules',
+    }
+  }
+
+  // The cloud has the membership now. Anything below is this device failing to write the record down — NOT a refusal,
+  // so it must not be reported (or stored) as one. The row stays retryable so the next attempt repairs it.
+  try {
+    applyResult(deps.sqlite, row.id, { status: receipt.status }, now())
+    const applied = readAgentGroupJoin(deps.sqlite, row.id)
+    if (!applied) throw new Error('the local record disappeared before it could be read back')
+    return outcomeOf(applied)
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error)
+    markLocalRepairPending(deps.sqlite, row.id, message, now())
+    log.error(
+      { operationId: row.id, chatId: row.chatId, membership: receipt.status, reason: message },
+      'agent group join landed in the cloud but the local record could not be written — kept retryable',
+    )
+    return {
+      status: receipt.status,
+      operationId: row.id,
+      chatId: row.chatId,
+      targetAgentId: row.targetAgentId,
+      receipt,
+      localRecord: 'repair_pending',
+      notice: receipt.status === 'pending_approval'
+        ? 'the group queued the membership for approval; this device could not save the record yet and will retry'
+        : 'the Agent is in the group; this device could not save the record yet and will retry',
     }
   }
 }
@@ -404,6 +460,16 @@ function validate(input: AgentGroupJoinInput): void {
   }
 }
 
+export interface AgentGroupJoinOptions {
+  /**
+   * Default `true`: resolve only once the ask settled (answer, timeout, withdrawal, offline) — what a caller that acts on
+   * the membership outcome needs. `false` resolves as soon as the durable pending row exists; the ask keeps running in
+   * this process and the row is asked again after a restart. Provisioning registers with `false` so a new Agent's session
+   * does not hang on a person's answer, while callers can still read the pending record the moment it returns.
+   */
+  awaitAnswer?: boolean
+}
+
 /**
  * Ask one person to approve adding one Agent to one existing group, and only then call the membership RPC.
  *
@@ -415,25 +481,42 @@ function validate(input: AgentGroupJoinInput): void {
 export async function requestAgentGroupJoin(
   input: AgentGroupJoinInput,
   deps: AgentGroupJoinDeps,
+  options: AgentGroupJoinOptions = {},
 ): Promise<AgentGroupJoinOutcome> {
   validate(input)
   const now = deps.now ?? Date.now
   const ttl = deps.ttlMs ?? GROUP_JOIN_CONSENT_HUMAN_WINDOW_MS
   const key = agentGroupJoinOperationKey(input)
 
+  /**
+   * `awaitAnswer: false` hands the caller the registration, never the person's answer. The ask itself stays alive here
+   * (its failures go to the log, not to an unhandled rejection) and the written row — not this promise — is what a
+   * restart resumes from.
+   */
+  const settleLater = (row: AgentGroupJoinRow, started: Promise<AgentGroupJoinOutcome>): Promise<AgentGroupJoinOutcome> => {
+    if (options.awaitAnswer !== false) return started
+    void started.catch((error: unknown) => {
+      log.warn(
+        { operationId: row.id, err: error instanceof Error ? error.message : String(error) },
+        'group join ask failed after its registration returned',
+      )
+    })
+    return Promise.resolve(outcomeOf(readAgentGroupJoin(deps.sqlite, row.id) ?? row))
+  }
+
   const continueWith = (row: AgentGroupJoinRow): Promise<AgentGroupJoinOutcome> => {
     if (row.status === 'applied') return Promise.resolve(outcomeOf(row))
     // An unexpired `applying` claim fails inside `execute` and stays `in_progress`; an expired one is re-claimed and
     // retried, because the membership call is idempotent and a killed process must not strand the approval forever.
     if (row.status === 'approved' || row.status === 'applying') {
-      return runOnce(row.id, () => execute(row, deps, now))
+      return settleLater(row, runOnce(row.id, () => execute(row, deps, now)))
     }
     if (row.status === 'pending') {
       if (row.expiresAt <= now()) {
         settle(deps.sqlite, row.id, 'expired', { decidedAt: now(), lastError: 'the previous ask ran out before an answer' })
         return Promise.resolve(outcomeOf(readAgentGroupJoin(deps.sqlite, row.id)!))
       }
-      return runOnce(row.id, () => askAndSettle(row, deps, now))
+      return settleLater(row, runOnce(row.id, () => askAndSettle(row, deps, now)))
     }
     return Promise.resolve(outcomeOf(row))
   }
