@@ -20,7 +20,7 @@ it('keeps the first resize notification from restarting an already fitted toolba
   vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockImplementation(function () {
     reads++
     const level = Number((this.closest('[data-level]') as HTMLElement)?.dataset.level ?? 0)
-    const left = this.dataset.end !== undefined ? 80 : 0
+    const left = this.dataset.end !== undefined ? width - 20 : 0
     const w = this.dataset.level !== undefined ? width : this.dataset.end !== undefined ? 20 : level < 2 ? 200 : 80
     return { left, right: left + w, width: w, top: 0, bottom: 20, height: 20 } as DOMRect
   })
