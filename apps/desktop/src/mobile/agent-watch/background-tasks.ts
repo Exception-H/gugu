@@ -75,6 +75,8 @@ export function usePhoneBackgroundTasks(
       timer = setTimeout(() => { timer = null; ask() }, interval)
     }
     function ask() {
+      // 看不见就别问 —— 挂载时也一样:这个模块本来是为「页面在后台」省的,挂上先打一轮跟它自己的目标相反。
+      if (document.visibilityState !== 'visible') return
       fetchRunningIds(deviceId, sessionId).then(
         (value) => {
           if (!live) return
@@ -102,6 +104,7 @@ export function usePhoneBackgroundTasks(
       }
       ask()
     }
+    // 挂上先问一轮(看得见的时候);看不见就不打这一轮,由 onVisibilityChange 在回到前台时叫醒。
     ask()
     document.addEventListener('visibilitychange', onVisibilityChange)
     return () => {
