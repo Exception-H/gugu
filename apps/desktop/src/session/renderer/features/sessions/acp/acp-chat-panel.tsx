@@ -1,5 +1,4 @@
 import { isTranscriptDelivery } from '@/lib/pendingSessionDeliveries';
-import { resolveDeliveredAttachment } from '@renderer/lib/chat/delivered-message-presentation';
 import { readNativeOfflineDraft, writeNativeOfflineDraft } from '@/lib/nativeOfflineDraft';
 import { useSessionInputAccount } from '@/lib/sessionInputOutboxBridge';
 import { appendToDraft } from '@/store/chatContext';
@@ -84,7 +83,7 @@ import {
 import { toast } from '@renderer/lib/hooks/use-toast';
 import { useNavigate } from '@renderer/lib/layout/navigation-actions';
 import type { SessionCondition as ChatSessionCondition } from '@gugu/session-chat-ui';
-import { rpc, rpcOn } from '@renderer/lib/ipc';
+import { rpc } from '@renderer/lib/ipc';
 import { nudgeWorkspace } from '@renderer/features/sessions/stores/workspace-nudges';
 import { machineLabel } from '@renderer/lib/machine-clients';
 import { machineRegistry } from '@renderer/lib/machine-routing';
@@ -102,6 +101,7 @@ import { SessionScheduleChip } from '../session-schedule-chip';
 import { sessionComposerTrayClassName, sessionComposerTrayStyle } from '../session-composer-styles';
 import { useSessionSchedules } from '@renderer/features/automations/use-session-schedules';
 import { toComposerPermission } from './composer-permission';
+import { resolveAttachmentDataUrl } from './attachment-data-url';
 import { useHostAskBand } from '@renderer/features/extensions/use-session-host-ask';
 import { SessionHostQuestion } from '@renderer/features/extensions/session-host-question';
 import { registerPastedScreenshot, screenshotQuality } from '@/lib/pastedScreenshot';
@@ -124,7 +124,6 @@ import {
   sessionPermissionModeOptions,
   selectedPermissionModeId,
 } from './permission-mode-options';
-import { resolveVisualEvidenceAttachmentDataUrl } from './acp-chat-resource-manager';
 import { useOpenedOutputMenu } from './opened-output-menu';
 import type { AcpChatTabResource } from './acp-chat-tab-resource';
 import { chatViewCommandForShortcut, executeChatViewCommand } from './acp-chat-view-commands';
@@ -191,21 +190,6 @@ import { getDraggedScreenContent } from '@renderer/lib/drag-screen-content';
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
-/**
- * 会话里看过的每张附件图都会在这里留一份 base64。不设上限的话,翻过的会话越多内存越高,
- * 关掉会话也不释放 —— 「用一阵子就变卡」多半是从这儿开始的。
- * Map 按插入顺序迭代,超了就从最旧的那张出局(先进先出,不做访问刷新)。
- */
-const ATTACHMENT_DATA_URL_CACHE_LIMIT = 24;
-const attachmentDataUrlCache = new Map<string, Promise<string | null>>();
-function rememberAttachmentDataUrl(id: string, promise: Promise<string | null>): void {
-  attachmentDataUrlCache.set(id, promise);
-  while (attachmentDataUrlCache.size > ATTACHMENT_DATA_URL_CACHE_LIMIT) {
-    const oldest = attachmentDataUrlCache.keys().next();
-    if (oldest.done) break;
-    attachmentDataUrlCache.delete(oldest.value);
-  }
-}
 /** `/mcp` 这条自有命令的匹配 —— 与 agent 命令同一口径:空查询全列,否则按名字包含。 */
 function commandMatchesClientQuery(normalized: string): boolean {
   return normalized.length === 0 || 'mcp'.includes(normalized);
@@ -254,52 +238,6 @@ function readFileAsDataUrl(file: File): Promise<string | undefined> {
     reader.onerror = () => resolve(undefined);
     reader.readAsDataURL(file);
   });
-}
-
-function resolveAttachmentDataUrl(store: AcpChatStore, id: string): Promise<string | null> {
-  if (id.startsWith('gugu-message-file://')) return resolveDeliveredAttachment(id);
-  const fixtureDataUrl = resolveVisualEvidenceAttachmentDataUrl(store, id);
-  if (fixtureDataUrl) return Promise.resolve(fixtureDataUrl);
-  // 旧消息正文里那条绝对路径投影出来的附件(#5269):字节在盘上,不在 agent 的附件仓里 —— 照那条路径读。
-  const path = pathAttachmentTarget(id);
-  if (path) {
-    const cachedPath = attachmentDataUrlCache.get(id);
-    if (cachedPath) return cachedPath;
-    // 字节在会话所在的那台机器上(别的机器上的会话 = 问那台机器)。
-    const promise = rpcOn(machineRegistry.machineOf(store.projectId)).app.readUserImageDataUrl(path)
-      .then((result) => (result.success ? result.dataUrl : null))
-      .catch((error: unknown) => {
-        // 读不到就退回中性占位块(旧消息里那些指着临时目录的路径就是这种)——❌ 不弹错。
-        log.warn('Failed to read attachment image', { path, error });
-        return null;
-      });
-    rememberAttachmentDataUrl(id, promise);
-    return promise;
-  }
-  if (!store.session) return Promise.resolve(null);
-  const cached = attachmentDataUrlCache.get(id);
-  if (cached) return cached;
-  const promise = store.session
-    .downloadAttachment(id)
-    .then((result) => {
-      if (!result.success) return null;
-      return `data:${result.data.ref.mimeType};base64,${bytesToBase64(result.data.data)}`;
-    })
-    .catch((error: unknown) => {
-      log.warn('Failed to resolve ACP attachment', { id, error });
-      return null;
-    });
-  rememberAttachmentDataUrl(id, promise);
-  return promise;
-}
-
-function bytesToBase64(bytes: Uint8Array): string {
-  let binary = '';
-  const chunkSize = 0x8000;
-  for (let offset = 0; offset < bytes.length; offset += chunkSize) {
-    binary += String.fromCharCode(...bytes.subarray(offset, offset + chunkSize));
-  }
-  return btoa(binary);
 }
 
 // ── Composer for a single store ────────────────────────────────────────────────
