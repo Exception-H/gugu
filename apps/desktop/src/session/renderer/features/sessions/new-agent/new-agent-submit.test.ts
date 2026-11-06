@@ -26,7 +26,22 @@ const session = {
 
 describe('planNewAgentSubmit', () => {
   it('does not require a first task when the agent is resident', () => {
-    expect(planNewAgentSubmit({ startNow: false, displayName: '新助手 1', firstTask: '   ' })).toEqual({ kind: 'resident' });
+    expect(planNewAgentSubmit({ startNow: false, displayName: '新助手 1', firstTask: '   ' })).toEqual({ kind: 'resident', firstTaskNotice: false });
+  });
+
+  it('says the typed first task will not be sent instead of dropping it silently', () => {
+    // 不勾开工 = 常驻 Agent，不发首轮：这段字这次不会被送出去，所以计划里必须带出提示，由界面说出来。
+    expect(planNewAgentSubmit({ startNow: false, displayName: '新助手 1', firstTask: '  修一下登录  ' })).toEqual({
+      kind: 'resident',
+      firstTaskNotice: true,
+    });
+    // 勾了开工时这段文字就是首轮本身，不需要额外提示。
+    expect(planNewAgentSubmit({ startNow: true, displayName: '新助手 1', firstTask: '修一下登录' })).toEqual({ kind: 'first-turn' });
+    // 名字都没填时先报名字，不抢在更靠前的拦截前面弹提示。
+    expect(planNewAgentSubmit({ startNow: false, displayName: ' ', firstTask: '修一下登录' })).toEqual({
+      kind: 'blocked',
+      reason: 'name-required',
+    });
   });
 
   it('requires a non-empty first task when starting right away', () => {

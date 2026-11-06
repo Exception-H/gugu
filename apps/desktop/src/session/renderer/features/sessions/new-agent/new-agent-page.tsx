@@ -308,6 +308,8 @@ export const NewAgentPage = observer(function NewAgentPage() {
     platformModel: initialSession.platformModel,
   });
   const blockKey = plan.kind === 'blocked' ? blockMessageKey[plan.reason] : null;
+  // 常驻路径不发首轮：人写下的字这次不会送出去，界面必须在提交前就说出来（不许静默丢弃）。
+  const firstTaskNotSent = plan.kind === 'resident' && plan.firstTaskNotice;
 
   const contextBlocked = Boolean(machineContext?.blocked);
   const contextBlockReason = machineContext?.blockReason ?? null;
@@ -558,6 +560,15 @@ export const NewAgentPage = observer(function NewAgentPage() {
                   {translate('newAgent.startNow')}
                 </Label>
                 <p className="text-xs text-foreground-muted">{translate('newAgent.startNowHint')}</p>
+                {firstTaskNotSent ? (
+                  <p
+                    role="status"
+                    data-testid="new-agent-first-task-notice"
+                    className="text-xs text-foreground-muted"
+                  >
+                    {translate('newAgent.firstTaskWillNotSend')}
+                  </p>
+                ) : null}
               </div>
             </div>
             <div className="flex items-center justify-between gap-3">
