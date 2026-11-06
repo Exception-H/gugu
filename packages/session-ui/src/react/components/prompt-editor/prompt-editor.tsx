@@ -440,11 +440,12 @@ export const PromptEditor = forwardRef<PromptEditorRef, PromptEditorProps>(funct
         return parts.join('\n').replace(/\n+$/, '');
       },
     }), [inputTestId, disabled, placeholder, enterBehavior]);
+  const onEditorUnmount = useCallback(() => setEditorDom(null), []);
   const editor = useEditor({
     extensions,
     editorProps,
     onCreate({ editor: e }) { setEditorDom(e.view.dom); },
-    onUnmount() { setEditorDom(null); },
+    onUnmount: onEditorUnmount,
     onUpdate({ editor: e }) {
       setIsEmpty(isEmptyPromptDocument(e.state.doc));
       const text = serializeDoc(e.state.doc);

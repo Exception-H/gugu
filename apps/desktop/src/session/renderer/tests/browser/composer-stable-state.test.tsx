@@ -44,7 +44,7 @@ it('keeps editor options stable on host renders and still reads new callbacks an
   await act(async () => api.current!.setText('new draft'))
   expect(changed).toHaveBeenLastCalledWith('new draft')
   await render(changed, true)
-  expect(instance.isEditable).toBe(false)
+  expect(instance.view.dom.getAttribute('aria-disabled')).toBe('true')
 })
 
 it('keeps the exact document, caret and update history when restoring the same draft', async () => {
