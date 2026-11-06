@@ -17,7 +17,7 @@ it('keeps the first resize notification from restarting an already fitted toolba
     disconnect() {}
   }
   vi.stubGlobal('ResizeObserver', Observer)
-  vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockImplementation(function () {
+  vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockImplementation(function (this: HTMLElement) {
     reads++
     const level = Number((this.closest('[data-level]') as HTMLElement)?.dataset.level ?? 0)
     const left = this.dataset.end !== undefined ? width - 20 : 0

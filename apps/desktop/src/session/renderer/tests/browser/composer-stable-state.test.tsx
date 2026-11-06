@@ -51,7 +51,14 @@ it('keeps the exact document, caret and update history when restoring the same d
   const changed = vi.fn()
   await render(changed)
   await act(async () => api.current!.setText('same draft'))
-  editor().commands.setTextSelection(3)
+  editor().view.dom.focus()
+  const range = document.createRange()
+  range.setStart(editor().view.dom.querySelector('p')!.firstChild!, 2)
+  range.collapse(true)
+  const selection = window.getSelection()!
+  selection.removeAllRanges()
+  selection.addRange(range)
+  await until('caret is inside the draft', () => editor().state.selection.from === 3)
   const state = editor().state
   changed.mockClear()
   await act(async () => api.current!.setText('same draft'))
