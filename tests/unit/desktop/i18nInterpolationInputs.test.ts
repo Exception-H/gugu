@@ -99,9 +99,9 @@ describe('locale interpolation inputs', () => {
     let checked = 0
     for (const file of files) {
       const text = readFileSync(join(ROOT, file), 'utf8')
-      if (!/\b(?:translate|translateSessionMessage|useTranslation|i18n\.t)\b/.test(text)) continue
+      if (!/\b(?:translate|translateSessionMessage|use(?:Shared)?Translation|i18n\.t)\b/.test(text)) continue
       const bindings = new Map<string, string>()
-      for (const match of text.matchAll(/const\s*\{([^}]*)\}\s*=\s*useTranslation\(\s*['"]([A-Za-z]+)['"]\s*\)/g)) {
+      for (const match of text.matchAll(/const\s*\{([^}]*)\}\s*=\s*use(?:Shared)?Translation\(\s*['"]([A-Za-z]+)['"]\s*\)/g)) {
         const binding = match[1].split(',').map(part => part.trim()).find(part => part === 't' || /^t\s*:/.test(part))
         if (!binding) continue
         const name = binding === 't' ? 't' : binding.split(':')[1].trim()
