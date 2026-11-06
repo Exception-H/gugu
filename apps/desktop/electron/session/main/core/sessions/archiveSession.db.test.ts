@@ -75,7 +75,13 @@ vi.mock('@main/core/sessions/session-workspace-manager', () => ({
   cleanupDetachedSessions: vi.fn(),
 }));
 vi.mock('@main/lib/events', () => ({ events: { emit: vi.fn() } }));
-vi.mock('@main/lib/logger', () => ({ log: { warn: vi.fn(), error: vi.fn(), info: vi.fn() } }));
+// 与产品同形的 Logger(含 `child`):`app-scope` 在 import 期就 `createScope({ logger: log })`,
+// 缺 `child` 的桩会让整条 import 链在收集期就崩(`logger.child is not a function`)。
+vi.mock('@main/lib/logger', () => {
+  const log: Record<string, unknown> = { level: 'info', debug: vi.fn(), info: vi.fn(), warn: vi.fn(), error: vi.fn() };
+  log.child = vi.fn(() => log);
+  return { log };
+});
 vi.mock('./session-events', () => ({ sessionEvents: { _emit: vi.fn() } }));
 
 vi.mock('@main/core/session-import/host-source', () => ({ hasLocalSessionSource: () => false }));

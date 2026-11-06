@@ -141,6 +141,23 @@ function tools(w: World) {
     threadRootId: null,
     guguHome: '/tmp/gugu-6492-contract',
     getAccessToken: async () => `x.${Buffer.from(JSON.stringify({ sub: w.owner })).toString('base64url')}.x`,
+    /**
+     * P0-2.1(#2.1):Agent 往已有的群里加 Agent 现在只是「一个意图」——由宿主记下待确认记录、
+     * 在时间线上问人,只有人点了允许才调库。用例里「人确认了」这一步由这里担当:用与 handler 同一个身份
+     * (调用者这个 Agent)调同一个库函数,结果原样交回 handler —— 库那边该拒的照旧拒。
+     */
+    runHostAction: async (action: { action: string; chat_id?: string; agent_user_id?: string; as_task?: boolean }) => {
+      if (action.action !== 'group_join_confirm' || !action.chat_id || !action.agent_user_id) {
+        throw new Error(`ownerGroupTools6492: unexpected host action ${action.action}`)
+      }
+      return ownerRpc(w.owner)('add_group_agent', {
+        p_chat_id: action.chat_id,
+        p_agent_user_id: action.agent_user_id,
+        p_message: null,
+        p_as_user_id: w.self,
+        p_as_task: action.as_task === true,
+      })
+    },
   }
   const deps = {
     restRpc: ownerRpc(w.owner),

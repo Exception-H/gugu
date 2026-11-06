@@ -11,7 +11,8 @@ export type NewAgentSubmitBlock =
   | 'platform-model-needs-first-turn';
 
 export type NewAgentSubmitPlan =
-  | { kind: 'resident' }
+  /** `firstTaskNotice` = 人填了首条任务，但这条路不发首轮：界面必须把这句话说出来。 */
+  | { kind: 'resident'; firstTaskNotice: boolean }
   | { kind: 'first-turn' }
   | { kind: 'blocked'; reason: NewAgentSubmitBlock };
 
@@ -22,6 +23,12 @@ export type NewAgentSubmitPlan =
  *
  * resident 动作没有群入参、也没有平台模型入参（0.4 的边界）：同时选中时明确拦下，
  * ❌ 不静默丢掉群 / 换成 harness 模型。
+ *
+ * 同理，常驻路径也不发首轮：人在首条任务里写了字却提交成常驻 Agent 时，这段字这次不会被发送。
+ * 选「保留下来等以后预填」需要一份能跨设备、跨重启的存储（0.4 的 resident 会话没有进程、
+ * 也没有可写的首轮草稿通道），渲染层内存里的暂存一重启就没了 —— 那等于换一种方式静默丢。
+ * 所以这里选「明确说出来」：plan 把「有字但他这次不发送」交给界面，由界面在提交前就提示，
+ * ❌ 不再让人以为填进去了。
  */
 export function planNewAgentSubmit(input: {
   startNow: boolean;
@@ -34,7 +41,7 @@ export function planNewAgentSubmit(input: {
   if (!input.startNow) {
     if (input.groupChatId) return { kind: 'blocked', reason: 'group-needs-first-turn' };
     if (input.platformModel) return { kind: 'blocked', reason: 'platform-model-needs-first-turn' };
-    return { kind: 'resident' };
+    return { kind: 'resident', firstTaskNotice: input.firstTask.trim().length > 0 };
   }
   if (!input.firstTask.trim()) return { kind: 'blocked', reason: 'first-task-required' };
   return { kind: 'first-turn' };

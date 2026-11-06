@@ -12,11 +12,23 @@ vi.mock('@main/db/client', () => ({
     return mocks.db;
   },
 }));
-vi.mock('@gugu/session-plugins/agents', () => ({
-  resolveSessionpageSessionIntegration: () => ({ identity: 'addressable', messageTransport: 'router' }),
-}));
+// 只盖住这一个函数,其余导出照旧走真模块:这条链还会 import `agentShellEnvDenied`(pty-env → childProcessEnv),
+// 整体替身会让它在收集期就报「No export is defined on the mock」。
+vi.mock('@gugu/session-plugins/agents', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@gugu/session-plugins/agents')>();
+  return {
+    ...actual,
+    resolveSessionpageSessionIntegration: () => ({ identity: 'addressable', messageTransport: 'router' }),
+  };
+});
 vi.mock('@main/core/projects/utils', () => ({ resolveSession: () => null }));
-vi.mock('@main/lib/logger', () => ({ log: { warn: vi.fn() } }));
+// 产品侧 `@main/lib/logger` 是一个完整的 Logger(带 `child`):`app-scope` 在 import 期就 `createScope({ logger: log })`,
+// 只给 warn 的桩会让整条 import 链在收集期就崩(`logger.child is not a function`)。桩要和产品同形,不是放松断言。
+vi.mock('@main/lib/logger', () => {
+  const log: Record<string, unknown> = { level: 'info', debug: vi.fn(), info: vi.fn(), warn: vi.fn(), error: vi.fn() };
+  log.child = vi.fn(() => log);
+  return { log };
+});
 vi.mock('@main/lib/events', () => ({ events: { emit: vi.fn() } }));
 
 import { sessionBootTasks } from '../boot-tasks';
