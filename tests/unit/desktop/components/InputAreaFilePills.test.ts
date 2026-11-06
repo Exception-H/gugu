@@ -175,7 +175,9 @@ describe('file citations share the composer document with the words', () => {
     await send()
     expect(readComposer(textarea())).toBe(text)
     expect(pills()).toHaveLength(2)
-    expect(noticeMock).toHaveBeenCalledWith(expect.objectContaining({ title: '发送失败：offline', tier: 'error', key: expect.any(String) }))
+    expect(noticeMock).toHaveBeenCalledWith(expect.objectContaining({ title: '这条消息未发出，请重新发送。', tier: 'error', key: expect.any(String) }))
+    expect(JSON.stringify(noticeMock.mock.calls)).not.toContain('offline')
+    expect(toastMock).not.toHaveBeenCalled()
   })
 
   it('restores a failed send to its original chat without leaking into another draft', async () => {
