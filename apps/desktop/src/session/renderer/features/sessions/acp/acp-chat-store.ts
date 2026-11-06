@@ -70,7 +70,7 @@ import { projectOwnerNotifications } from '@gugu/session-core/session-record/own
 import { toast } from '@renderer/lib/hooks/use-toast';
 import { translateSessionMessage } from '@renderer/localization/locale-store';
 import type { SessionMessageKey } from '@renderer/localization/messages';
-import { failureText } from '../gugu-reason';
+import { failureReason, failureText } from '../gugu-reason';
 import { modelSettingRejection, type ModelSettingRejection } from '../session-config/model-setting-rejection';
 import { rpc, rpcOn, onMachineEvent } from '@renderer/lib/ipc';
 import { sessionTurnSettledChannel, type StoredSettledTurn } from '@shared/core/sessions/sessionEvents';
@@ -1552,7 +1552,9 @@ export class AcpChatStore {
       const displayReason = rejection ? reason?.split('\n')[0] : reason;
       runInAction(() => {
         if (!result.success) {
-          this.modelSettingError = failureText(displayReason ?? '', translateSessionMessage);
+          this.modelSettingError = failureReason(displayReason ?? '')
+            ? failureText(displayReason ?? '', translateSessionMessage)
+            : translateSessionMessage('taskError.settingFailedRetry');
         } else if (result.data.status === 'applied') {
           this.modelSettingError = null;
         }
@@ -1567,7 +1569,9 @@ export class AcpChatStore {
       const reason = describeFailureCause(error);
       const displayReason = rejection ? reason?.split('\n')[0] : reason;
       runInAction(() => {
-        this.modelSettingError = failureText(displayReason ?? '', translateSessionMessage);
+        this.modelSettingError = failureReason(displayReason ?? '')
+            ? failureText(displayReason ?? '', translateSessionMessage)
+            : translateSessionMessage('taskError.settingFailedRetry');
       });
       this._toastError('acpFailure.changeModel', error, displayReason);
       return rejection;
@@ -3179,15 +3183,14 @@ export class AcpChatStore {
     const cause = describeFailureCause(error);
     const errorType = error && typeof error === 'object' && 'type' in error ? error.type : undefined;
     log.error('ACP chat action failed', { sessionId: this.sessionId, title, errorType, error: cause });
-    const notice = {
-      title: translateSessionMessage(title),
-      description: errorType === 'conversation_not_found'
-        ? translateSessionMessage('acpFailure.sessionUnavailable')
-        : failureText(displayReason ?? cause ?? '', translateSessionMessage),
-      variant: 'destructive' as const,
-    };
+    const description = errorType === 'conversation_not_found'
+      ? translateSessionMessage('acpFailure.sessionUnavailable')
+      : failureReason(displayReason ?? cause ?? '')
+        ? failureText(displayReason ?? cause ?? '', translateSessionMessage)
+        : translateSessionMessage('taskError.settingFailedRetry');
+    const notice = { title: translateSessionMessage(title), description, variant: 'destructive' as const };
     if (attempt) attempt.failed(notice);
-    else toast(notice);
+    else toast({ ...notice, key: `session-action:${this.sessionId}:${title}` });
   }
 }
 
