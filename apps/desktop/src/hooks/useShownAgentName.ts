@@ -1,5 +1,5 @@
 import { agentNamingUntil } from '@gugu/core/shared/agentDefaultName'
-import { useSharedTranslation } from '@/i18n/react'
+import { useSharedTranslation } from '@/i18n/useLocale'
 import { useDeadlineClock } from './useDeadlineClock'
 import { useChatClashNames } from '../components/chat/ChatClashNames'
 

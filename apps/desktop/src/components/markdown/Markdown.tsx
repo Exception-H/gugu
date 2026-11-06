@@ -9,7 +9,7 @@ import {
   type ComponentPropsWithoutRef,
   type ReactNode,
 } from 'react'
-import { useSharedTranslation } from '@/i18n/react'
+import { useSharedTranslation } from '@/i18n/useLocale'
 import { CodeBlock, Streamdown, type CustomRendererProps, type PluginConfig } from 'streamdown'
 import 'katex/dist/katex.min.css'
 import '@gugu/session-shared/markdown.css'

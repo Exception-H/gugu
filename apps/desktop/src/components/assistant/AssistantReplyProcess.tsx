@@ -1,4 +1,4 @@
-import { useSharedTranslation } from '@/i18n/react'
+import { useSharedTranslation } from '@/i18n/useLocale'
 import { useAssistantConversationProgress } from './assistantConversationProgressContext'
 
 /** Small evidence-backed preface; missing record data never becomes a fabricated duration. */

@@ -1,4 +1,4 @@
-import { useSharedTranslation } from '@/i18n/react'
+import { useSharedTranslation } from '@/i18n/useLocale'
 import { Chip } from '../ui/Chip'
 import { NativeButton } from '../ui/Button'
 import { useAuth } from '../../store/auth'

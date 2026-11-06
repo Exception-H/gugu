@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { act } from 'react'
 import { afterEach, beforeEach, expect, it } from 'vitest'
-import { useSharedTranslation } from '../../../../apps/desktop/src/i18n/react'
+import { useSharedTranslation } from '../../../../apps/desktop/src/i18n/useLocale'
 import { setLocalePreference } from '../../../../apps/desktop/src/i18n/runtime'
 import { createReactHarness } from '../../../support/testHarness'
 

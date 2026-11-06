@@ -3,7 +3,7 @@ import { useShownAgentName } from '@/hooks/useShownAgentName'
 import { useAvatarIdentity } from '@/lib/avatarIdentity'
 import type { AutomationTestId } from '../lib/automationDom'
 import type { MemberProfileCardModel } from './MemberProfileCard'
-import { useSharedTranslation } from '@/i18n/react'
+import { useSharedTranslation } from '@/i18n/useLocale'
 
 export function MemberProfileAvatarButton({
   member,
