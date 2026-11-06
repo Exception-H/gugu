@@ -6,19 +6,19 @@ import { useToolbarDisclosure } from '../../../../packages/session-ui/src/react/
 
 const harness = createReactHarness()
 afterEach(() => { harness.cleanup(); vi.unstubAllGlobals() })
-it('measures only in resize delivery, advances through unchanged-size levels, and restores labels when widened', async () => {
+it('keeps the first resize notification from restarting an already fitted toolbar, but refits after a real width change', async () => {
   let width = 100
-  let delivering = false
-  const reads: boolean[] = []
-  const active = new Set<() => void>()
+  let reads = 0
+  const observers: Array<{ callback: (entries: ResizeObserverEntry[]) => void; targets: Element[] }> = []
   class Observer {
-    constructor(private callback: () => void) {}
-    observe() { active.add(this.callback) }
-    disconnect() { active.delete(this.callback) }
+    targets: Element[] = []
+    constructor(public callback: (entries: ResizeObserverEntry[]) => void) { observers.push(this) }
+    observe(target: Element) { this.targets.push(target) }
+    disconnect() {}
   }
   vi.stubGlobal('ResizeObserver', Observer)
   vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockImplementation(function () {
-    reads.push(delivering)
+    reads++
     const level = Number((this.closest('[data-level]') as HTMLElement)?.dataset.level ?? 0)
     const left = this.dataset.end !== undefined ? 80 : 0
     const w = this.dataset.level !== undefined ? width : this.dataset.end !== undefined ? 20 : level < 2 ? 200 : 80
@@ -29,20 +29,16 @@ it('measures only in resize delivery, advances through unchanged-size levels, an
     return <div ref={ref} data-level={level}><span>Variable label</span><span data-end="">Send</span></div>
   }
   await harness.render(<Toolbar />)
-  expect(reads).toEqual([])
-  const deliver = async () => {
-    delivering = true
-    await act(async () => { for (const callback of [...active]) callback() })
-    delivering = false
-  }
+  const toolbar = harness.container.firstElementChild!
+  expect(toolbar.getAttribute('data-level')).toBe('2')
+  const initialReads = reads
+  expect(initialReads).toBeGreaterThan(0)
+  const observer = observers.find(item => item.targets.includes(toolbar))!
+  const deliver = () => act(async () => observer.callback([{ target: toolbar, contentRect: { width } } as ResizeObserverEntry]))
   await deliver()
-  await deliver()
-  await deliver()
-  expect(harness.container.firstElementChild!.getAttribute('data-level')).toBe('2')
+  expect(reads, 'initial notification must not repeat the complete shrink sequence').toBe(initialReads)
+  expect(toolbar.getAttribute('data-level')).toBe('2')
   width = 300
   await deliver()
-  await deliver()
-  expect(harness.container.firstElementChild!.getAttribute('data-level')).toBe('0')
-  expect(reads.length).toBeGreaterThan(0)
-  expect(reads.every(Boolean)).toBe(true)
+  expect(toolbar.getAttribute('data-level')).toBe('0')
 })

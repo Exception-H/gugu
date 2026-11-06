@@ -42,7 +42,7 @@ import { createContext, useCallback, useContext, useLayoutEffect, useRef, useSta
  *
  * 收敛性:每升一档严格变窄,最多 `MAX_LEVEL` 档,所以最多重排 MAX_LEVEL 次就停。
  * 尺寸变化时回到 0 重新往上爬 —— 变宽了要能爬回来,否则只会越缩越小回不去。
- * 尺寸判定由 ResizeObserver 的布局后通知驱动;档位变化后重新订阅,连未改变宽度的档也会收到首次通知。
+ * 全程在 `useLayoutEffect` 里做,浏览器绘制前就定档,看不到中间态。
  */
 export const TOOLBAR_DISCLOSURE_MAX_LEVEL = 6
 
@@ -124,8 +124,15 @@ export interface ToolbarDisclosure {
 
 export function useToolbarDisclosure(): ToolbarDisclosure {
   const [level, setLevel] = useState(0)
+  // 尺寸变了要重新判一次。❌ 只 setLevel(0) 不够:已经是 0 时那是空操作,不触发重渲染,
+  // 检测用的 layout effect 就不会再跑 —— 2026-09-05 实测档位恒为 0 就是这么来的。
+  const [recheck, setRecheck] = useState(0)
   const nodeRef = useRef<HTMLElement | null>(null)
+  // 记住上一次量到的容器宽度:只有宽度真的变了才回到 0 重爬,
+  // ❌ 别在每次 ResizeObserver 回调里无条件重置 —— 升档本身会改变尺寸,
+  //    那样就是「重置 → 升档 → 触发 resize → 重置」的死循环。
   const lastWidthRef = useRef<number | null>(null)
+
   const setNode = useCallback((node: HTMLElement | null) => {
     nodeRef.current = node
     lastWidthRef.current = null
@@ -133,25 +140,52 @@ export function useToolbarDisclosure(): ToolbarDisclosure {
 
   useLayoutEffect(() => {
     const el = nodeRef.current
+    if (!el) return
+    // 放不下就升一档。每次 render 后跑一次,一档一档爬,不在这里循环——
+    // setLevel 会再触发一次 layout effect,天然就是下一次迭代。
+    if (level < TOOLBAR_DISCLOSURE_MAX_LEVEL && isOverflowing(el)) {
+      setLevel(level + 1)
+    }
+  }, [level, recheck])
+
+  useLayoutEffect(() => {
+    const el = nodeRef.current
     if (!el || typeof ResizeObserver === 'undefined') return
-    const observer = new ResizeObserver(() => {
-      // Read only after browser layout, rather than forcing it during each React commit.
-      const width = el.getBoundingClientRect().width
+    const observer = new ResizeObserver((entries) => {
+      const width = entries[0]?.contentRect.width
+      if (width === undefined) return
       const previous = lastWidthRef.current
       lastWidthRef.current = width
-      if (previous !== null && Math.abs(previous - width) >= 1 && level > 0) {
-        setLevel(0)
-      } else if (level < TOOLBAR_DISCLOSURE_MAX_LEVEL && isOverflowing(el)) {
-        setLevel(level + 1)
-      }
+      // 宽度没变(是我们自己升档导致的重排)就别动档位,否则来回震荡。
+      // The first layout effect already converged. Initial observation must not restart every level.
+      if (previous === null || Math.abs(previous - width) < 1) return
+      // 回到档 0 重爬(变宽了要能爬回来),并显式要求重判一次。
+      setLevel(0)
+      setRecheck((n) => n + 1)
     })
     observer.observe(el)
-    // Async labels can overflow without resizing the toolbar itself.
-    for (const child of Array.from(el.children)) observer.observe(child)
-    return () => observer.disconnect()
-    // Each committed level gets an initial notification, including levels that happen
-    // to hide no control. No timer or per-render geometry read drives convergence.
-  }, [level])
+
+    // ⚠️ 只观察底排自己是不够的,而这正是 #5141 里阶梯"明明溢出却停在 0"的那一半原因:
+    // 底排的宽度由卡片定(卡片有 max-width,窗口变宽它也不变),而**撑爆它的是内容**——
+    // harness 名、模型名、权限档这些是异步到的,它们变宽时底排的 `contentRect.width` 一个像素
+    // 都不动 ⇒ 这个回调不触发 ⇒ 阶梯永远不再判一次。
+    // 2026-09-06 实测:1280 与 1700 两个宽度下 `data-disclosure` 都是 0,而同一时刻把判据
+    // 拿到页面里跑是 `true`(`session-view-control [671,776]` 越出左组 `[466,736]`)。
+    // ⇒ 判据没错,是**没人再问它一次**。
+    //
+    // 所以子组也要观察。❌ 但子组变化**不能**像容器那样 `setLevel(0)` 重爬:
+    // 升档本身就会改变子组尺寸,那样就是「升档 → 子组变 → 重置 → 再升档」的死循环。
+    // 这里只 `setRecheck`:效果是"再判一次,该升就升",而阶梯只升不降且有上界,必然收敛。
+    const childObserver = new ResizeObserver(() => {
+      setRecheck((n) => n + 1)
+    })
+    for (const child of Array.from(el.children)) childObserver.observe(child)
+
+    return () => {
+      observer.disconnect()
+      childObserver.disconnect()
+    }
+  }, [])
 
   return { level, ref: setNode }
 }
