@@ -17,6 +17,7 @@ it('keeps the first resize notification from restarting an already fitted toolba
     disconnect() {}
   }
   vi.stubGlobal('ResizeObserver', Observer)
+  vi.spyOn(HTMLElement.prototype, 'clientWidth', 'get').mockImplementation(function (this: HTMLElement) { return this.dataset.level !== undefined ? width : 0 })
   vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockImplementation(function (this: HTMLElement) {
     reads++
     const level = Number((this.closest('[data-level]') as HTMLElement)?.dataset.level ?? 0)
@@ -41,4 +42,15 @@ it('keeps the first resize notification from restarting an already fitted toolba
   width = 300
   await deliver()
   expect(toolbar.getAttribute('data-level')).toBe('0')
+
+  // A parent can resize after commit but before the very first observer notification.
+  await harness.render(null)
+  width = 100
+  await harness.render(<Toolbar />)
+  const remounted = harness.container.firstElementChild!
+  expect(remounted.getAttribute('data-level')).toBe('2')
+  width = 300
+  const firstDelivery = observers.find(item => item.targets.includes(remounted))!
+  await act(async () => firstDelivery.callback([{ target: remounted, contentRect: { width } } as ResizeObserverEntry]))
+  expect(remounted.getAttribute('data-level')).toBe('0')
 })
