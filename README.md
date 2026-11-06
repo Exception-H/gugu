@@ -235,3 +235,5 @@ Contribute code, documentation, translations or Gugu Apps: [Contributing](CONTRI
 [Modified Apache License 2.0](LICENSE) · [Third-party licenses](THIRD_PARTY_NOTICES.md)
 
 <sub>Get the client: <a href="https://gugu.nextmind.space/en/#download">macOS</a> · <a href="https://download.gugu.nextmind.space/releases/windows/latest/gugu-windows-x64.exe">Windows</a> · <a href="https://download.gugu.nextmind.space/releases/linux/latest/gugu-linux-x86_64.AppImage">Linux</a> · <a href="https://download.gugu.nextmind.space/releases/android/latest/gugu-android.apk">Android</a></sub>
+
+<!-- n8n 审计合并端到端测试 HRM-16 -->
