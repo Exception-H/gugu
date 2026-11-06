@@ -1283,6 +1283,8 @@ const ComposerForStore = observer(function ComposerForStore({
       });
       if (!result.ok) {
         reportInputFailure(translate('mcpSession.title'), result.error ?? '');
+      } else {
+        setInputFailure(null);
       }
     } finally {
       setReloading(false);
