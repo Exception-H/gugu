@@ -7,11 +7,11 @@ import { createRoot, type Root } from 'react-dom/client'
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
 ;(globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true
 
-// Markdown calls useTranslation once per render of its body: counting those counts the renders memo let through.
+// Markdown calls its translation hook once per body render: count the renders memo lets through.
 const renders = vi.hoisted(() => ({ count: 0 }))
-vi.mock('react-i18next', async (original) => {
-  const actual = await original<typeof import('react-i18next')>()
-  return { ...actual, useTranslation: (...args: Parameters<typeof actual.useTranslation>) => { renders.count += 1; return actual.useTranslation(...args) } }
+vi.mock('../../../../apps/desktop/src/i18n/useLocale', async (original) => {
+  const actual = await original<typeof import('../../../../apps/desktop/src/i18n/useLocale')>()
+  return { ...actual, useSharedTranslation: (...args: Parameters<typeof actual.useSharedTranslation>) => { renders.count += 1; return actual.useSharedTranslation(...args) } }
 })
 const { Markdown } = await import('../../../../apps/desktop/src/components/markdown/Markdown')
 
