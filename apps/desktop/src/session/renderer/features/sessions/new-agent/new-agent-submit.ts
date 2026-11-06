@@ -47,6 +47,34 @@ export function planNewAgentSubmit(input: {
   return { kind: 'first-turn' };
 }
 
+/**
+ * resident 的幂等 id 只属于**同一个请求**：同一次提交失败重试复用 id，改了名字 / 工作区 / 引擎 / 模型
+ * 就是另一次创建 —— 继续用旧 id 会让服务端把上一次的会话原样还回来，看起来像新建成功。
+ */
+export type ResidentRequestIdentity = {
+  projectId: string;
+  workspaceId: string;
+  provider: AgentProviderId;
+  runtime: SessionRuntime;
+  displayName: string;
+  permissionMode?: CreateResidentSessionParams['agent']['permissionMode'];
+  model?: string | null;
+  effort?: string | null;
+};
+
+export function residentRequestKey(request: ResidentRequestIdentity): string {
+  return JSON.stringify([
+    request.projectId,
+    request.workspaceId,
+    request.provider,
+    request.runtime,
+    request.displayName.trim(),
+    request.permissionMode ?? null,
+    request.model ?? null,
+    request.effort ?? null,
+  ]);
+}
+
 export class ResidentAgentCreateError extends Error {
   readonly code = 'resident-agent-create-failed';
   constructor(readonly failure: CreateSessionError) {
