@@ -236,4 +236,4 @@ Contribute code, documentation, translations or Gugu Apps: [Contributing](CONTRI
 
 <sub>Get the client: <a href="https://gugu.nextmind.space/en/#download">macOS</a> · <a href="https://download.gugu.nextmind.space/releases/windows/latest/gugu-windows-x64.exe">Windows</a> · <a href="https://download.gugu.nextmind.space/releases/linux/latest/gugu-linux-x86_64.AppImage">Linux</a> · <a href="https://download.gugu.nextmind.space/releases/android/latest/gugu-android.apk">Android</a></sub>
 
-<!-- n8n 审计合并端到端测试 HRM-16 -->
+<!-- n8n 审计合并端到端测试 HRM-16；第 2 次返工：仅重新触发 CI，无代码改动 -->
