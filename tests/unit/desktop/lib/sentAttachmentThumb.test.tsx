@@ -16,6 +16,8 @@ vi.mock('../../../../apps/desktop/src/lib/fileAccess', () => ({
   attachmentCache: async () => ({ match: async (key: string) => f.store.has(key) ? { blob: async () => f.store.get(key) } : undefined,
     put: async (key: string, response: Response) => { f.store.set(key, new NodeBlob([await response.arrayBuffer()])) } }),
   attachmentCacheOrigin: 'https://attachments.gugu.invalid',
+  // Where a version is kept, asked after a failed read: these files are not on a machine.
+  fileMetadata: async () => ({ status: 'gone' }),
 }))
 
 import { keepSentAttachment, useAttachmentObjectUrl } from '../../../../apps/desktop/src/lib/attachmentBytes'
