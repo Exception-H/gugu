@@ -1185,6 +1185,11 @@ function chatRead(chatId: string, includeMembers = true): Promise<void> {
 const unread = (chatId: string) => (error: unknown) =>
   log.warn('The chat could not be read', { chatId, message: error instanceof Error ? error.message : String(error) });
 
+/** The chats some page is drawn in: where a change to a person, which names no chat, may move who is shown. */
+export function chatsWithPages(): string[] {
+  return [...new Set([...bindings.values()].flatMap((binding) => (binding.conversation ? [binding.conversation] : [])))];
+}
+
 /** A row of this chat's members changed: if that moved who is in it (`rosterMoved`), read them again and tell its pages. */
 export async function chatMembersChanged(chatId: string, changes: readonly MemberChange[]): Promise<void> {
   // No page drawn for it: nobody keeps its members current, so they are forgotten — read afresh when a page is (`pushContext`).

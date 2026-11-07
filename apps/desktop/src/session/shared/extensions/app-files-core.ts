@@ -308,19 +308,25 @@ async function peopleOf(token: string, entries: readonly AppFileEntry[], identit
 /** Who is in a chat (摩擦单 F36), as `getContext().chat.members` and `gugu.chats.members` carry them. */
 type ChatMember = { id: string; name: string; kind: 'human' | 'agent'; avatar?: string };
 
-/** One row of a chat's members changed, as `chat_members_changed` says it (`readMemberRosterRevision`). */
-export type MemberChange = { memberId: string | null; left: boolean };
+/**
+ * One row of a chat's members changed, as `chat_members_changed` says it (`readMemberRosterRevision`); or `renamed`: a
+ * person's name or face changed, as `agent_changed` says it (`readIdentityRevision`) — kept on their account, not on a
+ * member row, so no `chat_members_changed` comes for it.
+ */
+export type MemberChange = { memberId: string | null; left: boolean; renamed?: boolean };
 
 /**
- * Whether these changes moved who is in the chat — someone left, or an id not among `members` came (or one not known):
- * only then are `getContext().chat.members` read again and pushed. Every update of a member row sends one too — a read mark,
- * a pin, mute, listen mode — and those change nobody: a 112-person group sent 224 in 38 s (统筹 10-05, 画廊车道 §6).
- * Not read yet (`null`): read.
+ * Whether these changes moved who is in the chat — someone left, or an id not among `members` came (or one not known), or
+ * one of `members` was renamed: only then are `getContext().chat.members` read again and pushed. Every update of a member
+ * row sends one too — a read mark, a pin, mute, listen mode — and those change nobody: a 112-person group sent 224 in 38 s
+ * (统筹 10-05, 画廊车道 §6); a rename of someone not in the chat changes nobody in it either. Not read yet (`null`): read.
  */
 export function rosterMoved(members: readonly { id: string }[] | null, changes: readonly MemberChange[]): boolean {
   if (!members) return true;
   const ids = new Set(members.map((member) => member.id));
-  return changes.some((change) => change.left || !change.memberId || !ids.has(personId(change.memberId)));
+  return changes.some((change) => change.renamed
+    ? !!change.memberId && ids.has(personId(change.memberId))
+    : change.left || !change.memberId || !ids.has(personId(change.memberId)));
 }
 
 /**

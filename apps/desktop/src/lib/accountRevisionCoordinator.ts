@@ -112,6 +112,14 @@ export function readMemberRosterRevision(
   return { chatId: key.chatId, memberId: key.entityId, left: tombstone, own: kind === 'own' }
 }
 
+// agent_changed names whose account changed (agent_user_id: an agent's row to its owner; anyone's name, face or bio to the
+// people who share a chat or a friendship with them). It names no chat: the change is to the person, wherever they are.
+export function readIdentityRevision(payload: unknown): string {
+  const id = (payload && typeof payload === 'object' && !Array.isArray(payload) ? payload : {}) as { agent_user_id?: unknown }
+  if (typeof id.agent_user_id !== 'string' || !id.agent_user_id) throw new Error('agent_changed revision requires agent_user_id')
+  return id.agent_user_id
+}
+
 // device_changed 的 resource_key 带 device_id 和 kind(迁移 20261027190000):'row' = 那一行变了(设备行触发器),
 // 'projects' = 那一台的项目变了(publish_device_projects)。没有 kind(之前落的行 / 还没部署那条迁移的库)= 两样都可能变了。
 // tombstone = 那一行被删。客户端据此只读变了的那一样、只读那一台。
