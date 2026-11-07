@@ -47,6 +47,7 @@ import { IntegrationIcon } from '@renderer/features/integrations/integration-ico
 import { useShowModal } from '@renderer/lib/modal/modal-provider';
 import { resolveLegLoginGate } from './vendor-login-prompt';
 import { usePromptLibrary } from '@renderer/features/library/prompts/use-prompt-library';
+import { promptSlashItems } from '@renderer/features/library/prompts/prompt-slash-items';
 import { AgentIcon } from '@renderer/lib/components/agent-icon';
 import {
   agentGroupLabel,
@@ -1287,12 +1288,6 @@ function useAgentCapabilities(providerId: AgentProviderId | null): AgentCapabili
   return agents?.find((agent) => agent.id === providerId)?.capabilities ?? null;
 }
 
-const SLASH_PROMPTS_SECTION = 'Prompts';
-
-function promptPreview(text: string): string {
-  return text.split(/\r?\n/, 1)[0] ?? '';
-}
-
 function toLinkedIssueMentionItem(issue: LinkedIssue): MentionItem {
   const token = issueMentionToken(issue.provider, issue.identifier);
   return {
@@ -1541,25 +1536,9 @@ export function InitialSessionField({
 
   const querySlashItems = useCallback(
     async (query: string): Promise<CommandItem[]> => {
-      const normalized = query.trim().toLowerCase();
-      return promptLibrary
-        .filter((prompt) => {
-          if (!normalized) return true;
-          return [prompt.title, prompt.prompt].some((value) =>
-            value.toLowerCase().includes(normalized)
-          );
-        })
-        .map((prompt) => ({
-          id: `prompt:${prompt.id}`,
-          name: prompt.title,
-          label: prompt.title,
-          description: promptPreview(prompt.prompt),
-          behavior: 'insert-text' as const,
-          insertText: prompt.prompt,
-          section: SLASH_PROMPTS_SECTION,
-        }));
+      return promptSlashItems(promptLibrary, translate('chat.prompts'), query.trim().toLowerCase());
     },
-    [promptLibrary]
+    [promptLibrary, translate]
   );
 
   // @@@permission-independent-of-chat-ui — 权限选择与 Chat UI 开关是两件事,不该互相牵制。

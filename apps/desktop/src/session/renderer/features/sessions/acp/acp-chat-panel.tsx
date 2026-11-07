@@ -56,6 +56,7 @@ import { sessionRegistry } from '@renderer/features/sessions/stores/session-regi
 import { IntegrationIcon } from '@renderer/features/integrations/integration-icon';
 import { useConnectedIssueProviders } from '@renderer/features/integrations/use-connected-issue-providers';
 import { usePromptLibrary } from '@renderer/features/library/prompts/use-prompt-library';
+import { promptSlashItems } from '@renderer/features/library/prompts/prompt-slash-items';
 import { asMounted, getProjectStore, getProjectViewStore } from '@renderer/features/projects/stores/project-selectors';
 import { composerLayerHoldsFocus, sessionNavigationFocus } from '@renderer/features/sidebar/session-navigation-focus';
 import { useComposerEntryFocus } from '@/lib/composerEntryFocus';
@@ -211,10 +212,6 @@ const ISSUE_SEARCH_MIN_LENGTH = 2;
 const ISSUE_SEARCH_LIMIT = 20;
 /** 空态最多摆几个建议芯片 —— 再多就成了一堵墙,而空态要的是「开个头」。 */
 const WELCOME_SUGGESTION_LIMIT = 3;
-
-function promptPreview(text: string): string {
-  return text.split(/\r?\n/, 1)[0] ?? '';
-}
 
 function declaredMessageKey(key: string | null | undefined): SessionMessageKey | undefined {
   if (!key) return undefined;
@@ -1369,22 +1366,8 @@ const ComposerForStore = observer(function ComposerForStore({
           ...command,
           section: translate('chat.commands'),
         }));
-      const prompts = promptLibrary
-        .filter((prompt) => {
-          if (!normalized) return true;
-          return [prompt.title, prompt.prompt].some((value) =>
-            value.toLowerCase().includes(normalized)
-          );
-        })
-        .map((prompt) => ({
-          id: `prompt:${prompt.id}`,
-          name: prompt.title,
-          label: prompt.title,
-          description: promptPreview(prompt.prompt),
-          behavior: 'insert-text' as const,
-          insertText: prompt.prompt,
-          section: translate('chat.prompts'),
-        }));
+      // 提示词:我的一组,各 App 各一组(prompt-slash-items.ts,聊天输入框用的是同一份)。
+      const prompts = promptSlashItems(promptLibrary, translate('chat.prompts'), normalized);
       // @@@gugu-client-commands —— `/mcp` 是**咕咕自己的**命令,不是 agent 报上来的:
       // 选中时被 `onCommand` 拦下来开面板,**一个字都不发给 agent**。
       // ⚠️ 它出现在这里的前提是 apply 那条路已经接通(面板 → 记录 → 重开)——

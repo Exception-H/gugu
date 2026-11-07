@@ -1821,6 +1821,13 @@ async function dispatch(caller: BridgeCaller, method: ExtensionBridgeMethod, arg
       return { projects: (await getProjects()).filter((project) => !isImplicitSessionHomeProjectId(project.id)).map(({ id, name }) => ({ id, name, workspace: projectWorkspace(id) })) };
     }
 
+    case 'promptsList':
+    case 'promptsSave':
+    case 'promptsDelete': {
+      const { promptsForApp } = await import('@main/core/extensions/app-prompts');
+      return await promptsForApp(method, args, extensionId);
+    }
+
     case 'cloudRead':
     case 'cloudWrite':
     case 'cloudProgramWrite': {

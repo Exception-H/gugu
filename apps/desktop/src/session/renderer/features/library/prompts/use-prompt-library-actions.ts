@@ -9,19 +9,27 @@ import { useShowModal } from '@renderer/lib/modal/modal-provider';
 import { useSessionMessages } from '@renderer/localization/use-session-messages';
 import type { PromptLibraryPrompt } from '@shared/prompt-library';
 import type { PromptFormResult } from './prompt-modal';
-import { usePromptLibrary } from './use-prompt-library';
+import { deletePrompt, savePrompt, usePromptLibrary } from './use-prompt-library';
 
 function createPromptId(): string {
   return globalThis.crypto?.randomUUID?.() ?? `prompt-${Date.now()}`;
+}
+
+/**
+ * 删了就是删了,不先问(owner 11-07「删除只保留撤销条」):提示里那一下「撤销」把它原样存回去。
+ * App 的程序删的(`gugu.prompts.delete`)也是这一条提示,在 prompt-changes.ts。
+ */
+export function showPromptDeleted(prompt: PromptLibraryPrompt, title: string, undoLabel: string): void {
+  toast({ key: `prompt-deleted:${prompt.id}`, title, action: { label: undoLabel, onClick: () => void savePrompt(prompt) }, duration: 8000 });
 }
 
 export interface PromptLibraryActions {
   prompts: PromptLibraryPrompt[];
   /** 第一次读、还没读到。 */
   isLoading: boolean;
-  /** 读写任一在途 → 入口置灰,避免同一份列表被两次乐观更新叠写。 */
+  /** 读写任一在途 → 入口置灰。 */
   isBusy: boolean;
-  /** 读这一份的错误(资源库看别的机器时,页面据此说那台机器怎么了)。 */
+  /** 读这一份的错误。 */
   error: unknown;
   hasData: boolean;
   reload(): void;
@@ -36,19 +44,14 @@ export interface PromptLibraryActions {
 }
 
 export function usePromptLibraryActions(): PromptLibraryActions {
-  const { value, update, isLoading, isSaving, error, hasData, reload } = usePromptLibrary();
+  const { value: prompts, isLoading, isSaving, error, hasData, reload } = usePromptLibrary();
   const showPromptModal = useShowModal('promptModal');
-  const showConfirm = useShowModal('confirmActionModal');
   const { translate } = useSessionMessages();
 
-  const prompts = value ?? [];
-
-  const upsertPrompt = (prompt: PromptLibraryPrompt, successTitle: string) => {
-    const exists = prompts.some((item) => item.id === prompt.id);
-    const nextPrompts = exists
-      ? prompts.map((item) => (item.id === prompt.id ? prompt : item))
-      : [...prompts, prompt];
-    update(nextPrompts, { onSuccess: () => toast({ title: successTitle }) });
+  const save = (prompt: PromptLibraryPrompt, successTitle: string) => {
+    savePrompt(prompt)
+      .then(() => toast({ title: successTitle }))
+      .catch((failure: unknown) => toast({ title: String(failure), variant: 'destructive' }));
   };
 
   return {
@@ -60,35 +63,24 @@ export function usePromptLibraryActions(): PromptLibraryActions {
     reload,
     createPromptFromDraft: (draft) => {
       const created: PromptLibraryPrompt = { id: createPromptId(), ...draft };
-      upsertPrompt(created, translate('prompts.added'));
+      save(created, translate('prompts.added'));
       return created;
     },
     createPrompt: () => {
       showPromptModal({
-        onSuccess: (result: PromptFormResult) => {
-          upsertPrompt({ id: createPromptId(), ...result }, translate('prompts.added'));
-        },
+        onSuccess: (result: PromptFormResult) => save({ id: createPromptId(), ...result }, translate('prompts.added')),
       });
     },
     editPrompt: (prompt) => {
       showPromptModal({
         initialPrompt: prompt,
-        onSuccess: (result: PromptFormResult) =>
-          upsertPrompt({ ...prompt, ...result }, translate('prompts.updated')),
+        onSuccess: (result: PromptFormResult) => save({ ...prompt, ...result }, translate('prompts.updated')),
       });
     },
     deletePrompt: (prompt) => {
-      showConfirm({
-        // @@@raw prompt title — 提示词标题是用户内容,只做插值。
-        title: translate('prompts.deleteTitle'),
-        description: translate('prompts.deleteDescription', { title: prompt.title }),
-        confirmLabel: translate('prompts.delete'),
-        onSuccess: () =>
-          update(
-            prompts.filter((item) => item.id !== prompt.id),
-            { onSuccess: () => toast({ title: translate('prompts.deleted') }) }
-          ),
-      });
+      deletePrompt(prompt.id)
+        .then(() => showPromptDeleted(prompt, translate('prompts.deleted'), translate('prompts.undo')))
+        .catch((failure: unknown) => toast({ title: String(failure), variant: 'destructive' }));
     },
   };
 }

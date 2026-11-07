@@ -53,7 +53,7 @@ const PROGRAM: ReadonlySet<HostMember> = new Set<HostMember>([
   'projection.create', 'projection.publish', 'projection.close', 'projection.closed', 'projection.inputResult', 'onProjectionSource',
   'getContext', 'onContextChanged', 'onFilesChanged', 'reportError', 'openBrowserTab', 'dispatch', 'messages.history', 'messages.search',
   'chats.list', 'chats.members', 'projects.list', 'linkTo',
-  'sessions.index', 'sessions.read', 'cloud.read', 'cloud.programWrite',
+  'sessions.index', 'sessions.read', 'cloud.read', 'cloud.programWrite', 'prompts.list', 'prompts.save', 'prompts.delete',
   'appFiles.open', 'appFiles.reopen', 'appFiles.close', 'appFiles.list', 'appFiles.read', 'appFiles.readText', 'appFiles.exists', 'appFiles.draft', 'appFiles.writeText', 'appFiles.search', 'appFiles.recent', 'appFiles.create',
   'appFiles.remove', 'appFiles.canDelete', 'appFiles.rename', 'appFiles.mkdir', 'appFiles.move', 'appFiles.watch', 'appFiles.replace',
   'appFiles.versions', 'appFiles.readVersion', 'appFiles.upload', 'appFiles.writeChunk',

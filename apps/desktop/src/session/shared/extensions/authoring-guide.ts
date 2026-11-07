@@ -973,6 +973,14 @@ capabilities; those features run only on computers. Phone plus \`notifications\`
 whole line in every new session's \`<gugu_apps>\`: name the tools that matter and when to read which skill. Longer
 standing behavior is a skill whose description says when to read it.
 
+## Prompts (API 34)
+
+\`contributes.prompts\`: up to 8 \`{ "name", "title", "prompt" }\`, plain text the person picks from the composer's \`/\`
+menu under your App's name, edits and sends. Translate with \`localized.<tag>.prompts.<name>\` (\`title\`, \`prompt\`).
+It needs no capability. The person's own prompts are behind \`prompts\` (a program's, for its agent):
+\`gugu.prompts.list({ query? })\`, \`gugu.prompts.save({ id?, title, prompt })\` and \`gugu.prompts.delete(id)\` (the
+person gets an undo at once). App prompts are read-only.
+
 ## Configuration
 
 An App with only programs or skills may omit \`entry\` and \`contributes.tabs\` (API 5). Clicking it

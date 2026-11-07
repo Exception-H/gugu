@@ -4,6 +4,6 @@ import { promptLibraryService } from './service';
 
 export const promptLibraryController = createRPCController({
   get: (): Promise<PromptLibraryPrompt[]> => promptLibraryService.getPrompts(),
-  update: (prompts: PromptLibraryPrompt[]): Promise<void> =>
-    promptLibraryService.updatePrompts(prompts),
+  save: (prompt: PromptLibraryPrompt): Promise<PromptLibraryPrompt[]> => promptLibraryService.savePrompt(prompt),
+  delete: (id: string): Promise<PromptLibraryPrompt[]> => promptLibraryService.deletePrompt(id),
 });

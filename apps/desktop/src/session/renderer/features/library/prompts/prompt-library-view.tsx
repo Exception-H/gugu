@@ -1,9 +1,7 @@
 import { useCommandProvider } from '@renderer/lib/commands/use-command-provider';
 import { Pencil, Plus, Trash2 } from '@/lib/icons';
 import { useMemo, useRef, useState } from 'react';
-import { useLibraryHost } from '@renderer/features/library/library-host';
 import { DeviceScopeNoticeLine } from '@renderer/features/remote-hosts/device-scope-picker';
-import { deviceScopeNotice } from '@renderer/features/remote-hosts/device-scope-notice';
 import { MultiLineListItem } from '@renderer/lib/components/multi-line-list-item';
 import { PageHeader } from '@renderer/lib/components/page-header';
 import { PageLoading } from '@renderer/lib/components/page-layout';
@@ -13,7 +11,6 @@ import { SearchInput } from '@renderer/lib/ui/search-input';
 import { useSessionMessages } from '@renderer/localization/use-session-messages';
 import { cn } from '@renderer/utils/utils';
 import { usePromptLibraryActions } from './use-prompt-library-actions';
-import { remoteHostsStore } from '@renderer/features/remote-hosts/remote-hosts-store';
 
 type PromptListItem = {
   id: string;
@@ -88,13 +85,8 @@ export function PromptLibraryView() {
   const actions = usePromptLibraryActions();
   const { prompts: promptLibrary, createPrompt, editPrompt, deletePrompt } = actions;
   const { translate } = useSessionMessages();
-  const host = useLibraryHost();
-  // 看的是别的机器、它此刻给不出东西:说一句人话;离线时照旧画上次读到的、只读。一份都没有 ❌ 画「还没有提示词」。
-  const notice = deviceScopeNotice(
-    { remote: host.remote, error: actions.error, hasData: actions.hasData, now: Date.now(), cloud: remoteHostsStore.cloudScope(host.remote?.deviceId) },
-    translate
-  );
-  const isDisabled = actions.isBusy || !!notice?.readOnly;
+  // 提示词是账号的(use-prompt-library.ts):资源库选了哪台机器都是这一份,没有「那台机器离线」这回事。
+  const isDisabled = actions.isBusy;
   const [search, setSearch] = useState('');
 
   const filteredItems = useMemo(
@@ -125,7 +117,9 @@ export function PromptLibraryView() {
           </Button>
         </div>
       </PageHeader>
-      {notice && <DeviceScopeNoticeLine notice={notice} onRetry={actions.reload} />}
+      {!!actions.error && !actions.hasData && (
+        <DeviceScopeNoticeLine notice={{ kind: 'failed', text: translate('prompts.loadFailed'), retry: true, readOnly: false }} onRetry={actions.reload} />
+      )}
       {/* 还没读到(在读 / 读不到):❌ 先画一句「还没有提示词」冒充它是空的。读不到时上面那一句说清楚。 */}
       {actions.isLoading ? (
         <PageLoading />
