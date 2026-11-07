@@ -7,7 +7,7 @@ import type { SourceRange, SourceSnapshot, WindowByteSource, WindowReadRequest }
 type Frame = { path: string[]; array: boolean; key: string; index: number; state: 'key' | 'colon' | 'value' | 'comma' };
 type Token = { kind: 'key' | 'metadata' | 'skip' | 'candidate'; raw: string | null; escaped: boolean; start: number; path: string[] };
 type State = { version: 1; offset: number; stack: Frame[]; token: Token | null; skipDepth: number;
-  skipString: boolean; skipEscape: boolean; primitive: boolean; metadata: Record<string, unknown> };
+  skipString: boolean; skipEscape: boolean; primitive: boolean; metadata: Record<string, unknown>; bodyOffset?: number };
 const utf8 = new TextDecoder('utf-8', { fatal: true });
 const digest = (value: string) => createHash('sha256').update(value).digest('hex');
 function metadataPath(path: string[]) {
@@ -92,21 +92,54 @@ function advance(state: State, bytes: Uint8Array, start: number, provider: strin
   return null;
 }
 
+export function recordHeaderKey(snapshot: SourceSnapshot, range: SourceRange, request: WindowReadRequest) {
+  return { scope: request.scope, sourceLineage: snapshot.sourceInstance, decoderVersion: 1, kind: 'head' as const,
+    cursor: 'body-header:' + digest(JSON.stringify([snapshot.snapshotRevision, range.start, range.end])) };
+}
+function cachedState(bytes: Uint8Array, range: SourceRange): State | null {
+  try {
+    const state = JSON.parse(utf8.decode(bytes)) as State;
+    const object = (value: unknown) => value !== null && typeof value === 'object' && !Array.isArray(value);
+    const position = (value: number) => Number.isSafeInteger(value) && value >= range.start && value <= range.end;
+    const strings = (value: unknown, keys: string[]) => object(value) &&
+      Object.entries(value as Record<string, unknown>).every(([key, item]) => keys.includes(key) && typeof item === 'string');
+    if (!state || state.version !== 1 || !position(state.offset) || !Array.isArray(state.stack) ||
+      !state.stack.every(frame => object(frame) && Array.isArray(frame.path) && frame.path.every(part => typeof part === 'string') &&
+        typeof frame.array === 'boolean' && typeof frame.key === 'string' && Number.isSafeInteger(frame.index) && frame.index >= 0 &&
+        ['key', 'colon', 'value', 'comma'].includes(frame.state)) ||
+      !Number.isSafeInteger(state.skipDepth) || state.skipDepth < 0 || !object(state.metadata) ||
+      !['skipString', 'skipEscape', 'primitive'].every(field => typeof state[field as keyof State] === 'boolean') ||
+      !Object.entries(state.metadata).every(([key, item]) => ['message', 'payload'].includes(key)
+        ? strings(item, ['id', 'type', 'role']) : ['uuid', 'parentUuid', 'type'].includes(key) && typeof item === 'string') ||
+      state.bodyOffset !== undefined && !position(state.bodyOffset)) return null;
+    const token = state.token;
+    if (token !== null && (!object(token) || !['key', 'metadata', 'skip', 'candidate'].includes(token.kind) ||
+      token.raw !== null && (typeof token.raw !== 'string' || token.raw.length > 256) ||
+      ['candidate', 'skip'].includes(token.kind) && token.raw !== null || typeof token.escaped !== 'boolean' || !position(token.start) ||
+      !Array.isArray(token.path) || !token.path.every(part => typeof part === 'string'))) return null;
+    return state;
+  } catch { return null; } // Only bounded cache payload decoding; I/O and budget errors remain outside this repair.
+}
+
 /** One source block per invocation. The fixed checkpoint survives a process restart. */
 export async function locateRecordBody(source: WindowByteSource, snapshot: SourceSnapshot, range: SourceRange, request: WindowReadRequest) {
-  const key = { scope: request.scope, sourceLineage: snapshot.sourceInstance, decoderVersion: 1, kind: 'head' as const,
-    cursor: 'body-header:' + digest(JSON.stringify([snapshot.snapshotRevision, range.start, range.end])) };
+  const key = recordHeaderKey(snapshot, range, request);
   const directory = join(request.cacheDirectory, 'body-headers');
   const previous = await readWindowFrame(directory, key, request.budget);
-  let state: State;
+  let state: State | null = null;
   if (previous.kind === 'hit') {
     request.budget.charge('decodedBytes', previous.bytes.length);
-    state = JSON.parse(utf8.decode(previous.bytes)) as State;
-    if (state.version !== 1 || !Number.isSafeInteger(state.offset) || state.offset < range.start || state.offset > range.end)
-      throw new Error('Invalid body header checkpoint');
+    state = cachedState(previous.bytes, range);
   } else {
-    if (previous.reason !== 'not_found') throw new Error(`Body header checkpoint failure: ${previous.reason}`);
-    state = { version: 1, offset: range.start, stack: [], token: null, skipDepth: 0, skipString: false, skipEscape: false, primitive: false, metadata: {} };
+    if (previous.reason === 'io') throw previous.error;
+  }
+  // A disposable derived checkpoint can be rebuilt only from this real record
+  // anchor, using the same request budget, without scanning the source prefix.
+  state ??= { version: 1, offset: range.start, stack: [], token: null, skipDepth: 0, skipString: false, skipEscape: false, primitive: false, metadata: {} };
+  if (state.bodyOffset !== undefined) return { kind: 'located' as const, offset: state.bodyOffset, metadata: state.metadata };
+  async function save() {
+    await mkdir(directory, { recursive: true }); await syncWindowDirectory(request.cacheDirectory);
+    await writeWindowFrame(directory, key, Buffer.from(JSON.stringify(state)));
   }
   const start = state.offset, length = Math.min(65536, range.end - start);
   if (!length) return { kind: 'empty' as const };
@@ -126,9 +159,8 @@ export async function locateRecordBody(source: WindowByteSource, snapshot: Sourc
     throw new Error('Source changed while locating body header');
   request.budget.charge('decodedBytes', length);
   const offset = advance(state, bytes, start, request.locator.harness);
-  if (offset !== null) return { kind: 'located' as const, offset, metadata: state.metadata };
+  if (offset !== null) { state.bodyOffset = offset; await save(); return { kind: 'located' as const, offset, metadata: state.metadata }; }
   if (state.offset === range.end) return { kind: 'empty' as const };
-  await mkdir(directory, { recursive: true }); await syncWindowDirectory(request.cacheDirectory);
-  await writeWindowFrame(directory, key, Buffer.from(JSON.stringify(state)));
+  await save();
   return { kind: 'locating' as const, nextOffset: state.offset };
 }
