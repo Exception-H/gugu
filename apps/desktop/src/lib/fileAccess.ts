@@ -4,10 +4,28 @@ import { attachmentRequest } from '@gugu/core/cloud/attachmentsApi'
 import { createCachedFileSink, type FileChunkCache } from '@gugu/core/shared/fileCache'
 import { createFileResolver, snapshotBlob, requireFileRange, FILE_CHUNK_BYTES, type FileBytes, type FileContext, type FileRevision } from '@gugu/core/shared/fileResolver'
 import { attachmentsEndpoint } from './attachmentsEndpoint'
+import { trimCacheToBytes } from './attachmentCacheBudget'
+import { rendererLogger } from './log'
 import { getRendererSession, observeRendererSession } from './sessionPublication'
 
 export const attachmentCache = () => caches.open('gugu-attachments-v1')
 export const attachmentCacheOrigin = 'https://attachments.gugu.invalid'
+const log = rendererLogger('attachments')
+export const ATTACHMENT_CACHE_BYTES = 512 * 1024 * 1024
+const isChunk = (url: string) => url.startsWith(`${attachmentCacheOrigin}/chunks/`)
+let trimming: Promise<void> | null = null, trimAgain = false
+/** 写进附件缓存的唯一入口(打开的原图、预览、发送时留的本机副本):写完按上限裁一次;裁着的时候又来的写入合成下一轮。 */
+export async function putAttachment(request: RequestInfo | URL, response: Response): Promise<void> {
+  await (await attachmentCache()).put(request, response)
+  void trimAttachmentCache().catch((error: unknown) => log.warn({ error }, 'attachment cache trim failed'))
+}
+function trimAttachmentCache(): Promise<void> {
+  if (trimming) { trimAgain = true; return trimming }
+  trimming = (async () => {
+    do { trimAgain = false; await trimCacheToBytes(await attachmentCache(), ATTACHMENT_CACHE_BYTES, isChunk) } while (trimAgain)
+  })().finally(() => { trimming = null })
+  return trimming
+}
 let account = getRendererSession()?.user.id, generation = new AbortController()
 observeRendererSession(({ session }) => {
   if (session?.user.id === account) return
@@ -50,7 +68,7 @@ const nativeBytes = (context: FileContext, file: { id: string; size: number }): 
   async dispose() { await native('dispose', context, { id: file.id }) },
 })
 const cloud = cloudFileProviders({ endpoint, metadata, cache: chunks, sink: async size => createCachedFileSink(chunks, size),
-  imageCache: { match: async request => (await attachmentCache()).match(request), put: async (request, response) => (await attachmentCache()).put(request, response) },
+  imageCache: { match: async request => (await attachmentCache()).match(request), put: putAttachment },
   async image(file, revision) {
     const bitmap = await createImageBitmap(await snapshotBlob(file, revision.content_type))
     try {
