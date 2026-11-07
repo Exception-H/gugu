@@ -19,6 +19,7 @@ export function createDesktopSourceWindowReader(options: {
   request(id: string, limit?: number, signal?: AbortSignal): Promise<DesktopSourceRequest>;
   reportError(error: unknown): void;
   observed?(conversationId: string, io: Readonly<WindowIoCounters>, phase: 'window' | 'discovery'): void;
+  backgroundRead?(jobId: string, io: Readonly<WindowIoCounters>): void;
 }) {
   type Discovery = { abort: AbortController; promise: Promise<WindowSourceLocator>; waiters: number };
   const discoveries = new Map<string, Discovery>();
@@ -27,7 +28,7 @@ export function createDesktopSourceWindowReader(options: {
   const reported = new WeakSet<WindowReadRequest>();
   const listeners = new Map<() => void, string>();
   const locatedRequests = new WeakMap<WindowReadRequest, WindowSourceLocator>();
-  const scheduler = createReverseIndexScheduler({ onFailure: options.reportError,
+  const scheduler = createReverseIndexScheduler({ onFailure: options.reportError, onRead: options.backgroundRead,
     onLocated: () => { for (const changed of listeners.keys()) changed(); } });
   async function locate(input: DesktopSourceRequest): Promise<WindowSourceLocator | null> {
     const cached = locatedRequests.get(input);

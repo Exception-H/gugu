@@ -58,6 +58,7 @@ async function fixture(multipleBatches = false) {
         budget: createWindowBudget(), limit, signal };
       requests.push(request); return request;
     }, reportError: error => { throw error; }, observed: (id, io, phase) => { observed.push({ id, phase, io: { ...io } }); if (phase === 'window') measured.push({ ...io }); },
+    backgroundRead: (jobId, io) => observed.push({ id: jobId, phase: 'reverse', io: { ...io } }),
   });
   cleanup.push(() => reader.dispose());
   reads.source = 0; reads.index = 0; reads.maximum = 0; reads.onDirectoryRead = null;
@@ -190,7 +191,7 @@ describe('desktop default source reopening', () => {
     release(); const stop = await next; cleanup.push(async () => stop()); await shown;
   });
   it('replaces an unknown giant tail ticket with real first-body text after locating its start', async () => {
-    const { reader, path, row, measured } = await fixture();
+    const { reader, path, measured, observed } = await fixture();
     const text = '中文😀 real body '.repeat(8000);
     await writeFile(path, JSON.stringify({ metadata: 'x'.repeat(70000), type: 'response_item', payload: {
       type: 'message', role: 'assistant', content: [{ type: 'output_text', text: '' }, { type: 'output_text', text }] } }) + '\n');
@@ -208,5 +209,8 @@ describe('desktop default source reopening', () => {
     expect(loading).toBe(true); expect(text.startsWith(fragment.text!)).toBe(true);
     expect(Buffer.byteLength(fragment.text!)).toBeLessThanOrEqual(16384);
     expect(measured.every(io => io.sourceBytes <= 512 * 1024 && io.indexBytes <= 65536)).toBe(true);
+    expect(observed.some(value => value.phase === 'reverse' && value.io.sourceBytes > 0)).toBe(true);
+    expect(observed.reduce((sum, value) => sum + value.io.sourceBytes, 0)).toBe(reads.source);
+    expect(observed.reduce((sum, value) => sum + value.io.indexBytes, 0)).toBe(reads.index);
   });
 });
