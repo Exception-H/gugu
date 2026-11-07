@@ -1188,7 +1188,9 @@ it.each(['group', 'topic', 'owned', 'assistant'] as const)('places an annotated 
   await act(async () => { window.dispatchEvent(new CustomEvent(APP_COMPOSE_EVENT, { detail: {
     chatId: target, text: '① Check this', images: [{ name: 'edited.png', type: 'image/png', bytes: new ArrayBuffer(3) }],
   } })) })
-  expect(chatStoreMock.setDraftQuote).not.toHaveBeenCalled()
+  // The owned agent's own composer takes the image; a quote left in that chat's draft is dropped, not sent with it.
+  if (kind === 'owned') expect(chatStoreMock.setDraftQuote).toHaveBeenCalledWith(target, null)
+  else expect(chatStoreMock.setDraftQuote).not.toHaveBeenCalled()
   expect(chatStoreMock.writeDraft).toHaveBeenCalledWith(target, kind === 'owned' ? '① Check this' : { at: 'end', text: '① Check this' })
   expect(chatStoreMock.setDraftAttachments).toHaveBeenCalledWith(target, [expect.objectContaining({ file: expect.objectContaining({ name: 'edited.png', type: 'image/png' }) })])
   if (kind === 'topic') expect(drainTopicSplitRequest(parent)).toMatchObject({ chatId: target })
