@@ -1,7 +1,8 @@
-import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
+// @vitest-environment jsdom
+import { describe, expect, it } from 'vitest';
 import { folderItem, type PanelItem } from './chat-panel-item';
-import { askChat, chatAlone, chatBlockContentOf, chatLayoutOf, chatPaneOf, closeChatTab, closeInfoTab, closeTopicTab, focusedChatTab, infoTabOf, openInfoTab, openPanelItem, openTopicTab, panelFull, panelTabsOf, setPanelFull, showChatOnly, showChatTab, takeChatAsk, topicTabOf, updateFileNames } from './chat-layouts';
-import { CHAT_TAB_KIND } from './chat-tab-providers';
+import { askChat, chatAlone, chatBlockContentOf, chatLayoutOf, chatPaneOf, closeChatTab, closeInfoTab, closeTopicTab, focusedChatTab, infoTabOf, memberTopicOf, openInfoTab, openPanelItem, openTopicTab, panelFull, panelTabsOf, setPanelFull, showChatOnly, showChatTab, takeChatAsk, topicTabOf, updateFileNames } from './chat-layouts';
+import { CHAT_INFO_TAB_KIND, CHAT_TAB_KIND } from './chat-tab-providers';
 import { tabFullscreen } from '../../tabs/tab-fullscreen';
 import { SIDE_PAGE_WIDTH_PX } from '../../tabs/side-width';
 
@@ -103,6 +104,53 @@ describe('chat navigation uses the same page history and real panes as tasks', (
     updateFileNames([{ id: 'README', filename: 'later.md', content_type: 'text/markdown' }], []);
     expect(panelTabsOf(id)).toEqual([]);
   });
+  it('the members context follows the focused topic, its information page, and the source chat', () => {
+    const id = 'topic-members-focus';
+    const topic = { topicChatId: 'topic-members', name: 'Topic' };
+    openTopicTab(id, topic);
+    const topicTab = topicTabOf(id)!.tabId;
+    expect(memberTopicOf(id)).toEqual(topic);
+    openInfoTab(id, 'members', memberTopicOf(id));
+    expect(infoTabOf(id)?.info.topic).toEqual(topic);
+    expect(memberTopicOf(id)).toEqual(topic);
+    showChatTab(id, topicTab);
+    expect(memberTopicOf(id)).toEqual(topic);
+    showChatOnly(id);
+    expect(memberTopicOf(id)).toBeNull();
+    openInfoTab(id);
+    expect(infoTabOf(id)?.info.topic).toBeUndefined();
+    expect(memberTopicOf(id)).toBeNull();
+  });
+  it('does not restore a topic members page without its runtime-only topic tab', () => {
+    const id = 'topic-members-persistence';
+    const topic = { topicChatId: 'transient-topic-id', name: 'Transient topic' };
+    openTopicTab(id, topic);
+    openInfoTab(id, 'members', topic);
+    expect(JSON.stringify(chatLayoutOf(id).snapshot)).not.toContain(topic.topicChatId);
+    showChatOnly(id);
+    openInfoTab(id, 'members');
+    expect(chatLayoutOf(id).snapshot.groups.flatMap((group) => group.tabManager.tabs).some((tab) => tab.kind === 'extension' && tab.extensionKind === CHAT_INFO_TAB_KIND)).toBe(true);
+  });
+  it('reuses the information tab when switching from source members to topic members', () => {
+    const id = 'topic-members-switch';
+    openInfoTab(id, 'members');
+    const infoTab = infoTabOf(id)!.tabId;
+    openTopicTab(id, { topicChatId: 'topic-members-switch', name: 'Topic' });
+    openInfoTab(id, 'members', memberTopicOf(id));
+    expect(infoTabOf(id)?.tabId).toBe(infoTab);
+    expect(infoTabOf(id)?.info.topic?.topicChatId).toBe('topic-members-switch');
+    expect(infoTabOf(id)?.shown).toBe(true);
+  });
+  it('closing topic members restores the topic on a phone-sized page', () => {
+    const id = 'topic-members-phone';
+    chatLayoutOf(id).focusedPane.setDimensions(390, 620);
+    openTopicTab(id, { topicChatId: 'topic-members-phone', name: 'Topic' });
+    const topicTab = topicTabOf(id)!.tabId;
+    openInfoTab(id, 'members', memberTopicOf(id));
+    closeInfoTab(id);
+    expect(focusedChatTab(id)).toEqual({ tabId: topicTab, kind: 'topic' });
+    expect(infoTabOf(id)).toBeNull();
+  });
   it('each chat receives only its latest ask once', () => {
     askChat('asked', { app: 'workspace' }); askChat('asked', { itemId: 'README', from: 'origin' });
     expect(takeChatAsk('asked')).toEqual({ itemId: 'README', from: 'origin' });
@@ -111,9 +159,6 @@ describe('chat navigation uses the same page history and real panes as tasks', (
 });
 
 describe('pages beside the chat start at one declared width (side-width.ts, owner 11-07)', () => {
-  // openInfoTab reads the chat's summary off the window (none here: not a group).
-  beforeAll(() => { vi.stubGlobal('window', {}); });
-  afterAll(() => { vi.unstubAllGlobals(); });
   const sideWidth = (id: string, width: number) => {
     const layout = chatLayoutOf(id);
     const side = layout.groups.find(({ paneId }) => paneId === layout.sidePaneId)!;

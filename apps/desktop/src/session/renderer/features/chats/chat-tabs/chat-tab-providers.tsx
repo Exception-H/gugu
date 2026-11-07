@@ -39,7 +39,7 @@ export const CHAT_INFO_TAB_KIND = 'chat-info';
 
 export type ChatTabState = { chatId: string };
 export type ChatTopicState = { topicChatId: string; name: string };
-export type ChatInfoState = { group: boolean; page?: 'main' | 'members' | 'announcement'; at?: number };
+export type ChatInfoState = { group: boolean; page?: 'main' | 'members' | 'announcement'; at?: number; topic?: ChatTopicState };
 
 /** The chat a strip belongs to (its place, `chat-layouts`). */
 export const chatIdOfView = (ctx: TabViewContext): string => (ctx.place?.kind === 'chat' ? ctx.place.chatId : '');
@@ -234,7 +234,7 @@ export const chatTopicTabProvider = createTabProvider<typeof CHAT_TOPIC_TAB_KIND
   TabContent: TopicTabContent,
 });
 
-const useInfoLabel = (tab: ResolvedTab) => useTranslation('messaging').t(stateOf<ChatInfoState>(tab).group ? 'header.groupInfo' : 'header.chatInfo');
+const useInfoLabel = (tab: ResolvedTab) => useTranslation('messaging').t(stateOf<ChatInfoState>(tab).topic ? 'group.memberList.titleTopic' : stateOf<ChatInfoState>(tab).group ? 'header.groupInfo' : 'header.chatInfo');
 
 const InfoTabItem = observer(function InfoTabItem({ tab, host, ctx }: TabBarItemProps<TabResource>) {
   return (
@@ -254,8 +254,9 @@ function InfoTabContent(props: TabContentProps) {
 
 export const chatInfoTabProvider = createTabProvider<typeof CHAT_INFO_TAB_KIND, ChatInfoState, TabResource>({
   kind: CHAT_INFO_TAB_KIND,
+  isPersistent: (state) => !state.topic,
 
-  resourceKey: (state) => `${state.page}:${state.at ?? ''}`,
+  resourceKey: (state) => `${state.topic?.topicChatId ?? ''}:${state.page}:${state.at ?? ''}`,
   sideWidth: () => SIDE_PAGE_WIDTH_PX,
   initialize: stateResource,
   dispose: () => {},
