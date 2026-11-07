@@ -1,4 +1,5 @@
-import { mkdtemp, mkdir, rm, writeFile, realpath } from 'node:fs/promises';
+import { mkdtemp, mkdir, rm, writeFile, realpath, appendFile, stat, utimes, rename } from 'node:fs/promises';
+import type { Stats } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
@@ -9,7 +10,21 @@ import type { WindowIoCounters } from '@gugu/session-core/session-record/window-
 import { supportsSourceWindow } from '@gugu/session-core/session-record/window-cache/formats';
 
 const reads = vi.hoisted(() => ({ source: 0, index: 0, maximum: 0, onDirectoryRead: null as (() => void | Promise<void>) | null,
+  ranges: [] as { path: string; start: number; end: number }[],
+  watchers: new Map<string, Set<(current: Stats, previous: Stats) => void>>(),
   beforeSourceRead: null as ((path: string, position: number, close: () => Promise<void>) => void | Promise<void>) | null }));
+vi.mock('node:fs', async original => {
+  const fs = await original<typeof import('node:fs')>();
+  return { ...fs, watchFile: (...args: Parameters<typeof fs.watchFile>) => {
+    const path = String(args[0]), listener = args.at(-1) as (current: Stats, previous: Stats) => void;
+    const watchers = reads.watchers.get(path) ?? new Set(); watchers.add(listener); reads.watchers.set(path, watchers);
+    return Reflect.apply(fs.watchFile, fs, args);
+  }, unwatchFile: (...args: Parameters<typeof fs.unwatchFile>) => {
+    const watchers = reads.watchers.get(String(args[0]));
+    if (args[1]) watchers?.delete(args[1] as unknown as (current: Stats, previous: Stats) => void); else watchers?.clear();
+    return fs.unwatchFile(...args);
+  } };
+});
 vi.mock('node:fs/promises', async original => {
   const fs = await original<typeof import('node:fs/promises')>();
   return { ...fs, readFile: () => { throw new Error('Whole-file reads are forbidden'); },
@@ -27,6 +42,7 @@ vi.mock('node:fs/promises', async original => {
         if (String(args[0]).endsWith('.jsonl')) await reads.beforeSourceRead?.(String(args[0]), Number(values[3]), () => file.close());
         const result = await Reflect.apply(read, file, values);
         const kind = String(args[0]).endsWith('.jsonl') ? 'source' : 'index';
+        if (kind === 'source') reads.ranges.push({ path: String(args[0]), start: Number(values[3]), end: Number(values[3]) + result.bytesRead });
         reads[kind] += result.bytesRead;
         reads.maximum = Math.max(reads.maximum, Number(values[2]));
         return result;
@@ -63,11 +79,64 @@ async function fixture(multipleBatches = false) {
     backgroundRead: (jobId, io) => observed.push({ id: jobId, phase: 'reverse', io: { ...io } }),
   });
   cleanup.push(() => reader.dispose());
-  reads.source = 0; reads.index = 0; reads.maximum = 0; reads.onDirectoryRead = null; reads.beforeSourceRead = null;
+  reads.source = 0; reads.index = 0; reads.maximum = 0; reads.ranges = []; reads.watchers.clear(); reads.onDirectoryRead = null; reads.beforeSourceRead = null;
   return { reader, measured, observed, requests, path: await realpath(path), row };
 }
 
 describe('desktop default source reopening', () => {
+  it('pins two real opening EOFs independently, ignores append, and releases the cancelled pin', async () => {
+    const { reader, path, row } = await fixture();
+    await writeFile(path, row('first'));
+    const texts = (events: ReturnType<typeof vi.fn>) => events.mock.calls.map(([event]) => {
+      const value = event.result.ok ? event.result.batch : event.result.snapshot;
+      return value.sourceFragments?.map((fragment: { text?: string }) => fragment.text);
+    }).at(-1);
+    const failed = vi.fn(), first = vi.fn(), second = vi.fn();
+    const stopFirst = await reader.subscribe({ conversationId: 'conversation', subscriptionId: 'first', cursor: null }, first, failed);
+    cleanup.push(async () => stopFirst());
+    await vi.waitFor(() => expect(texts(first)).toEqual(['first']));
+    const before = await stat(path);
+    await appendFile(path, row('second'));
+    const middle = await stat(path);
+    for (const notify of reads.watchers.get(path) ?? []) notify(middle, before);
+    const stopSecond = await reader.subscribe({ conversationId: 'conversation', subscriptionId: 'second', cursor: null }, second, failed);
+    cleanup.push(async () => stopSecond());
+    await vi.waitFor(() => expect(texts(second)).toEqual(['first', 'second']));
+    await appendFile(path, row('third'));
+    const appended = await stat(path);
+    for (const notify of reads.watchers.get(path) ?? []) notify(appended, middle);
+    // Force a structural refresh at the current physical revision. Each reader
+    // must retain its own range cap, rather than use a fake snapshot size.
+    await utimes(path, appended.atime, new Date(appended.mtimeMs + 1000));
+    const touched = await stat(path);
+    for (const notify of reads.watchers.get(path) ?? []) notify(touched, appended);
+    await vi.waitFor(() => { expect(first.mock.calls.length).toBeGreaterThan(1); expect(second.mock.calls.length).toBeGreaterThan(1); });
+    expect(texts(first)).toEqual(['first']); expect(texts(second)).toEqual(['first', 'second']);
+    expect(reads.ranges.every(read => read.end <= middle.size)).toBe(true);
+    stopFirst(); stopSecond();
+    expect(reads.watchers.get(path)?.size).toBe(0);
+    const reopened = vi.fn();
+    const stopReopened = await reader.subscribe({ conversationId: 'conversation', subscriptionId: 'reopened', cursor: null }, reopened, failed);
+    cleanup.push(async () => stopReopened());
+    await vi.waitFor(() => expect(texts(reopened)).toEqual(['first', 'second', 'third']));
+    expect(failed).not.toHaveBeenCalled();
+  });
+  it.each(['truncate', 'replace'])('fails a %s of the opening physical source without publishing a new EOF', async change => {
+    const { reader, path, row } = await fixture();
+    await writeFile(path, row('opening body with a sufficiently large range'));
+    const events = vi.fn(), failed = vi.fn();
+    const stop = await reader.subscribe({ conversationId: 'conversation', subscriptionId: change, cursor: null }, events, failed);
+    cleanup.push(async () => stop());
+    await vi.waitFor(() => expect(events).toHaveBeenCalledOnce());
+    const before = await stat(path);
+    if (change === 'replace') { await writeFile(path + '.new', row('new body')); await rename(path + '.new', path); }
+    else await writeFile(path, row('short'));
+    const after = await stat(path);
+    for (const notify of [...reads.watchers.get(path) ?? []]) notify(after, before);
+    await vi.waitFor(() => expect(failed).toHaveBeenCalledOnce());
+    expect(failed.mock.calls[0][0].error.code).toBe('source_changed');
+    expect(events).toHaveBeenCalledOnce(); expect(reads.watchers.get(path)?.size).toBe(0);
+  });
   it('reports a fatal reverse read to its own window once and leaves another window live', async () => {
     const { reader, path, row, observed } = await fixture();
     const otherEvents = vi.fn(), otherFailed = vi.fn();
@@ -85,7 +154,7 @@ describe('desktop default source reopening', () => {
     await vi.waitFor(() => expect(failed).toHaveBeenCalledOnce());
     expect(failed).toHaveBeenCalledWith(expect.objectContaining({ conversationId: 'conversation', subscriptionId: 'failed-job-owner', state: 'failed',
       error: expect.objectContaining({ code: 'EBADF' }) }));
-    await writeFile(path.replace('native-id', 'other-id'), row('healthy window still updates'));
+    await writeFile(path.replace('native-id', 'other-id'), row('healthy update!'));
     await vi.waitFor(() => expect(otherEvents).toHaveBeenCalledTimes(2));
     expect(otherFailed).not.toHaveBeenCalled(); expect(failed).toHaveBeenCalledOnce();
     expect(observed.reduce((sum, item) => sum + item.io.sourceBytes, 0)).toBe(reads.source);
