@@ -11,7 +11,7 @@ import { useChatStore } from '../store/chatContext'
 type Quote = NonNullable<ChatMessageComposerProps['quoteContent']>
 
 /** One quote for every entry (reply menu, annotated-image draft): an attachment quotes its file, never a bare label. */
-export function quoteOfMessage(msg: MessageItem, senderName: string, attachmentLabel: string, selection?: QuoteSelection,
+function quoteOfMessage(msg: MessageItem, senderName: string, attachmentLabel: string, selection?: QuoteSelection,
   previewTextOf?: (message: MessageItem) => string): Quote {
   const textSelection = msg.content_type === 'text' ? selection : undefined
   const attachment = msg.content_type === 'attachment' && !parseVoiceAttachmentContent(msg.content) ? parseAttachmentContent(msg.content, msg) ?? undefined : undefined

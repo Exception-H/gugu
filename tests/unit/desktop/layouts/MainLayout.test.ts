@@ -15,7 +15,6 @@ import { openLinkTarget } from '../../../../apps/desktop/src/lib/guguLinks'
 import { conversationLink, parseGuguLink } from '@gugu/core/shared/ui/guguLink'
 import { ToastContext } from '../../../../apps/desktop/src/components/toastContext'
 import { clickElement, createNode, createReactHarness, message } from '../../../support/testHarness'
-import { attachmentEnvelope } from '@gugu/core/shared/ui/attachmentModels'
 import { chatOnScreen } from '../../../../apps/desktop/src/lib/onScreenChat'
 import { askChat, takeChatAsk } from '../../../../apps/desktop/src/session/renderer/features/chats/chat-tabs/chat-layouts'
 import { drainTopicSplitRequest } from '../../../../apps/desktop/src/lib/topicSplitRequest'
@@ -1178,9 +1177,8 @@ describe('MainLayout: personal assistant destinations', () => {
   })
 })
 
-it.each(['group', 'topic', 'owned', 'assistant'] as const)('places an image reply in its %s destination while another chat is active', async kind => {
+it.each(['group', 'topic', 'owned', 'assistant'] as const)('places an annotated image in its %s destination while another chat is active, without quoting anything', async kind => {
   const target = '0b1e7c1a-0000-4000-8000-000000000002', parent = '0b1e7c1a-0000-4000-8000-000000000001'
-  const original = message({ id: 'original-image', chat_id: target, sender_user_id: 'agent', is_whisper: true, to_user_ids: ['user-1'] })
   const dm = kind === 'owned' || kind === 'assistant'
   chatStoreMock.activeChatId = 'other-chat'
   chatStoreMock.chats = [{ id: parent, kind: 'group' }, { id: target, kind: dm ? 'dm' : kind, source_chat_id: kind === 'topic' ? parent : null, peer_user_id: dm ? 'agent' : null }] as never
@@ -1188,26 +1186,13 @@ it.each(['group', 'topic', 'owned', 'assistant'] as const)('places an image repl
   if (kind === 'assistant') { installAssistantShellBridge(); publishAssistantShell({ assistant: { id: 'agent' }, chatId: target } as never) }
   await renderMainLayoutWithToast()
   await act(async () => { window.dispatchEvent(new CustomEvent(APP_COMPOSE_EVENT, { detail: {
-    chatId: target, text: '① Check this', quote: original, images: [{ name: 'edited.png', type: 'image/png', bytes: new ArrayBuffer(3) }],
+    chatId: target, text: '① Check this', images: [{ name: 'edited.png', type: 'image/png', bytes: new ArrayBuffer(3) }],
   } })) })
-  expect(chatStoreMock.setDraftQuote).toHaveBeenCalledWith(target, kind === 'owned' ? null : expect.objectContaining({ messageId: original.id, source: original }))
+  expect(chatStoreMock.setDraftQuote).not.toHaveBeenCalled()
   expect(chatStoreMock.writeDraft).toHaveBeenCalledWith(target, kind === 'owned' ? '① Check this' : { at: 'end', text: '① Check this' })
   expect(chatStoreMock.setDraftAttachments).toHaveBeenCalledWith(target, [expect.objectContaining({ file: expect.objectContaining({ name: 'edited.png', type: 'image/png' }) })])
   if (kind === 'topic') expect(drainTopicSplitRequest(parent)).toMatchObject({ chatId: target })
   if (kind === 'assistant') await act(async () => publishAssistantShell({ assistant: null, chatId: null } as never))
-})
-
-it('quotes an annotated image by its picture and file name, not a bare attachment label', async () => {
-  const target = '0b1e7c1a-0000-4000-8000-000000000002'
-  const original = message({ id: 'original-image', chat_id: target, content_type: 'attachment', content: attachmentEnvelope('shot.png', 2048, 'image/png'), file_item_id: 'item-1', file_version: 1 })
-  chatStoreMock.chats = [{ id: target, kind: 'group' }] as never
-  await renderMainLayoutWithToast()
-  await act(async () => { window.dispatchEvent(new CustomEvent(APP_COMPOSE_EVENT, { detail: {
-    chatId: target, text: '', quote: original, images: [{ name: 'shot-annotated.png', type: 'image/png', bytes: new ArrayBuffer(3) }],
-  } })) })
-  expect(chatStoreMock.setDraftQuote).toHaveBeenCalledWith(target, expect.objectContaining({
-    messageId: original.id, content: 'shot.png', attachment: expect.objectContaining({ kind: 'image', fileName: 'shot.png', source: { kind: 'item', itemId: 'item-1', version: 1 } }),
-  }))
 })
 
 // Links and notifications retain the topic address. Files open the shared source slot.
