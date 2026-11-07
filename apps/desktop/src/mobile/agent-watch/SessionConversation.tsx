@@ -299,7 +299,7 @@ export function SessionConversation({ timeline, deviceId, sessionId, agentName, 
       if (!input) return rejectedInputCommands.onRetrySend?.(id)
       if (input.delivery?.retryable) void machineRpc(deviceId, local).sessions.lifeRetryUnknown(sessionId, id).catch(error => setBackgroundError(messageForUser(error)))
     },
-    ...(nativeRecord && !phoneHost ? userAttachments : {}),
+    ...(nativeRecord && !phoneHost ? userAttachments : { onViewAttachment: userAttachments.onViewAttachment }),
     classifyLink: classifyFileLink, onOpenLink: followConversationLink, onOpenSender: openMessageSender,
     onOpenFile: ({ path, source }) => openFile(path, source),
     conversationAgentSession: () => sessionId, conversationAgentUserId: () => agentUserId ?? null,
