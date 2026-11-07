@@ -136,7 +136,9 @@ describe('@@@5856 名册读不到', () => {
     await act(async () => { await Promise.resolve(); await Promise.resolve() })
     const box = harness.container.querySelector('[data-testid="member-list-error"]')
     expect(box?.getAttribute('data-member-list-error')).toBe('not-participant')
-    expect(box?.textContent).toContain('说一句就进来了')
+    expect(box?.textContent).toContain('说一句就会加入')
+    // Source members can read the other participants, so the copy must not claim non-participants never see the list.
+    expect(box?.textContent).not.toContain('所以看不到')
     expect(box?.textContent).not.toContain('关掉再打开')
   })
 })
