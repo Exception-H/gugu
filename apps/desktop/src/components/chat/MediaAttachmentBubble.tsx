@@ -1,4 +1,4 @@
-import { useEffect, useRef, type CSSProperties } from 'react'
+import { useEffect, useRef, useState, type RefObject, type CSSProperties } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useQuery } from '@tanstack/react-query'
 import type { ParsedAttachment } from '@gugu/core/shared/ui/attachmentModels'
@@ -13,7 +13,6 @@ import { Button } from '../ui/Button'
 import { FileAttachmentCard } from './FileAttachmentCard'
 import { ExpiredAttachmentCard } from './ExpiredAttachmentCard'
 import { Markdown } from '../markdown/Markdown'
-import { useNearViewport } from '../../hooks/useNearViewport'
 import './mediaAttachmentBubble.css'
 
 // @@@fit-bubble 气泡正文是 align-items:flex-start 的 flex 列,子项按内容宽取 fit-content;文件名不换行,卡片的最小内容宽顶到 260px,
@@ -132,3 +131,16 @@ function inlineImageStyle(dimensions?: { width?: number | null; height?: number 
 }
 
 /** 滚到眼前(含上下 400px)才去取:一屏一批,往回翻历史时不把整段都下了。 */
+function useNearViewport(ref: RefObject<Element | null>, enabled = true): boolean {
+  const [near, setNear] = useState(false)
+  useEffect(() => {
+    const el = ref.current
+    if (!enabled || near || !el) return
+    const observer = new IntersectionObserver((entries) => {
+      if (entries.some((e) => e.isIntersecting)) setNear(true)
+    }, { rootMargin: '400px 0px' })
+    observer.observe(el)
+    return () => observer.disconnect()
+  }, [ref, near, enabled])
+  return near
+}

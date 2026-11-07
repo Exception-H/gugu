@@ -33,9 +33,10 @@ import { PlatformCopyButton } from './PlatformCopyButton'
 import { PlatformTable } from './PlatformTable'
 import { useMobileShell } from '@/hooks/useMobileShell'
 import { FILE_PILL_CLASS, hookFilePillCopy, rehypeGroupFilePills } from './filePills'
-import { RESOURCE_CARD_CLASS, rehypeResourceCards } from './resourceCards'
-// Lazy: a card reads through the chat's readers (file metadata, messages, devices); Markdown itself stays free of them.
-const ResourceCard = lazy(() => import('./ResourceCard').then(module => ({ default: module.ResourceCard })))
+import { LINK_PILL_CLASS, rehypeLinkPills } from './linkPills'
+import { MentionPill } from './MentionPill'
+// Lazy: a link pill reads through the chat's readers (file metadata, messages, topics); Markdown itself stays free of them.
+const LinkPill = lazy(() => import('./LinkPill').then(module => ({ default: module.LinkPill })))
 import { GroupFileName } from './GroupFileName'
 import { revealMarkdownAnchor } from './revealAnchor'
 import { followLink } from '../../lib/guguLinks'
@@ -119,8 +120,8 @@ function pluginsFor(options: MarkdownDialectOptions) {
   const key = `${options.trust}|${options.hardBreaks ? 1 : 0}|${options.frontmatter ? 1 : 0}`
   let entry = pluginCache.get(key)
   if (!entry) {
-    // Link cards are a chat bubble's: documents and previews keep their links as written.
-    entry = { remark: markdownRemarkPlugins(options), rehype: markdownRehypePlugins(options, options.trust === 'chat' ? [rehypeGroupFilePills, rehypeResourceCards] : [rehypeGroupFilePills]) }
+    // Link pills are a chat bubble's: documents and previews keep their links as written.
+    entry = { remark: markdownRemarkPlugins(options), rehype: markdownRehypePlugins(options, options.trust === 'chat' ? [rehypeGroupFilePills, rehypeLinkPills] : [rehypeGroupFilePills]) }
     pluginCache.set(key, entry)
   }
   return entry
@@ -148,8 +149,6 @@ export const Markdown = memo(function Markdown({
   const openLinkRef = useRef(onOpenLink)
   openLinkRef.current = onOpenLink
   const renderImageRef = useRef(renderImage)
-  const onAccentRef = useRef(onAccent)
-  onAccentRef.current = onAccent
   renderImageRef.current = renderImage
   const hasImageRenderer = !!renderImage
   // A pill's hover says which version it was picked on, in the person's language (read through a ref, as the callbacks are).
@@ -190,26 +189,24 @@ export const Markdown = memo(function Markdown({
           // A link the host did not claim goes to the system browser only if it is a web, mail or phone link.
           if ((href && (followLink(href) || openLinkRef.current?.(href))) || !EXTERNAL_LINK.test(href ?? '')) event.preventDefault()
         }
-        if (href && typeof rest.className === 'string' && rest.className.split(/\s+/).includes(RESOURCE_CARD_CLASS)) {
-          return <Suspense fallback={null}><ResourceCard href={href} mine={onAccentRef.current} onOpen={() => { if (!followLink(href)) openLinkRef.current?.(href) }} /></Suspense>
+        const groupFile = href ? parseGroupFileLink(href) : null
+        const classes = typeof rest.className === 'string' ? rest.className.split(/\s+/) : []
+        const { className: _className, ...attributes } = rest
+        // A chat link to a file, chat or message is drawn in place as the file pill, read as the person reading (linkPills.ts).
+        if (href && classes.includes(LINK_PILL_CLASS)) {
+          const words = onlyText(children) ?? href
+          return (
+            <Suspense fallback={<MentionPill href={href} file={groupFile !== null} title={words} onClick={onClick} rest={attributes}>{children}</MentionPill>}>
+              <LinkPill href={href} onClick={onClick} rest={attributes}>{children}</LinkPill>
+            </Suspense>
+          )
         }
         // App 引用 pill: `@` + a group file's link (rehypeGroupFilePills) is the transcript's file pill; its click is the
         // link's, so it opens where that link opens — at the place it points at.
-        const groupFile = href ? parseGroupFileLink(href) : null
-        if (groupFile && typeof rest.className === 'string' && rest.className.split(/\s+/).includes(FILE_PILL_CLASS)) {
+        if (href && groupFile && classes.includes(FILE_PILL_CLASS)) {
           const label = onlyText(children) ?? ''
           const picked = groupFile.version === undefined ? null : tRef.current('filePill.picked', { version: groupFile.version })
-          return (
-            <a {...rest} className={`gg-md-mention ${FILE_PILL_CLASS}`} data-mention-kind="file" href={href} title={picked ? `${label} · ${picked}` : label} onClick={onClick}>
-              <span className="gg-md-mention-icon" aria-hidden="true">
-                <svg width="9" height="9" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                  <path d="M9 2H4a1 1 0 0 0-1 1v10a1 1 0 0 0 1 1h8a1 1 0 0 0 1-1V6L9 2z" />
-                  <polyline points="9 2 9 6 13 6" />
-                </svg>
-              </span>
-              <span className="gg-file-pill-label">{children}</span>
-            </a>
-          )
+          return <MentionPill href={href} file title={picked ? `${label} · ${picked}` : label} onClick={onClick} rest={attributes}>{children}</MentionPill>
         }
         // A group file's link written as its name reads as the file list reads it (摩擦单 F39).
         const fileName = groupFile ? onlyText(children) : null

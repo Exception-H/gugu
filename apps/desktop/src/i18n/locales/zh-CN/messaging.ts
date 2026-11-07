@@ -348,7 +348,7 @@ export default {
     "send": "发送",
     "settings": "设置"
   },
-  "resourceCard": {"file": "文件", "message": "消息", "task": "任务", "taskItem": "任务里的一条", "taskOffline": "{{machine}} 不在线", "unavailable": "不可用：已删除，或你无权查看"},
+  "linkPill": {"unavailable": "不可用：已删除，或你无权查看"},
   "attachmentView": {
     "types": {"pdf": "PDF 文档", "word": "Word 文档", "excel": "Excel 表格", "presentation": "演示文稿", "text": "文本", "markdown": "Markdown 文档", "csv": "CSV 表格", "html": "网页", "json": "JSON 文档", "archive": "压缩文件", "image": "图片", "audio": "音频", "video": "视频"},
     "fileGone": "文件已删除",

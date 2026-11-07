@@ -11,8 +11,6 @@ const { openResource } = vi.hoisted(() => ({ openResource: vi.fn(async (target: 
 vi.mock('@/platform', () => ({ platform: { kind: 'web' } }))
 vi.mock('@/components/appSlot/phoneAppHost', () => ({ openPhoneLink: openResource }))
 ;(globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true
-// A chat link also gets a card (resourceCards.ts) that reads only near the viewport; these cases are about the link, so cards stay unread.
-globalThis.IntersectionObserver ??= class { observe() {} disconnect() {} } as unknown as typeof IntersectionObserver
 
 /**
  * App 引用 pill in a chat bubble (owner 10-14): `@[label](gugu-file://<id>?v=…#<at>)` is drawn as the transcript's file
@@ -59,10 +57,12 @@ describe('a pill pointing at a group file, in a chat bubble', () => {
     expect(decodeURI(pill.getAttribute('href')!)).toBe(`gugu-file://${ITEM}?v=7#slide=3&shape=12`)
   })
 
-  it('control: a group file’s plain link (no `@`) stays a link, and an `@` before a web link stays text', async () => {
+  it('control: a group file’s plain link (no `@`) is drawn in place as a link pill, not an `@` pill; an `@` before a web link stays text', async () => {
     await render(`见 [演示稿.pptx](gugu-file://${ITEM}) 和 @[网站](https://example.com)`)
-    expect(container.querySelector('a.gg-file-pill')).toBeNull()
-    expect(container.textContent).toContain('@网站')
+    const pill = container.querySelector<HTMLAnchorElement>('a.gg-file-pill')!
+    expect(pill.dataset.mentionKind).toBe('file')
+    expect(pill.textContent).toBe('演示稿.pptx')
+    expect(container.textContent).toBe('见 演示稿.pptx 和 @网站')
   })
 
   // 155 10-15: the host encodes the App's place; through the real renderer it comes back exactly — `%`, a space, quotes.

@@ -332,10 +332,8 @@
    chip's colour, and a long label cut with an ellipsis rather than pushing the bubble wider (a phone's width). */
 .gg-md a.gg-file-pill { max-width: 100%; text-decoration: none; color: var(--chat-mention-chip-fg, inherit); vertical-align: bottom; }
 .gg-md a.gg-file-pill .gg-file-pill-label { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-/* Link cards under a chat paragraph (resourceCards.ts): stacked, each as wide as its own content. */
-.gg-md .gg-resource-cards { display: flex; flex-direction: column; align-items: flex-start; gap: 6px; margin: 4px 0; max-width: 100%; }
-.gg-md .gg-resource-card-box { max-width: 100%; }
-.gg-md .gg-resource-card-thumb { display: block; cursor: pointer; margin-bottom: 4px; }
+/* A link pill whose target the reader cannot open (LinkPill): the same chip, greyed. */
+.gg-md a.gg-file-pill[data-unavailable='true'] { opacity: 0.5; filter: grayscale(1); }
 /* Code coloured by `paintHighlight` (the transcript's runs, App pages through gugu.markdown()): every token carries the
    dual-theme vars. A host page says dark with `data-theme`, an App page with `data-gugu-theme`. */
 .gg-md pre code span[style*='--shiki-light'] { color: var(--shiki-light); }

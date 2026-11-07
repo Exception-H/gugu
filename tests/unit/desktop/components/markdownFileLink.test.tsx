@@ -11,8 +11,6 @@ import { EXTENSION_API_VERSION, parseExtensionManifest } from '../../../../apps/
 import { installedExtensionsStore } from '../../../../apps/desktop/src/session/renderer/features/extensions/installed-extensions-store'
 import { runInAction } from 'mobx'
 ;(globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true
-// A chat link also gets a card (resourceCards.ts) that reads only near the viewport; these cases are about the link, so cards stay unread.
-globalThis.IntersectionObserver ??= class { observe() {} disconnect() {} } as unknown as typeof IntersectionObserver
 
 /**
  * The files this person can read, and the chat each is in (F112): answered where the chat client's read of
@@ -130,6 +128,8 @@ describe('Markdown local file links in chat', () => {
     const elsewhere = 'bbbbbbbb-bbbb-4ccc-8ddd-eeeeeeeeeeee'
     readable.set(itemId, chatId)
     await act(async () => root.render(createElement(Document, { trust: 'chat', content: `[plan.md](gugu-file://${itemId}) [local](notes/a.md) [theirs](gugu-file://${elsewhere})` })))
+    // A chat's file link is drawn as a link pill, loaded on first use: click the pill that stays, not its placeholder.
+    await act(async () => { await vi.dynamicImportSettled() })
     const links = [...container.querySelectorAll<HTMLAnchorElement>('a')]
     expect(links.map((anchor) => anchor.getAttribute('href'))).toEqual([`gugu-file://${itemId}`, 'notes/a.md', `gugu-file://${elsewhere}`])
     const click = async (anchor: HTMLAnchorElement) => {
