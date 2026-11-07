@@ -5,7 +5,7 @@ import type {
 } from '@gugu/session-core/session-record/contract';
 import type {
   WindowBodyResult, WindowPage, WindowReadRequest, WindowResult,
-} from '@gugu/session-core/session-record/window-cache/types';
+} from '../../../../../../../packages/session-core/src/session-record/window-cache/types';
 
 export interface DesktopWindowIo {
   request(conversationId: string, limit?: number, signal?: AbortSignal): Promise<WindowReadRequest>;

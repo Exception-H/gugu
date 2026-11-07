@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import { createDesktopWindowReader, type DesktopWindowIo } from './desktop-window-reader';
-import { createWindowBudget } from '@gugu/session-core/session-record/window-cache/read-budget';
-import type { WindowPage } from '@gugu/session-core/session-record/window-cache/types';
+import { createWindowBudget } from '../../../../../../../packages/session-core/src/session-record/window-cache/read-budget';
+import type { WindowPage } from '../../../../../../../packages/session-core/src/session-record/window-cache/types';
 import { applySnapshot, applyTimelineResult, emptyAgentWatchTimeline } from '../../../../../src/mobile/agent-watch/agent-watch-store';
 
 function setup() {
