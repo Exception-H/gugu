@@ -490,13 +490,13 @@ export const MessageBubble = memo(function MessageBubble({
         </MessageHoverTrigger>
 
         {/* 表情回应与气泡同侧(#6428):这一层是整列宽,我方气泡行靠 marginLeft:auto 贴右,回应条不跟着贴右就留在整列最左。 */}
-        {msg.reactions.length > 0 && (
+        {msg.reactions?.length ? (
           <ReactionBar
             reactions={msg.reactions}
             isMine={msg.is_mine}
             onToggle={(emoji) => onReaction(msg.id, emoji)}
           />
-        )}
+        ) : null}
         </div>{/* closes bubble + reactions block */}
       </div>
 
