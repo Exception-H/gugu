@@ -137,7 +137,7 @@ describe('consumed first-unread entry', () => {
       const row = firstUnread()?.getBoundingClientRect(), bounds = view.scroller()?.getBoundingClientRect()
       return !!row && !!bounds && row.bottom > bounds.top && row.top < bounds.bottom
     })
-    await act(async () => { view.history.update(rowsBetween(301, 380)) })
+    await act(async () => { view.history.update(rowsBetween(301, 360)) })
     await until('later rows have moved the already-seen target above the viewport', () => {
       const row = firstUnread()?.getBoundingClientRect(), bounds = view.scroller()?.getBoundingClientRect()
       return !!row && !!bounds && row.bottom <= bounds.top
