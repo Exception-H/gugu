@@ -10,6 +10,7 @@ const state = vi.hoisted(() => ({
   emits: [] as Array<{ name: string; data: unknown; topic?: string }>,
   pushes: new Map<string, (event: unknown) => void>(),
   failures: new Map<string, (event: unknown) => void>(),
+  legacyStarts: vi.fn(),
   unsubscribe: vi.fn(),
   unsubscribeSessions: vi.fn(),
   unwatch: vi.fn(),
@@ -33,6 +34,7 @@ vi.mock('./service', () => ({
   windowPrepare: async () => { if (state.gate) await state.gate; return { ok: true, value: { source: 'window' } }; },
   snapshot: async () => ({ ok: true, value: { cursor: { epoch: 'e', seq: 1 }, turns: [turnWith(HUGE)], settlements: [], hasOlder: false } }),
   subscribe: async (input: { subscriptionId: string }, emit: (event: unknown) => void) => {
+    state.legacyStarts(input.subscriptionId);
     state.pushes.set(input.subscriptionId, emit);
     return { ok: true, value: { subscriptionId: input.subscriptionId } };
   },
@@ -72,6 +74,7 @@ beforeEach(() => {
   state.emits = [];
   state.pushes.clear();
   state.failures.clear();
+  state.legacyStarts.mockClear();
   state.unsubscribe = vi.fn();
   state.unsubscribeSessions = vi.fn();
   state.unwatch = vi.fn();
@@ -79,6 +82,32 @@ beforeEach(() => {
 });
 
 describe('会话时间线路由(本机窗口、别的电脑、手机同一张)', () => {
+  it.each(['preparing', 'prepared', 'subscribed'])('refuses legacy cross-connection takeover of a %s window and keeps the original reader usable', async stage => {
+    const input = { conversationId: 'window-owner', subscriptionId: `owned-${stage}`, cursor: null };
+    let release = () => {};
+    if (stage === 'preparing') state.gate = new Promise<void>(yes => { release = yes; });
+    const preparing = call(810, 'sessionWindowPrepare', input);
+    if (stage !== 'preparing') await preparing;
+    if (stage === 'subscribed') await call(810, 'sessionWindowSubscribe', input);
+    await expect(call(811, 'sessionSubscribe', input))
+      .resolves.toMatchObject({ ok: false, error: { code: 'invalid_subscription' } });
+    expect(state.legacyStarts).not.toHaveBeenCalled();
+    releaseSubscriptionsOf(811); expect(state.unsubscribe).not.toHaveBeenCalled();
+    release(); await preparing;
+    if (stage !== 'subscribed') await call(810, 'sessionWindowSubscribe', input);
+    state.pushes.get(input.subscriptionId)!({ subscriptionId: input.subscriptionId, result: { ok: true } });
+    expect(state.emits.at(-1)).toMatchObject({ name: 'session-timeline:push', topic: input.subscriptionId });
+    releaseSubscriptionsOf(810);
+    await expect(call(811, 'sessionSubscribe', input)).resolves.toMatchObject({ ok: true });
+    releaseSubscriptionsOf(811);
+  });
+  it('preserves the existing cross-connection legacy reconnect selection', async () => {
+    const input = { conversationId: 'legacy', subscriptionId: 'legacy-reconnect', cursor: null };
+    await expect(call(812, 'sessionSubscribe', input)).resolves.toMatchObject({ ok: true });
+    await expect(call(813, 'sessionSubscribe', input)).resolves.toMatchObject({ ok: true });
+    expect(state.legacyStarts).toHaveBeenCalledTimes(2);
+    releaseSubscriptionsOf(812); releaseSubscriptionsOf(813);
+  });
   it('owns a pending window preparation before its ACK and refuses another connection using that UUID', async () => {
     let release!: () => void;
     state.gate = new Promise<void>(yes => { release = yes; });

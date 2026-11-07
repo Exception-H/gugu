@@ -45,11 +45,11 @@ import { taskExchangeChannel } from '@shared/core/session-timeline/sessionTimeli
  *
  * `trim`:调用方要「过长的工具内容裁掉」的那一份(手机)。桌面不给,一个字都不裁。
  */
-const owned = new Map<number, { timeline: Set<string>; sessions: Set<string>; exchanges: Set<string> }>();
+const owned = new Map<number, { timeline: Set<string>; windows: Map<string, object>; sessions: Set<string>; exchanges: Set<string> }>();
 
 function ownedBy(sender: number) {
   let entry = owned.get(sender);
-  if (!entry) owned.set(sender, (entry = { timeline: new Set(), sessions: new Set(), exchanges: new Set() }));
+  if (!entry) owned.set(sender, (entry = { timeline: new Set(), windows: new Map(), sessions: new Set(), exchanges: new Set() }));
   return entry;
 }
 
@@ -75,9 +75,23 @@ async function owning<T extends { ok: boolean }>(sender: number, kind: 'timeline
   return result;
 }
 
-function openingOwned<T extends { ok: boolean }>(sender: number, id: string, start: () => Promise<T>) {
+function openingOwned<T extends { ok: boolean }>(sender: number, id: string, start: () => Promise<T>, retain = (result: T) => result.ok) {
   for (const [owner, entry] of owned) if (owner !== sender && entry.timeline.has(id))
     return Promise.resolve({ ok: false as const, error: { code: 'invalid_subscription', message: 'Subscription belongs to another connection' } });
+  const entry = ownedBy(sender), token = {};
+  entry.windows.set(id, token);
+  return owning(sender, 'timeline', id, start).then(result => {
+    if (!retain(result) && entry.windows.get(id) === token) {
+      entry.windows.delete(id); entry.timeline.delete(id);
+    }
+    return result;
+  });
+}
+
+function legacyOwned<T extends { ok: boolean }>(sender: number, id: string, start: () => Promise<T>) {
+  for (const [owner, entry] of owned) if (owner !== sender && entry.windows.has(id))
+    return Promise.resolve({ ok: false as const, error: { code: 'invalid_subscription', message: 'Subscription belongs to another connection' } });
+  owned.get(sender)?.windows.delete(id);
   return owning(sender, 'timeline', id, start);
 }
 
@@ -112,11 +126,8 @@ export const sessionTimelineController = createRPCController({
   sessionNativeAttachment: service.nativeAttachment,
   sessionReadState: (input: { conversationId: string }) => ({ unreadKeys: nativeConversationUnread(input.conversationId), ownerNotificationUnreadKeys: nativeOwnerNotificationUnread(input.conversationId) }),
   sessionVisible: (input: { conversationId: string; itemIds: string[] }) => ({ unreadKeys: markNativeConversationVisible(input.conversationId, input.itemIds) }),
-  sessionWindowPrepare: withSender(async (sender: number, input: { conversationId: string; subscriptionId: string }) => {
-    const result = await openingOwned(sender, input.subscriptionId, () => service.windowPrepare(input));
-    if (result.ok && result.value.source === 'legacy') owned.get(sender)?.timeline.delete(input.subscriptionId);
-    return result;
-  }),
+  sessionWindowPrepare: withSender(async (sender: number, input: { conversationId: string; subscriptionId: string }) =>
+    openingOwned(sender, input.subscriptionId, () => service.windowPrepare(input), result => result.ok && result.value.source === 'window')),
   sessionWindowSnapshot: (input: SessionpageSessionSnapshotRequest) => service.windowSnapshot(input),
   sessionWindowAfter: (input: SessionpageSessionAfterRequest) => service.windowAfter(input),
   sessionWindowOlder: (input: SessionpageSessionOlderRequest) => service.windowOlder(input),
@@ -134,7 +145,7 @@ export const sessionTimelineController = createRPCController({
   /** 一张工具交回来的图(手机那份时间线里只有它的类型和字数)。 */
   sessionToolImage: async (input: SessionpageSessionToolImageRequest) => service.toolImage(input),
   sessionSubscribe: withSender(async (sender: number, input: SessionpageSessionSubscribeRequest) =>
-    owning(sender, 'timeline', input.subscriptionId, () => service.subscribe(input, (event) =>
+    legacyOwned(sender, input.subscriptionId, () => service.subscribe(input, (event) =>
       events.emit(
         sessionpageSessionTimelineChannel,
         input.trim ? { ...event, result: trimAfterResultForTransport(event.result) } : event,
@@ -144,6 +155,7 @@ export const sessionTimelineController = createRPCController({
   // 只拆自己开的:订阅号对别的线是不透明的,但「不该做得到」不靠「猜不中」(一问一答的 taskhost.call 也算别的线)。
   sessionUnsubscribe: withSender(async (sender: number, input: SessionpageSessionUnsubscribeRequest) => {
     if (!owned.get(sender)?.timeline.delete(input.subscriptionId)) return;
+    owned.get(sender)?.windows.delete(input.subscriptionId);
     service.unsubscribe(input.subscriptionId);
   }),
   /** 整台机器的会话列表(谁此刻卡在人这儿):订上那一刻推一份整的,之后有变化只推变了的行。 */
