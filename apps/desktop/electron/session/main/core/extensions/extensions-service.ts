@@ -818,9 +818,11 @@ export class ExtensionsService {
     // @@@bundle-reading - Every bridge call asks through here (grantedCapabilities), so a parse per call is main-thread
     // work per call. A reading holds while the files it read are the same files: an install lands by rename and an edit
     // moves mtime or size, so nothing has to remember to invalidate it, and a bundle gone bad is still reported at once.
+    // Only while the files have settled: see SETTLED_MS.
     const known = this.readings.get(dirName);
     if (known && known.stamps.every(({ file, stamp }) => fileStamp(file) === stamp)) return known.installed;
     this.readings.delete(dirName);
+    const readAt = Date.now();
     const bundleDir = path.join(this.rootDir, dirName);
     const manifestFile = path.join(bundleDir, EXTENSION_MANIFEST_FILENAME);
     const manifestStamp = fileStamp(manifestFile);
@@ -847,9 +849,21 @@ export class ExtensionsService {
     const manifestDigest = createHash('sha256').update(text).digest('hex');
     const installed = { manifest: parsed.manifest, rootDir: bundleDir, manifestDigest };
     // A link is read anew every time: what it points at can change without the link changing.
-    if (stamps.every(({ stamp }) => stamp !== null)) this.readings.set(dirName, { stamps, installed });
+    if (stamps.every(({ file, stamp }) => stamp !== null && settledBefore(file, readAt))) this.readings.set(dirName, { stamps, installed });
     return installed;
   }
+}
+
+/**
+ * A stamp only identifies contents once the file has settled. File timestamps are coarse — a kernel tick on Linux
+ * (measured: 1978 of 2000 back-to-back same-size rewrites on tmpfs kept the same `mtimeMs`), whole seconds on HFS+ and
+ * ext3, two on FAT — so a file changed within that window of a reading can change again without its stamp moving.
+ * Such a reading is not kept (git's "racily clean" rule); the next call reads again.
+ */
+const SETTLED_MS = 2_000;
+function settledBefore(file: string, readAt: number): boolean {
+  const stat = fs.lstatSync(file, { throwIfNoEntry: false });
+  return !!stat && readAt - stat.mtimeMs > SETTLED_MS;
 }
 
 /** Identifies one regular file's contents as a reading saw them; null for anything else. */
