@@ -183,16 +183,15 @@ it('will not write over a file it never read', async () => {
   expect(await onDisk('new/made.txt')).toBe('new');
 });
 
-it('writes the handed file outside the working copy, and no other, whatever the capabilities', async () => {
+it('never writes a file outside the working copy, the one a person opened in the page or another, whatever the capabilities', async () => {
   const file = path.join(outside, 'notes.md');
   const ref = { workspace, id: file };
   await readAppFileText(page(ref), { ref });
-  await writeAppFileText(page(ref), { ref, text: 'saved' });
-  expect(await fsp.readFile(file, 'utf8')).toBe('saved');
   f.capabilities.add('files:write');
+  await expect(writeAppFileText(page(ref), { ref, text: 'saved' })).rejects.toThrow(/read-only/);
   await expect(writeAppFileText(page(), { ref, text: 'no' })).rejects.toMatchObject({ code: 'denied' });
   await expect(writeAppFileChunk(page(), { place: { workspace }, path: file, uploadId: 'u', offset: 0, data: 'bm8=', total: 2, final: true, expectedEtag: 'force' })).rejects.toMatchObject({ code: 'denied' });
-  expect(await fsp.readFile(file, 'utf8')).toBe('saved');
+  expect(await fsp.readFile(file, 'utf8')).toBe('# outside');
 });
 
 it('hears a file on another machine through the window, which has that machine\'s events', async () => {

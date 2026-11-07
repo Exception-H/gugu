@@ -57,7 +57,8 @@ const across = async (caller: unknown, action: unknown) => {
   }
 };
 vi.mock('@main/core/sessions/session-family', () => ({
-  otherMachines: () => ({ appCall: (caller: unknown, _device: string, action: unknown) => across(caller, action), isThisDevice: async (id: string) => id === 'dev-here' }),
+  // As the real `appCall` sends it: this machine's id and label on the App's caller.
+  otherMachines: () => ({ appCall: (app: object, _device: string, action: unknown) => across({ kind: 'app', deviceId: 'dev-here', deviceLabel: 'here', ...app }, action), isThisDevice: async (id: string) => id === 'dev-here' }),
 }));
 vi.mock('../../../../../src/mobile/agent-watch/sessionpage-rpc', () => ({ appCallOn: (_device: string, caller: unknown, action: unknown) => across(caller, action) }));
 
@@ -117,9 +118,9 @@ function handedCases() {
     f.capabilities.add('files:write');
     await expect(writeAppFileText(pageOn(file), { ref: { workspace, id: file }, text: 'overwritten' })).rejects.toThrow(/read-only/);
     expect(fs.readFileSync(file, 'utf8')).toBe('outside');
-    // A file of the working copy still saves.
-    await writeAppFileText(pageOn(null), { ref: { workspace, id: 'in.txt' }, text: 'saved' });
-    expect(fs.readFileSync(path.join(f.root, 'in.txt'), 'utf8')).toBe('saved');
+    // A new file of the working copy still saves.
+    await writeAppFileText(pageOn(null), { ref: { workspace, id: 'new.txt' }, text: 'saved' });
+    expect(fs.readFileSync(path.join(f.root, 'new.txt'), 'utf8')).toBe('saved');
   });
 }
 
