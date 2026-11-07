@@ -112,6 +112,8 @@ export type ChatProjection = {
    * 沉默是仪器还没读到,不是阴性读数。
    */
   isMembershipRevoked: (chatId: string) => boolean
+  /** Every other member's read position this projection already holds; undefined until it has read the conversation. */
+  memberReadSeqs: (chatId: string) => Record<string, number> | undefined
   /** Personal list deletion is authoritative without revoking the retained membership. */
   isConversationDeleted: (chatId: string) => boolean
   ledger: () => readonly ChatProjectionLedgerEntry[]
@@ -566,6 +568,11 @@ export function createChatProjection(viewerId: string, held?: HeldObjects): Chat
       const cell = cache.get(entityKey('membership', membershipId(chatId, viewerId)))
       // 从没读过这个键 ⇒ false。沉默是仪器还没读到,不是阴性读数(铁律 2)。
       return !!cell && cell.value === null
+    },
+    memberReadSeqs(chatId) {
+      const members = membersByChat.get(chatId)
+      if (!members) return undefined
+      return Object.fromEntries([...members].filter(([userId]) => userId !== viewerId).map(([userId, member]) => [userId, member.last_read_seq]))
     },
     isConversationDeleted(chatId) {
       if (confirmedDeletions.has(chatId)) return true

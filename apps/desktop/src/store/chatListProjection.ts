@@ -235,6 +235,7 @@ export function useChatProjectionBinding(deps: {
     chats.some(chat => ownerFor(accountId).isConversationDeleted(chat.id)), [ownerFor])
 
   const identities = useCallback((accountId: string) => ownerFor(accountId).identities(), [ownerFor])
+  const memberReadSeqs = useCallback((accountId: string, chatId: string) => ownerFor(accountId).memberReadSeqs(chatId), [ownerFor])
 
   const confirmPersonalDeletion = useCallback(async (accountId: string, receipt: PersonalConversationDeletion): Promise<boolean> => {
     const binding = ownerRef.current
@@ -262,5 +263,5 @@ export function useChatProjectionBinding(deps: {
 
   // ⚠️ 必须**稳定**:返回新字面量 ⇒ 依赖它的 effect 与 useCallback 每渲染都重建 ⇒ 订阅/渲染循环
   // (实测:第一版返回字面量,chatSelectionIntent4314 直接跑到 heap OOM)。
-  return useMemo(() => ({ hydrate, identities, publish, attach, hasDeletedConversation, confirmPersonalDeletion }), [hydrate, identities, publish, attach, hasDeletedConversation, confirmPersonalDeletion])
+  return useMemo(() => ({ hydrate, identities, memberReadSeqs, publish, attach, hasDeletedConversation, confirmPersonalDeletion }), [hydrate, identities, memberReadSeqs, publish, attach, hasDeletedConversation, confirmPersonalDeletion])
 }

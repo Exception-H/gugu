@@ -81,7 +81,8 @@ export function ChatProvider({ children, active = true }: { children: React.Reac
   const activeThreadRootIdRef = useRef<string | null>(null)
 
   // Account facts/read ownership are shared; history and navigation belong to each presenter.
-  const { cache } = useChatWindowCache(userId)
+  const readSeqsOfRef = useRef<(chatId: string) => Record<string, number> | undefined>(() => undefined)
+  const { cache } = useChatWindowCache(userId, useCallback((chatId: string) => readSeqsOfRef.current(chatId), []))
   const startConversationRef = useRef<(chatId: string) => () => void>(() => () => undefined)
   const subscribeChatWindow = useCallback<ChatConversationAccess['subscribe']>((chatId, listener, viewport) =>
     cache.subscribe(chatId, listener, () => startConversationRef.current(chatId), viewport), [cache])
@@ -291,6 +292,7 @@ export function ChatProvider({ children, active = true }: { children: React.Reac
     chatsRef, activeChatIdRef, requestSeqRef: listRequestSeqRef, setChats, onActiveRevoked, canAcknowledge: canAcknowledgeOpenChat, visibleSeqOf: visibleSeqOfChat,
     notifications: { chatMessages: notificationSettings.chatMessages, sound: notificationSettings.sound },
   })
+  readSeqsOfRef.current = (chatId) => userId ? chatProjection.memberReadSeqs(userId, chatId) : undefined
 
   const loadChats = useChatListRefresh(userId, chatProjection, chatsRef, listRequestSeqRef, setChatsLoad, catchupPriority)
 
