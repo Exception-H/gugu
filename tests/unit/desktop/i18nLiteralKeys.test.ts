@@ -48,7 +48,7 @@ function sourceFiles(dir: string, out: string[] = []): string[] {
 /** 一个文件里 `const { t(: 别名)? } = useTranslation('ns')` 绑出来的名字 → 命名空间(带 keyPrefix 的不认)。 */
 function bindings(text: string): Map<string, string> {
   const found = new Map<string, string>()
-  const pattern = /const\s*\{([^}]*)\}\s*=\s*use(?:Shared)?Translation\(\s*'([A-Za-z]+)'\s*\)/g
+  const pattern = /const\s*\{([^}]*)\}\s*=\s*useTranslation\(\s*'([A-Za-z]+)'\s*\)/g
   for (const match of text.matchAll(pattern)) {
     const [, names, ns] = match
     if (!NAMESPACES.includes(ns)) continue
@@ -69,7 +69,7 @@ describe('界面里字面量写的 t() 键都在词条里', () => {
     const cache = new Map<string, Catalog>()
     for (const file of sourceFiles(SRC)) {
       const text = readFileSync(file, 'utf8')
-      if (!/use(?:Shared)?Translation\(/.test(text)) continue
+      if (!text.includes('useTranslation(')) continue
       for (const [name, ns] of bindings(text)) {
         if (!ns) continue
         const call = new RegExp(`(?<![\\w.$])${name}\\(\\s*'([^'\\\\]+)'([^)]*)`, 'g')

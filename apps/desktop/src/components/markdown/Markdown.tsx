@@ -9,7 +9,7 @@ import {
   type ComponentPropsWithoutRef,
   type ReactNode,
 } from 'react'
-import { useSharedTranslation } from '@/i18n/useLocale'
+import { useTranslation } from 'react-i18next'
 import { CodeBlock, Streamdown, type CustomRendererProps, type PluginConfig } from 'streamdown'
 import 'katex/dist/katex.min.css'
 import '@gugu/session-shared/markdown.css'
@@ -83,7 +83,7 @@ const SVG_FAILURE = { 'too-large': 'tooLarge', invalid: 'invalid', 'no-viewbox':
 
 /** A ```svg fence: the agent's figure as an image (`svgFigure`); one that cannot be drawn stays code, saying why. */
 function SvgRenderer({ code, isIncomplete }: CustomRendererProps) {
-  const { t } = useSharedTranslation('messaging')
+  const { t } = useTranslation('messaging')
   // Subscribed so a light/dark flip re-renders: the palette is read from the page as the theme is now.
   useSyncExternalStore(subscribeToHostTheme, readEffectiveHostTheme, () => 'light' as const)
   const figure = isIncomplete ? null : svgFigure(code, svgPalette(document.documentElement))
@@ -145,7 +145,7 @@ export const Markdown = memo(function Markdown({
   renderImageRef.current = renderImage
   const hasImageRenderer = !!renderImage
   // A pill's hover says which version it was picked on, in the person's language (read through a ref, as the callbacks are).
-  const { t } = useSharedTranslation('messaging')
+  const { t } = useTranslation('messaging')
   const tRef = useRef(t)
   tRef.current = t
   useEffect(() => hookFilePillCopy(), [])

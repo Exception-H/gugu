@@ -1,6 +1,6 @@
 import { Button as ButtonPrimitive } from '@base-ui/react/button'
 import { cva, type VariantProps } from 'class-variance-authority'
-import type { ComponentProps, CSSProperties, ReactNode } from 'react'
+import type { CSSProperties, ReactNode } from 'react'
 import { cn } from '@/lib/cn'
 import {
   controlTransition,
@@ -118,11 +118,4 @@ export function Button({
       {children}
     </ButtonPrimitive>
   )
-}
-
-/** Native semantics for message-row controls that do not use Base UI's render composition. */
-export function NativeButton({ variant = 'secondary', size = 'md', type = 'button', className, ...props }:
-  ComponentProps<'button'> & { variant?: ButtonVariant; size?: ButtonSize }) {
-  return <button {...props} type={type} data-slot="button" data-variant={variant} data-size={size}
-    data-disabled={props.disabled || undefined} className={cn(buttonVariants({ variant, size }), className)} />
 }
