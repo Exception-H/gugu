@@ -153,7 +153,8 @@ describe('desktop default source reopening', () => {
     const terminal = observed.filter(value => value.id === 'missing' && value.phase === 'window');
     expect(terminal).toHaveLength(1); expect(terminal[0].io).toEqual(requests[0].budget.counters);
     expect(observed.reduce((sum, value) => sum + value.io.indexBytes, 0)).toBe(reads.index);
-  });  it('admits two valid unregistered subscriptions without cross-session cancellation', async () => {
+  });
+  it('admits two valid unregistered subscriptions without cross-session cancellation', async () => {
     const { reader } = await fixture(true);
     const failed = vi.fn();
     const open = async (conversationId: string) => {
@@ -170,10 +171,29 @@ describe('desktop default source reopening', () => {
     expect(failed).not.toHaveBeenCalled();
   });
 
+  it('does not pass an old cancellation to an immediate same-source reopen', async () => {
+    const { reader } = await fixture(true);
+    let release!: () => void, entered!: () => void;
+    const gate = new Promise<void>(yes => { release = yes; });
+    const started = new Promise<void>(yes => { entered = yes; });
+    reads.onDirectoryRead = async () => { entered(); await gate; };
+    const first = new AbortController();
+    const opening = reader.subscribe({ conversationId: 'conversation', subscriptionId: 'first', cursor: null }, vi.fn(), vi.fn(), first.signal)
+      .then(() => false, () => true);
+    await started; first.abort(); expect(await opening).toBe(true);
+    let resolve!: () => void;
+    const shown = new Promise<void>(yes => { resolve = yes; });
+    const next = reader.subscribe({ conversationId: 'conversation', subscriptionId: 'second', cursor: null }, event => {
+      const value = event.result.ok ? event.result.batch : event.result.snapshot;
+      if (value.sourceFragments?.some(value => value.text === 'latest real body')) resolve();
+    }, error => { throw error; });
+    release(); const stop = await next; cleanup.push(async () => stop()); await shown;
+  });
   it('replaces an unknown giant tail ticket with real first-body text after locating its start', async () => {
     const { reader, path, row, measured } = await fixture();
     const text = '中文😀 real body '.repeat(8000);
-    await writeFile(path, row(text));
+    await writeFile(path, JSON.stringify({ metadata: 'x'.repeat(70000), type: 'response_item', payload: {
+      type: 'message', role: 'assistant', content: [{ type: 'output_text', text: '' }, { type: 'output_text', text }] } }) + '\n');
     let resolve!: (value: { text?: string }) => void, reject!: (error: unknown) => void;
     const shown = new Promise<{ text?: string }>((yes, no) => { resolve = yes; reject = no; });
     let loading = false;
