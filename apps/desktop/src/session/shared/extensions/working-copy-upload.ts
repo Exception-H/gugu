@@ -37,24 +37,28 @@ export async function readOneVersion(
     changing(): Error;
   },
 ): Promise<{ size: number; etag: string | null } | null> {
+  // @@@every-await-stops - every await here goes through `settled`: a stop that came while a piece was on its way, or while
+  // `begin` / `piece` ran (a download's truncate and write), wins over what that await brought — nothing more is handed on,
+  // and the file is never answered as read, the last piece included.
+  const settled = async <T>(pending: T | Promise<T>): Promise<T> => {
+    const value = await pending;
+    if (reader.signal?.aborted) throw reader.stopped();
+    return value;
+  };
   for (let attempt = 0; ; attempt++) {
     let at = 0;
     let part = reader.firstPart ?? SMALLEST_PART_BYTES;
     let started = Date.now();
     if (reader.signal?.aborted) throw reader.stopped();
-    let next = await readPiece(0, part);
-    // A stop while a piece was on its way wins over that piece, the last one too: nothing read after it is handed on.
-    if (reader.signal?.aborted) throw reader.stopped();
+    let next = await settled(readPiece(0, part));
     const { size, etag } = next;
-    if (await reader.begin(size) === false) return null;
+    if (await settled(reader.begin(size)) === false) return null;
     for (;;) {
-      if (next.data.byteLength > 0) await reader.piece(next.data, at += next.data.byteLength, size);
+      if (next.data.byteLength > 0) await settled(reader.piece(next.data, at += next.data.byteLength, size));
       if (at >= size || next.data.byteLength === 0) return { size, etag };
-      if (reader.signal?.aborted) throw reader.stopped();
       part = nextPartBytes(part, Date.now() - started);
       started = Date.now();
-      next = await readPiece(at, part);
-      if (reader.signal?.aborted) throw reader.stopped();
+      next = await settled(readPiece(at, part));
       if (next.etag !== etag) break;
     }
     if (attempt > 0) throw reader.changing();
