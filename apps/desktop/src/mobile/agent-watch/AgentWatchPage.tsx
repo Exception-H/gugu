@@ -40,7 +40,7 @@ export type AgentWatchRoute =
    */
   | { name: 'projects'; reveal?: { deviceId: string; sessionId: string } | { projectId: string } }
   /** `deviceId` = 会话所在的机器(跨机器的子会话在它自己那台上打开)。 */
-  | { name: 'timeline'; deviceId: string; session: SessionpageSessionSummary; firstPrompt?: string; appKind?: string; draft?: { text: string }; file?: { path: string } }
+  | { name: 'timeline'; deviceId: string; session: SessionpageSessionSummary; firstPrompt?: string; appKind?: string; draft?: { text: string } }
   /**
    * 新建会话的两步(owner 2026-09-06:「新建任务应该是先选择设备再新建任务」):
    * 根页的 + → `pick-machine`(「在哪台机器上」,离线的点不动)→ `create`。
@@ -92,9 +92,9 @@ export function AgentWatchPage({
   if (openRequest && openRequest !== seenOpenRequest) {
     if ('projectId' in openRequest) setNavigation({ request: openRequest, routes: [{ name: 'projects', reveal: openRequest }] })
     else {
-      const { deviceId, session, tabKind, draft, file } = openRequest
+      const { deviceId, session, tabKind, draft } = openRequest
       setNavigation({ request: openRequest, routes: [rowOpens(session)
-        ? { name: 'timeline', deviceId, session, ...(tabKind ? { appKind: tabKind } : {}), ...(draft ? { draft } : {}), ...(file ? { file } : {}) }
+        ? { name: 'timeline', deviceId, session, ...(tabKind ? { appKind: tabKind } : {}), ...(draft ? { draft } : {}) }
         : { name: 'projects', reveal: { deviceId, sessionId: session.conversationId } }] })
     }
   }
@@ -172,7 +172,6 @@ export function AgentWatchPage({
         session={liveSession ?? route.session}
         firstPrompt={route.firstPrompt}
         draft={route.draft}
-        file={route.file}
         onBack={goBack}
       />
     )

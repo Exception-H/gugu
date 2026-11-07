@@ -95,7 +95,7 @@ export function useOwnedAgentConversationEntry(input: {
           latest.setDraftAttachments(chatId, (latest.draftAttachments?.[chatId] ?? []).filter(one => !ids.has(one.id)))
         }
       } else if (state.mobile && target.kind === 'remote') {
-        window.dispatchEvent(new CustomEvent(APP_SHOW_SESSION_EVENT, { detail: { deviceId: target.deviceId, session: target.session, ...(file ? { file } : {}) } }))
+        window.dispatchEvent(new CustomEvent(APP_SHOW_SESSION_EVENT, { detail: { deviceId: target.deviceId, session: target.session } }))
       } else {
         await openTarget(target.kind === 'local'
           ? { kind: 'session', sessionId: target.sessionId, projectId: target.projectId }
