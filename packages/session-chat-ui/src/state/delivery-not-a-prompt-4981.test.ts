@@ -101,6 +101,11 @@ describe('#4981 投递进来的不是人打的字', () => {
 describe('viewer-owned cross-client delivery pins', () => {
   const viewerId = '11111111-1111-4111-8111-111111111111';
   const envelope = (fromId: string, type: string) => `<gugu_delivery route="chat" from_id="user:${fromId}" from_type="${type}" msg="msg:own"><![CDATA[Own request]]></gugu_delivery>`;
+  for (const normalized of [false, true]) it(`explicit non-owner provenance overrides same-viewer human envelope (normalized=${normalized})`, () => {
+    const input = { ...message('non-owner', 'user', envelope(viewerId, 'human')), _meta: { guguOwnerInput: false } };
+    const item = normalized ? normalizeMessage(input) : input;
+    expect(collectUserTurnUnits([turnOf([item])], unitsOf([item]), { viewerId })).toEqual([]);
+  });
   for (const normalized of [false, true]) it(`recognizes only the authenticated viewer human delivery (normalized=${normalized})`, () => {
     const own = envelope(viewerId, 'human');
     const other = envelope('22222222-2222-4222-8222-222222222222', 'human');
