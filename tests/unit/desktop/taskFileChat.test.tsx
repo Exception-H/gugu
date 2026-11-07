@@ -58,3 +58,22 @@ it('honors an explicit device when two directory entries report the same session
   })
   expect(host.firstElementChild?.getAttribute('data-project')).toBe('second-group')
 })
+
+it('a device heartbeat that leaves the project group and the private chat as they were re-renders nothing that reads them', () => {
+  let renders = 0
+  function ProjectOnly() {
+    renders += 1
+    return <div data-project={useTaskProjectChat('task')} data-conversation={useTaskConversation('task')} />
+  }
+  act(() => {
+    publishDirectoryDevices([machine('owner', 'project-group')])
+    updateDeviceSessions('owner', { sessions: [task], cached: false, loading: false, error: null })
+    root.render(<ProjectOnly />)
+  })
+  const settled = renders
+  act(() => publishDirectoryDevices([{ ...machine('owner', 'project-group'), last_seen_at: 'later' }]))
+  act(() => updateDeviceSessions('owner', { sessions: [{ ...task }], cached: false, loading: false, error: null }))
+  expect(renders, 'heartbeats re-rendered the reader').toBe(settled)
+  act(() => publishDirectoryDevices([machine('owner', 'moved-group')]))
+  expect(host.firstElementChild?.getAttribute('data-project')).toBe('moved-group')
+})
