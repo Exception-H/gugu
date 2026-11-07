@@ -1,5 +1,6 @@
 import type {
   SessionpageSessionAfterRequest,
+  SessionpageSessionBodyReadRequest,
   SessionpageSessionCancelRequest,
   SessionpageSessionCreateModelsRequest,
   SessionpageSessionCreateRequest,
@@ -103,6 +104,13 @@ export const sessionTimelineController = createRPCController({
   sessionNativeAttachment: service.nativeAttachment,
   sessionReadState: (input: { conversationId: string }) => ({ unreadKeys: nativeConversationUnread(input.conversationId), ownerNotificationUnreadKeys: nativeOwnerNotificationUnread(input.conversationId) }),
   sessionVisible: (input: { conversationId: string; itemIds: string[] }) => ({ unreadKeys: markNativeConversationVisible(input.conversationId, input.itemIds) }),
+  sessionWindowSnapshot: (input: SessionpageSessionSnapshotRequest) => service.windowSnapshot(input),
+  sessionWindowAfter: (input: SessionpageSessionAfterRequest) => service.windowAfter(input),
+  sessionWindowOlder: (input: SessionpageSessionOlderRequest) => service.windowOlder(input),
+  sessionBody: (input: SessionpageSessionBodyReadRequest) => service.body(input),
+  sessionWindowSubscribe: withSender(async (sender: number, input: SessionpageSessionSubscribeRequest) =>
+    owning(sender, 'timeline', input.subscriptionId, () => service.windowSubscribe(input, event =>
+      events.emit(sessionpageSessionTimelineChannel, event, input.subscriptionId)))),
   sessionSnapshot: async (input: SessionpageSessionSnapshotRequest) =>
     trimmed(await service.snapshot(input), input.trim, trimSnapshotForTransport),
   sessionAfter: async (input: SessionpageSessionAfterRequest) =>

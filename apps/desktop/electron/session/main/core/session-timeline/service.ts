@@ -43,6 +43,9 @@ import {
   type SessionpageOpenedFileReadRequest,
   type SessionpageOpenedFileChunk,
   type SessionpageSessionToolImageRequest,
+  type SessionpageSessionBodyReadRequest,
+  type SessionpageSessionOlderRequest,
+  type WindowBodyResult,
   type TimelineAfterResult,
   type TimelineOlderResult,
   type TimelineSnapshot,
@@ -792,6 +795,71 @@ export function after(input: {
   cursor: RecordCursor;
 }): Promise<SessionTimelineResult<TimelineAfterResult>> {
   return withTimeline(input.conversationId, (timeline) => timeline.getAfter(input.cursor));
+}
+
+type SourceWindowReader = ReturnType<typeof import('./desktop-source-reader').createDesktopSourceWindowReader>;
+let sourceWindowOpening: Promise<SourceWindowReader> | null = null;
+
+/** Desktop reopening has its own bounded source path, including its subscription. */
+function sourceWindowReader(): Promise<SourceWindowReader> {
+  return sourceWindowOpening ??= (async () => {
+    const [{ app }, { join }, { createHash }, { createWindowBudget }, { createDesktopSourceWindowReader }] = await Promise.all([
+      import('electron'), import('node:path'), import('node:crypto'),
+      import('@gugu/session-core/session-record/window-cache/read-budget'), import('./desktop-source-reader'),
+    ]);
+    const cacheDirectory = join(app.getPath('userData'), 'session-window-cache');
+    const hash = (value: unknown) => createHash('sha256').update(JSON.stringify(value)).digest('hex');
+    return createDesktopSourceWindowReader({
+      request: async (conversationId, limit, signal) => {
+        const row = readSessionRow(conversationId);
+        if (!row) throw Object.assign(new Error('The session is no longer available'), { code: 'session_not_found' });
+        const located = locateRow(row);
+        if (!located.supported || !['claude', 'codex'].includes(located.locator.harness))
+          throw Object.assign(new Error(located.supported ? 'This native format has no window reader' : located.reason), { code: 'unsupported_format' });
+        const conversationScope = hash([cacheDirectory, conversationId]);
+        return { conversationId, locator: located.locator, cacheDirectory, conversationScope,
+          scope: hash([conversationScope, located.locator.harness, located.locator.providerSessionId]),
+          branchLineage: hash([located.locator.harness, located.locator.providerSessionId]),
+          cwd: row.workspaceId ? persistedWorkspacePath(row.workspaceId) ?? undefined
+            : readSessionRows(false, conversationId).find(value => value.session.id === conversationId)?.project.path,
+          limit, signal, budget: createWindowBudget() };
+      },
+      reportError: error => log.warn('sessionWindow: bounded source subscription failed', { error: String(error) }),
+      observed: process.env.GUGU_WINDOW_IO_TRACE === '1'
+        ? (conversationId, io) => log.info('sessionWindow: read', { conversationId, ...io }) : undefined,
+    });
+  })();
+}
+async function withSourceWindow<T>(read: (reader: SourceWindowReader) => Promise<T>): Promise<SessionTimelineResult<T>> {
+  try { return { ok: true, value: await read(await sourceWindowReader()) }; }
+  catch (error) {
+    return fail((error as { code?: string }).code ?? 'record_unreadable', (error as Error).message ?? String(error));
+  }
+}
+export const windowSnapshot = (input: { conversationId: string; limit?: number }) => withSourceWindow(reader => reader.snapshot(input));
+export const windowAfter = (input: { conversationId: string; cursor: RecordCursor }) => withSourceWindow(reader => reader.after(input));
+export const windowOlder = (input: SessionpageSessionOlderRequest) => withSourceWindow(reader => reader.older(input));
+export const body = (input: SessionpageSessionBodyReadRequest): Promise<SessionTimelineResult<WindowBodyResult>> => withSourceWindow(reader => reader.body(input));
+
+export async function windowSubscribe(input: SessionpageSessionSubscribeRequest,
+  emit: (event: SessionpageSessionEvent) => void): Promise<SessionTimelineResult<{ subscriptionId: string }>> {
+  const subscriptionId = input.subscriptionId?.trim();
+  if (!subscriptionId) return fail('invalid_subscription', 'subscriptionId is required');
+  unsubscribe(subscriptionId);
+  let stopped = false, teardown: (() => void) | undefined;
+  const mine = { conversationId: input.conversationId, stop: () => { stopped = true; teardown?.(); } };
+  subscriptions.set(subscriptionId, mine);
+  const forget = () => { if (subscriptions.get(subscriptionId) === mine) subscriptions.delete(subscriptionId); };
+  const result = await withSourceWindow(async reader => {
+    teardown = await reader.subscribe(input, event => { if (!stopped) emit(event); }, error => {
+      mine.stop(); forget();
+      log.warn('sessionWindow: subscription stopped', { subscriptionId, error: String(error) });
+    });
+    if (stopped) { teardown(); throw Object.assign(new Error('Subscription was released before opening'), { code: 'unsubscribed' }); }
+    return { subscriptionId };
+  });
+  if (!result.ok) { mine.stop(); forget(); }
+  return result;
 }
 
 /** 读这条会话此刻可改的选项。 */
@@ -1655,6 +1723,9 @@ function settlementOf(timeline: SessionTimeline, itemId: string): Settlement | n
 
 /** 测试与收尾用：拆掉所有订阅与缓存实例。 */
 export function resetSessionTimelineService(): void {
+  const sourceWindow = sourceWindowOpening;
+  sourceWindowOpening = null;
+  if (sourceWindow) void sourceWindow.then(reader => reader.dispose()).catch(error => log.warn('sessionWindow: dispose failed', { error: String(error) }));
   resetAsks();
   // 存档跟着一起作废:重置意味着「这一层记的东西可能都不作数了」,
   // 留着一份自称还对得上的存档,下次开会话就会拿它去续一段不存在的历史。
