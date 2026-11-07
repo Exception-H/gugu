@@ -6,6 +6,7 @@ import { createWindowBudget } from '@gugu/session-core/session-record/window-cac
 import { createDesktopSourceWindowReader } from './desktop-source-reader';
 import type { DesktopSourceRequest } from './desktop-source-reader';
 import type { WindowIoCounters } from '@gugu/session-core/session-record/window-cache/types';
+import { supportsSourceWindow } from '@gugu/session-core/session-record/window-cache/formats';
 
 const reads = vi.hoisted(() => ({ source: 0, index: 0, maximum: 0, onDirectoryRead: null as (() => void | Promise<void>) | null }));
 vi.mock('node:fs/promises', async original => {
@@ -63,6 +64,10 @@ async function fixture(multipleBatches = false) {
 }
 
 describe('desktop default source reopening', () => {
+  it('selects supported source formats before invoking any native reader', () => {
+    expect(['claude', 'codex'].map(supportsSourceWindow)).toEqual([true, true]);
+    expect(['opencode', 'hermes', 'copilot', 'qwen', 'pi', 'codebuddy', null].map(supportsSourceWindow)).toEqual(Array(7).fill(false));
+  });
   it('discovers an unregistered source and reads real suffix text with one aggregate budget', async () => {
     const { reader, measured } = await fixture();
     const snapshot = await reader.snapshot({ conversationId: 'conversation', limit: 1 });
