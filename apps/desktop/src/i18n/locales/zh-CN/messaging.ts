@@ -80,7 +80,6 @@ export default {
       "stateAction": "{{name}} {{state}}，点击切换模型",
       "authentication": "模型服务拒绝了本次请求的授权，回复未完成。",
       "network": "与模型服务的连接中断，本次回复未完成。",
-      "statusReadFailed": "回复状态暂时读不到，请重试。",
       "weeklyQuota": "周限额度不足，当前账号暂时无法回复。",
       "monthlyQuota": "月限额度不足，当前账号暂时无法回复。",
       "rateLimited": "请求过于频繁，请稍后重试。",
@@ -359,6 +358,7 @@ export default {
     "reupload": "重新上传",
     "selectOriginal": "选择原文件",
     "storageWarning": "群文件存储空间即将用尽（{{used}} / {{limit}}）。",
+    "manageFiles": "管理文件",
     "storageFull": "群文件存储空间已满（{{used}} / {{limit}}），暂时无法上传新文件。",
     "usageUnavailable": "文件用量暂不可用。",
 
@@ -433,10 +433,6 @@ export default {
     "file": "文件",
     "photos": "照片",
     "camera": "拍摄",
-    "photoCaption": "添加说明",
-    "originalPhoto": "原图",
-    "cancelPhotos": "取消",
-    "sendPhotos_other": "发送({{count}})",
     "memberType": {
       "agent": "Agent",
       "all": "全员",
