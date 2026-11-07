@@ -4,7 +4,7 @@ import { PREPARE_SELECT_ALL_EVENT } from '../../shared/window-menu-commands'
 import { afterPaint } from './afterPaint'
 
 /**
- * 消息列表的滚动机制(#6595):整个消息窗口按文档流排(store 已把窗口限在 MAX_WINDOW 行内),位置交给浏览器。
+ * 消息列表的滚动机制(#6595):挂上的那段消息按文档流排(store 已把窗口限在 MAX_WINDOW 行内),位置交给浏览器。
  *
  * 为什么不再用虚拟列表:react-virtuoso 关掉原生滚动锚定(overflow-anchor:none),自己用 JS 补偿 —— 视口上方任何一行
  * 变高(第一次露出来、翻页插在上面、图片/代码高亮晚到),它先挪 scrollTop、下一次 React 提交才补上高度,中间那一帧
@@ -29,13 +29,8 @@ export interface FlowListHandle {
 
 export const isAtListEnd = (element: HTMLElement, threshold: number) => element.scrollHeight - element.clientHeight - element.scrollTop <= threshold
 
-/** 数据下标为 index 的行(行根带 aria-posinset = 下标 + 1,见 MessageRow)。 */
-function rowAt(content: HTMLElement, index: number): HTMLElement | null {
-  const child = content.children[index]
-  return child instanceof HTMLElement && child.getAttribute('aria-posinset') === String(index + 1)
-    ? child
-    : content.querySelector<HTMLElement>(`:scope > [aria-posinset="${index + 1}"]`)
-}
+/** 数据下标为 index 的已挂行(行根带 aria-posinset = 下标 + 1,见 MessageRow);没挂上 = null。 */
+const rowAt = (content: HTMLElement, index: number) => content.querySelector<HTMLElement>(`:scope > [aria-posinset="${index + 1}"]`)
 
 /** 把列表放到落点:最新一条贴底;锚点行的上沿离视口顶 -offset 像素(与滚动记忆离开时量的同一个矩形)。 */
 export function placeAtLanding(scroller: HTMLElement, content: HTMLElement, landing: ListLanding): void {

@@ -778,7 +778,7 @@ function ChatAreaSurface({ viewportKey = 'chats', imPage = false, navigationTarg
           scrollerRef={setScrollerRef}
           rows={chatListRows}
           rowProps={rowProps} footer={chrome?.typing}
-          initialTopMostItemIndex={openLocation()} topInset={0}
+          initialTopMostItemIndex={openLocation()}
           followTail={!unreadNavigationPending && !messageWindow?.hasNewer && messageWindow?.change !== 'newer'} unreadAbove={unreadEntry ? { messageId: unreadEntry.locator.message_id, messageSeq: unreadEntry.locator.message_seq, label: t('chatArea.unreadAbove', { count: unreadEntry.locator.unread_count }), onSeen: unreadEntry.onSeen, onJump: () => void jumpToUnreadEntry(scrollerRef.current).catch(onHistoryError) } : null}
           onAtBottomChange={onAtBottomChange}
           onTotalListHeightChanged={onTotalListHeightChanged}

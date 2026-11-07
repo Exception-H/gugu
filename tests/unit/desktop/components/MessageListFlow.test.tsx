@@ -68,14 +68,6 @@ describe('MessageList 文档流', () => {
     expect([...mounted].every(row => row.getAttribute('aria-setsize') === '30')).toBe(true)
   })
 
-  it('topInset:顶部给悬浮小鸟让位 —— 加在滚动容器的内边距上(滚到最上面时第一条不在它脚下);不传 = 不加', async () => {
-    const scroller = () => harness.container.querySelector<HTMLElement>('[data-testid="chat-message-list"]')!
-    await harness.render(createElement(MessageList, { ...listProps('chat-1', 3), topInset: 16 }))
-    expect(scroller().style.paddingTop).toBe('16px')
-    await harness.render(createElement(MessageList, { ...listProps('chat-1', 3) }))
-    expect(scroller().style.paddingTop).toBe('')
-  })
-
   it('副栏报自己的表面,未读定位器只看得见主线', async () => {
     await harness.render(createElement(MessageList, { ...listProps('topic-1', 3), surface: 'aside' }))
     expect(harness.container.querySelector('[data-testid="chat-message-list"]')).toBeNull()
