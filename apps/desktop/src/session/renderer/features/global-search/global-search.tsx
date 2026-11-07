@@ -106,10 +106,9 @@ export function GlobalSearch({ tasks, names = false, onClose, onOpen }: { tasks:
     group.hits.push(hit)
   }
   const ordered = groups.flatMap((group) => group.hits)
-  const named = useNameMatches(view.query, NAMED_LIMIT)
-  const nameRows = names && view.query && facet === 'all' && chips.length === 0
-    ? [...named.groups.map(([id, chat]) => ({ id, userId: '', name: chat.name ?? '', open: () => openGroup(id) })),
-      ...named.people.map((person) => ({ id: person.id, userId: person.id, name: person.name, open: () => openPerson(person.id) }))] : []
+  const named = useNameMatches(view.query, NAMED_LIMIT, names && !!view.query && facet === 'all' && chips.length === 0)
+  const nameRows = [...named.groups.map(([id, chat]) => ({ id, userId: '', name: chat.name ?? '', open: () => openGroup(id) })),
+      ...named.people.map((person) => ({ id: person.id, userId: person.id, name: person.name, open: () => openPerson(person.id) }))]
   const selected = ordered.find((hit) => hit.id === selectedId) ?? ordered[0] ?? null
   const scoped = view.scopes.some((chip) => chip.kind === 'in' || chip.kind === 'in-task')
   // Words, a sender or a kind of message: any of them is a search; with none the panel shows the quick filters.

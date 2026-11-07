@@ -9,13 +9,13 @@ import { useSessionMessages } from '@renderer/localization/use-session-messages'
 import { PALETTE_ITEM_CLASS } from './palette-item-styles';
 import { rankPaletteMatches } from './palette-rank';
 
-/** Groups and people named by `query`: the quick switcher's rows, and the phone search panel's (it has no switcher). */
-export function useNameMatches(query: string, limit: number) {
+/** Groups and people named by `query`: the quick switcher's rows, and the phone search panel's (it has no switcher). `enabled` false: none, without ranking anything. */
+export function useNameMatches(query: string, limit: number, enabled = true) {
   const summaries = useChatSummaries();
   const contacts = useContactSummaries();
-  const groups = rankPaletteMatches([...summaries].filter(([id, chat]) => chat.kind === 'group'
+  const groups = !enabled ? [] : rankPaletteMatches([...summaries].filter(([id, chat]) => chat.kind === 'group'
     && !!chat.name && !projectGroupsStore.rowProjectOfChat(id)), query, ([, chat]) => [chat.name, chat.alias]).slice(0, limit);
-  const people = rankPaletteMatches(contacts, query, (contact) => [contact.name]).slice(0, limit);
+  const people = !enabled ? [] : rankPaletteMatches(contacts, query, (contact) => [contact.name]).slice(0, limit);
   return { groups, people };
 }
 
