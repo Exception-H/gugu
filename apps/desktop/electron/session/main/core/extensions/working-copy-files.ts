@@ -146,7 +146,7 @@ export function releaseWorkingCopies(pageId: number): void {
  * folder. Both then go through the same reads and writes, on the machine the file is on; who may name an absolute path
  * is decided before that (`app-files`, the file the host handed the page).
  */
-export async function fileRootOf(place: WorkspacePlace, file: string): Promise<{ root: string; path: string }> {
+export async function fileRootOf(place: WorkspacePlace, file: string): Promise<{ root: string; path: string; outside?: true }> {
   const { localRootOf } = await import('./app-files');
   // A working copy is handed over whole, so its whole tree is checked; a file named outside it only itself, by what reads it.
   if (!path.isAbsolute(file)) {
@@ -159,7 +159,7 @@ export async function fileRootOf(place: WorkspacePlace, file: string): Promise<{
     await requireAgentFileTreeAccess(root);
     return { root, path: file.slice(root.length + 1) };
   }
-  return { root: path.dirname(file), path: path.basename(file) };
+  return { root: path.dirname(file), path: path.basename(file), outside: true };
 }
 
 /** `f.read(offset, length)`: up to 512 KB of a working copy's file, as the file panel reads it. */
@@ -167,9 +167,12 @@ export async function readWorkingCopy(place: WorkspacePlace, file: string, offse
   const { readWorkspaceChunk, WorkspaceTransferError } = await import('@main/core/files/workspace-transfer');
   const found = await fileRootOf(place, file);
   try {
-    // Named absolute, it is read where it is, a link followed: who may name one was decided where the page is.
-    const named = path.isAbsolute(file) ? file : found.path;
-    const chunk = await readWorkspaceChunk(found.root, { path: named, offset, length: Math.min(length, REMOTE_WORKSPACE_CHUNK_BYTES) }, 'machine');
+    // @@@handed-outside - only the file the host handed the page (a person opened it; `checkAbsolute` where the page is)
+    // names an absolute path outside the working copy: that one file is read where it is, a link to it followed.
+    // Anything named inside the working copy, a page's own reads among them, keeps the working copy's bound.
+    const chunk = found.outside
+      ? await readWorkspaceChunk(found.root, { path: file, offset, length: Math.min(length, REMOTE_WORKSPACE_CHUNK_BYTES) }, 'machine')
+      : await readWorkspaceChunk(found.root, { path: found.path, offset, length: Math.min(length, REMOTE_WORKSPACE_CHUNK_BYTES) });
     return { size: chunk.size, etag: chunk.etag, offset: chunk.offset, data: chunk.data };
   } catch (error) {
     if (error instanceof WorkspaceTransferError) throw new AppFileError(error.code === 'not_a_file' ? 'invalid' : 'not-found', error.message);

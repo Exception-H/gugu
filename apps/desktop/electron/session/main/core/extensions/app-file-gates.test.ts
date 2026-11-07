@@ -370,6 +370,17 @@ describe('reading a file outside the working copy', () => {
       expect((await readAppFileText(handed, { ref: { workspace, id: named } })).content).toBe('outside');
     }
   });
+
+  it('a link in the working copy to a file outside is not followed, by the page or for the file it was handed', async () => {
+    f.capabilities.add('files:read');
+    const key = path.join(outside, 'id_ed25519');
+    fs.writeFileSync(key, 'canary');
+    fs.symlinkSync(key, path.join(f.root, 'keys.txt'));
+    await expect(readAppFileText(page(), { ref: { workspace, id: 'keys.txt' } })).rejects.toThrow(/outside this workspace/);
+    const named = path.join(f.root, 'keys.txt');
+    const handed = { pageId: 7, extensionId: 'reader', handed: { workspace, id: named } } as never;
+    await expect(readAppFileText(handed, { ref: { workspace, id: named } })).rejects.toThrow(/outside this workspace/);
+  });
 });
 
 describe('saving a file', () => {
