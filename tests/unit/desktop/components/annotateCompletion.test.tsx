@@ -1,14 +1,15 @@
 // @vitest-environment jsdom
 import { act } from 'react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { clickElement, createNode, createReactHarness } from '../../../support/testHarness'
+import { clickElement, createNode, createReactHarness, message } from '../../../support/testHarness'
 import { addShape, newDocument } from '../../../../apps/desktop/src/components/imageAnnotate/annotateModel'
 import { useAnnotateActions } from '../../../../apps/desktop/src/components/imageAnnotate/useAnnotateActions'
 import { AnnotateDoneMenu } from '../../../../apps/desktop/src/components/imageAnnotate/AnnotateDoneMenu'
 import zh from '../../../../apps/desktop/src/i18n/locales/zh-CN/main'
 import type { ImageViewerItem } from '../../../../apps/desktop/src/lib/imageViewer'
 
-const calls = vi.hoisted(() => ({ compose: vi.fn(), draft: vi.fn(), session: vi.fn(), done: vi.fn(), output: vi.fn(), t: vi.fn() }))
+const calls = vi.hoisted(() => ({ compose: vi.fn(), draft: vi.fn(), original: vi.fn(), session: vi.fn(), done: vi.fn(), output: vi.fn(), t: vi.fn() }))
+vi.mock('@/lib/chat', () => ({ chatService: { getMessageById: calls.original } }))
 vi.mock('react-i18next', async original => ({ ...await original<typeof import('react-i18next')>(), useTranslation: () => ({ t: calls.t }) }))
 vi.mock('@/lib/sessionPublication', () => ({ getRendererSession: calls.session }))
 vi.mock('@/session/shared/extensions/app-send-core', () => ({ composeInChat: calls.compose }))
@@ -29,6 +30,7 @@ beforeEach(() => {
   calls.t.mockImplementation((key: keyof typeof zh.imageAnnotate) => zh.imageAnnotate[key] ?? key)
   calls.session.mockReturnValue({ access_token: 'test-token', user: { id: 'me' } })
   calls.compose.mockResolvedValue({ chatId: 'group', text: '① Check this', images: [] })
+  calls.original.mockResolvedValue(message({ id: 'original', chat_id: 'group' }))
   calls.output.mockResolvedValue(Object.assign(new Blob(['png'], { type: 'image/png' }), { arrayBuffer: async () => new ArrayBuffer(3) }))
   harness = createReactHarness()
 })
@@ -75,6 +77,34 @@ describe('annotation completion', () => {
     await act(async () => { window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', ctrlKey: true, bubbles: true, cancelable: true })) })
     expect(calls.output).not.toHaveBeenCalled()
     expect(calls.compose).not.toHaveBeenCalled()
+    expect(calls.done).not.toHaveBeenCalled()
+  })
+  it.each([
+    { sender_user_id: 'agent', to_user_ids: ['me'], peer: 'agent' },
+    { sender_user_id: 'me', to_user_ids: ['agent'], peer: 'agent' },
+  ])('keeps a whisper source private to the same pair without quoting it ($sender_user_id → $to_user_ids)', async ({ peer, ...pair }) => {
+    calls.original.mockResolvedValue(message({ id: 'original', chat_id: 'group', is_whisper: true, ...pair }))
+    await harness.render(createNode(Probe))
+    await act(async () => { await actions.putInComposer() })
+    expect(calls.draft).toHaveBeenCalledWith({ ...await calls.compose.mock.results[0].value, whisperTo: peer })
+    expect(calls.draft.mock.calls[0][0]).not.toHaveProperty('quote')
+    expect(calls.done).toHaveBeenCalledOnce()
+  })
+  it('leaves a public source public: no audience, no quote', async () => {
+    calls.original.mockResolvedValue(message({ id: 'original', chat_id: 'group', to_user_ids: ['agent'], is_whisper: false }))
+    await harness.render(createNode(Probe))
+    await act(async () => { await actions.putInComposer() })
+    expect(calls.draft.mock.calls[0][0]).toEqual(await calls.compose.mock.results[0].value)
+  })
+  it('refuses a missing, wrong-chat or inaccessible private source before preparing the draft', async () => {
+    await harness.render(createNode(Probe))
+    for (const original of [null, message({ chat_id: 'other' }), message({ chat_id: 'group', is_whisper: true, sender_user_id: 'a', to_user_ids: ['someone-else'] })]) {
+      calls.original.mockResolvedValue(original)
+      await act(async () => { await actions.putInComposer() })
+      expect(actions.error).toBe(zh.imageAnnotate.originalUnavailable)
+    }
+    expect(calls.output).not.toHaveBeenCalled()
+    expect(calls.draft).not.toHaveBeenCalled()
     expect(calls.done).not.toHaveBeenCalled()
   })
 })

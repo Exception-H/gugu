@@ -592,6 +592,8 @@ export const APP_COMPOSE_EVENT = 'gugu:app-compose';
 export interface AppComposeDetail {
   chatId: string;
   text: string;
+  /** The one peer this draft stays private to (a whisper's annotated image), without quoting anything. */
+  whisperTo?: string;
   /** G3 Images beside the text, as attachments of the draft: the person sends them, or not. */
   images?: AppComposeImage[];
   /** File references inserted as inline mention tokens in the draft text. */
