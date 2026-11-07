@@ -580,10 +580,10 @@ export type AppCallAction = {
   method: string;
   args: Record<string, unknown>;
   /**
-   * The working copy's file the host handed the page (`ctx.file`), stamped by the host from the page's binding, never from
-   * the page's args: the one absolute path a file call may name. The machine the file is on checks it (`fileRootOf`).
+   * The file outside its working copy a person opened in the page, and the grant the host made for that opening: stamped by
+   * the host from the page's binding, never from the page's args. The machine the file is on checks it (`fileRootOf`).
    */
-  handed?: { workspace: string; id: string };
+  handed?: { workspace: string; id: string; grant: string };
 };
 
 /**

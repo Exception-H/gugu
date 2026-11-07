@@ -5,7 +5,6 @@ import { requireAgentFileAccess } from '@gugu/core/local/state/agentFileBoundary
  * 只有「把一份任意大小的字节搬到另一台电脑」需要分块(单帧有上限,见 session-host-device-frames.ts)。
  *
  * 边界与本机工作区同一条:路径必须落在这个工作区里,符号链接逃出去也不行(按真实路径再核一次);
- * 只有「读」、且人点名的是绝对路径时可以落在这台机器的任何地方(`machine`,私有存储照旧不给);
  * 写回按「打开时那一版」核对,agent 正在改同一个文件时拒绝,❌ 静默盖掉它的改动。
  */
 import { createReadStream, createWriteStream } from 'node:fs';
@@ -71,19 +70,8 @@ export function etagOf(info: { mtimeNs: bigint; size: bigint }): string {
   return `${info.mtimeNs.toString()}-${info.size.toString()}`;
 }
 
-/**
- * Where a read or write may go. `workspace`: inside this workspace only. `machine`: a read of a file the person named by
- * its absolute path, anywhere on their own machine (a file outside the project opens read-only); writes never get it.
- */
-export type WorkspaceReach = 'workspace' | 'machine';
-
 /** 相对路径按工作区解析;字面在里面还不够,指向外面的符号链接也要挡住(目标还不存在就核它的父目录)。 */
-export async function inWorkspace(root: string, target: string, canonical = false, reach: WorkspaceReach = 'workspace'): Promise<string> {
-  // @@@machine-read - an absolute path read with `machine` reach skips only the workspace bound: private storage stays shut.
-  if (reach === 'machine' && path.isAbsolute(target)) {
-    const checked = await requireAgentFileAccess(path.resolve(target));
-    return canonical ? checked : path.resolve(target);
-  }
+export async function inWorkspace(root: string, target: string, canonical = false): Promise<string> {
   const resolved = path.resolve(root, target);
   if (!isInside(root, resolved)) {
     throw new WorkspaceTransferError('outside_workspace', `path is outside this workspace: ${target}`);
@@ -112,10 +100,9 @@ async function currentEtag(file: string): Promise<string | null> {
 
 export async function readWorkspaceChunk(
   root: string,
-  request: { path: string; offset: number; length: number },
-  reach: WorkspaceReach = 'workspace'
+  request: { path: string; offset: number; length: number }
 ): Promise<WorkspaceChunk> {
-  const file = await inWorkspace(root, request.path, true, reach);
+  const file = await inWorkspace(root, request.path, true);
   const offset = Math.max(0, Math.floor(request.offset));
   const length = Math.max(0, Math.min(Math.floor(request.length), REMOTE_WORKSPACE_CHUNK_BYTES));
   let handle;

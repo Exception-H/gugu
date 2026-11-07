@@ -141,16 +141,60 @@ export function releaseWorkingCopies(pageId: number): void {
   }
 }
 
-/** The working copy's file the host handed the page, as the call carries it (`AppCallAction.handed`); null: none. */
-export type HandedFile = { workspace: string; id: string } | null;
+/**
+ * The file outside its working copy the host handed a page, as a call carries it (`AppCallAction.handed`): its path, and
+ * the grant the host made for it when the person opened it (one per opening, kept by the host, never told the page).
+ */
+export type HandedFile = { workspace: string; id: string; grant: string } | null;
+
+/** One opening of a file outside a working copy, as this machine first saw it: the file it is, not only its name. */
+type OutsideGrant = { workspace: string; path: string; real: string; dev: bigint; ino: bigint };
+const outsideGrants = new Map<string, OutsideGrant>();
+/** At most this many openings kept: one the host let go of is never named again (the host made its id and forgot it). */
+const OUTSIDE_GRANTS_KEPT = 256;
+
+const refusedOutside = (why: string) => new AppFileError('denied', `Not permitted: ${why}`);
 
 /**
- * Where the chunked transfer finds a file a call names: by its path in the working copy, or, named absolute, in its own
- * folder. Both then go through the same reads and writes, on the machine the file is on.
- *
- * @@@handed-only - an absolute path reaches one file only: the one the host handed the page (`handed`, a person opened it).
- * This is the one place that says so, on the machine the file is on, for every page wherever it is — this desktop, another
- * one, the phone — and no capability opens any other: `handed` comes from the host's binding of the page, never its args.
+ * @@@outside-grant - the one gate, on the machine the file is on, for every page wherever it is (this desktop, another one,
+ * the phone): a file outside the working copy is read only through a grant the host made in a person's opening of it.
+ * The first time this machine sees a grant (the host reads it as it opens the page) it binds it to the file the path
+ * leads to then — its real path, device and inode; every later use stats it again, and a link turned to another file or a
+ * file replaced under the name is refused. No grant (an agent's or an App's opening, the phone, a tab closed): refused.
+ */
+async function outsideFile(place: WorkspacePlace, file: string, handed: HandedFile): Promise<string> {
+  if (!handed || handed.workspace !== place.workspace || handed.id !== file) {
+    throw refusedOutside('a file outside the working copy is read only as the file a person opened in this page');
+  }
+  const real = await fsp.realpath(file).catch(() => { throw new AppFileError('not-found', `No file ${file} on this computer`); });
+  const stat = await fsp.stat(real, { bigint: true });
+  const kept = outsideGrants.get(handed.grant);
+  if (!kept) {
+    outsideGrants.set(handed.grant, { workspace: handed.workspace, path: file, real, dev: stat.dev, ino: stat.ino });
+    for (const id of outsideGrants.keys()) {
+      if (outsideGrants.size <= OUTSIDE_GRANTS_KEPT) break;
+      outsideGrants.delete(id);
+    }
+    return real;
+  }
+  if (kept.workspace !== handed.workspace || kept.path !== file || kept.real !== real || kept.dev !== stat.dev || kept.ino !== stat.ino) {
+    throw refusedOutside(`${file} is no longer the file that was opened`);
+  }
+  return real;
+}
+
+/** Saved through its grant: the file is the one just written now (a save writes a new file in its place). */
+async function outsideFileSaved(grant: string, real: string): Promise<void> {
+  const kept = outsideGrants.get(grant);
+  if (!kept) return;
+  const stat = await fsp.stat(real, { bigint: true });
+  outsideGrants.set(grant, { ...kept, dev: stat.dev, ino: stat.ino });
+}
+
+/**
+ * Where the chunked transfer finds a file a call names: by its path in the working copy (named absolute or not), or a file
+ * outside it through its grant (`outsideFile`), in its real folder. Both then go through the same reads and writes, on
+ * the machine the file is on, with the working copy's bound and private storage shut.
  */
 export async function fileRootOf(place: WorkspacePlace, file: string, handed: HandedFile): Promise<{ root: string; path: string; outside?: true }> {
   const { localRootOf } = await import('./app-files');
@@ -160,15 +204,13 @@ export async function fileRootOf(place: WorkspacePlace, file: string, handed: Ha
     await requireAgentFileTreeAccess(root);
     return { root, path: file };
   }
-  if (handed?.workspace !== place.workspace || handed.id !== file) {
-    throw new AppFileError('denied', 'Not permitted: an absolute path reaches only the file the host handed this page');
-  }
   const root = await localRootOf(place).then((found) => found.workspaceRoot, () => null);
   if (root !== null && file.startsWith(root + path.sep)) {
     await requireAgentFileTreeAccess(root);
     return { root, path: file.slice(root.length + 1) };
   }
-  return { root: path.dirname(file), path: path.basename(file), outside: true };
+  const real = await outsideFile(place, file, handed);
+  return { root: path.dirname(real), path: path.basename(real), outside: true };
 }
 
 /** `f.read(offset, length)`: up to 512 KB of a working copy's file, as the file panel reads it. */
@@ -176,11 +218,7 @@ export async function readWorkingCopy(place: WorkspacePlace, file: string, offse
   const { readWorkspaceChunk, WorkspaceTransferError } = await import('@main/core/files/workspace-transfer');
   const found = await fileRootOf(place, file, handed);
   try {
-    // Outside the working copy is only ever the handed file (`fileRootOf`): read where it is, a link to it followed.
-    // Anything named inside the working copy, a page's own reads among them, keeps the working copy's bound.
-    const chunk = found.outside
-      ? await readWorkspaceChunk(found.root, { path: file, offset, length: Math.min(length, REMOTE_WORKSPACE_CHUNK_BYTES) }, 'machine')
-      : await readWorkspaceChunk(found.root, { path: found.path, offset, length: Math.min(length, REMOTE_WORKSPACE_CHUNK_BYTES) });
+    const chunk = await readWorkspaceChunk(found.root, { path: found.path, offset, length: Math.min(length, REMOTE_WORKSPACE_CHUNK_BYTES) });
     return { size: chunk.size, etag: chunk.etag, offset: chunk.offset, data: chunk.data };
   } catch (error) {
     if (error instanceof WorkspaceTransferError) throw new AppFileError(error.code === 'not_a_file' ? 'invalid' : 'not-found', error.message);
@@ -213,6 +251,7 @@ export async function writeWorkingCopyChunk(place: WorkspacePlace, chunk: Worksp
     }
     const { received, committed } = await uploads.write(found.root, { ...chunk, path: found.path });
     if (!committed) return { received };
+    if (found.outside && handed) await outsideFileSaved(handed.grant, path.resolve(found.root, found.path));
     const stat = await fsp.stat(path.resolve(found.root, found.path));
     return { received, entry: workingCopyEntry(place, path.isAbsolute(chunk.path) ? chunk.path : relOf(found.root, path.resolve(found.root, found.path)), stat), etag: committed.etag };
   } catch (error) {

@@ -166,8 +166,7 @@ export const workspaceFileSystemController = createRPCController({
 
   /**
    * #6264 按块读一份文件(别的电脑上的预览、下载):字节过线要分块,单帧有上限。
-   * 路径可以是工作区里的相对路径,也可以是落在工作区里的绝对路径。网页预览取资源也走这条(页面自己发起的读),
-   * 所以它 ❌ 放宽到工作区外:人点开的工作区外文件经 App 的那一份读(`readWorkingCopy`,只认交给页面的那个文件)。
+   * 路径可以是工作区里的相对路径,也可以是落在工作区里的绝对路径。
    */
   readChunk: async (projectId: string, workspaceId: string, request: { path: string; offset: number; length: number }) => {
     const resolved = await resolveWorkspaceFiles(projectId, workspaceId);

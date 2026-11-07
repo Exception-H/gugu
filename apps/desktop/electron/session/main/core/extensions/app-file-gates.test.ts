@@ -117,7 +117,7 @@ describe('forward', () => {
 
   it('the file a page was handed needs nothing', async () => {
     fs.writeFileSync(path.join(f.root, 'mine.txt'), 'mine');
-    const handed = { pageId: 7, extensionId: 'reader', handed: { workspace, id: 'mine.txt' } } as never;
+    const handed = { pageId: 7, extensionId: 'reader', handed: { workspace, id: 'mine.txt' }, grant: crypto.randomUUID() } as never;
     const detail = await forwardTargets(handed, { refs: [{ workspace, id: 'mine.txt' }] }) as { copies: { bytes: Uint8Array }[] };
     expect(Buffer.from(detail.copies[0]!.bytes).toString()).toBe('mine');
   });
@@ -316,7 +316,7 @@ describe('reveal', () => {
 });
 
 describe('reveal and Open in, to a program of this computer', () => {
-  const handedPage = (id: string) => ({ pageId: 7, extensionId: 'reader', handed: { workspace, id } }) as never;
+  const handedPage = (id: string) => ({ pageId: 7, extensionId: 'reader', handed: { workspace, id }, grant: crypto.randomUUID() }) as never;
 
   it('a page with no file capability reaches neither', async () => {
     fs.writeFileSync(path.join(f.root, 'a.txt'), 'x');
@@ -366,7 +366,7 @@ describe('reading a file outside the working copy', () => {
     for (const named of [file, path.join(outside, 'link.md')]) {
       await expect(readAppFileText(page(), { ref: { workspace, id: named } })).rejects.toThrow(DENIED);
       await expect(readAppFileText(agentPage, { ref: { workspace, id: named } })).rejects.toThrow(DENIED);
-      const handed = { pageId: 7, extensionId: 'reader', handed: { workspace, id: named } } as never;
+      const handed = { pageId: 7, extensionId: 'reader', handed: { workspace, id: named }, grant: crypto.randomUUID() } as never;
       expect((await readAppFileText(handed, { ref: { workspace, id: named } })).content).toBe('outside');
     }
   });
@@ -378,7 +378,7 @@ describe('reading a file outside the working copy', () => {
     fs.symlinkSync(key, path.join(f.root, 'keys.txt'));
     await expect(readAppFileText(page(), { ref: { workspace, id: 'keys.txt' } })).rejects.toThrow(/outside this workspace/);
     const named = path.join(f.root, 'keys.txt');
-    const handed = { pageId: 7, extensionId: 'reader', handed: { workspace, id: named } } as never;
+    const handed = { pageId: 7, extensionId: 'reader', handed: { workspace, id: named }, grant: crypto.randomUUID() } as never;
     await expect(readAppFileText(handed, { ref: { workspace, id: named } })).rejects.toThrow(/outside this workspace/);
   });
 });
@@ -387,7 +387,7 @@ describe('saving a file', () => {
   it('a file outside the working copy, handed to the page, saves with no capability', async () => {
     const file = path.join(outside, 'mine.txt');
     fs.writeFileSync(file, 'outside');
-    const handed = { pageId: 7, extensionId: 'reader', handed: { workspace, id: file } } as never;
+    const handed = { pageId: 7, extensionId: 'reader', handed: { workspace, id: file }, grant: crypto.randomUUID() } as never;
     let saved = '';
     await downloadAppFile(handed, { ref: { workspace, id: file } }, null, undefined, (at) => { saved = at; });
     expect(saved).toBe(f.dialogFile);

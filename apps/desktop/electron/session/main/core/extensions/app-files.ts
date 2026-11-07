@@ -122,6 +122,11 @@ export interface DesktopFilePage {
   pageId: number;
   extensionId: string;
   handed: (AppFileRef & { id: string }) | null;
+  /**
+   * The grant the host made when a person opened the handed file outside its working copy (`@@@outside-grant`): the host's,
+   * from the page's binding, never told the page. None for a file an agent or an App opened, or a page with no binding.
+   */
+  grant?: string;
   asAgent?: string | null;
   /** A page's own chat, as it was bound: already its resource container (`surfaceResourceChat`). */
   boundChat?: string | null;
@@ -287,9 +292,9 @@ const withId = (ref: AppFileRef, what: string): AppFileRef & { id: string } => {
 const isHanded = (page: DesktopFilePage, ref: WorkspaceFileRef): boolean =>
   !!page.handed && isWorkspace(page.handed) && page.handed.workspace === ref.workspace && 'id' in ref && page.handed.id === ref.id;
 
-/** The working copy's file the host handed this page, as a file call carries it to the machine it is on (`fileRootOf`). */
+/** The file outside its working copy a person opened in this page, as a file call carries it to its machine (`fileRootOf`). */
 const handedOf = (page: DesktopFilePage): HandedFile =>
-  page.handed && isWorkspace(page.handed) ? { workspace: page.handed.workspace, id: page.handed.id } : null;
+  page.handed && isWorkspace(page.handed) && page.grant ? { workspace: page.handed.workspace, id: page.handed.id, grant: page.grant } : null;
 
 /**
  * An absolute path reaches one file only: the one the host handed this page. Every read and write of a file's bytes says so
