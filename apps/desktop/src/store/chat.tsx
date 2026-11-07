@@ -55,7 +55,7 @@ import {
 } from '../lib/accountRevisionCoordinator'
 import { createSupabaseAccountRevisionSource } from '../lib/supabaseAccountRevisionSource'
 import { initializeAccountSync } from '../lib/accountSyncSnapshot'
-import { watchRendererRevisionReconcile } from '../lib/accountRevisionReconcile'
+import { useAccountStartBeat, type RevisionRegistration } from './accountStartBeat'
 import { subscribeAgentPresenceRevisions } from '../lib/agentPresenceStore'
 import { sendAttachmentBatch } from '../components/chat/sendAttachmentBatch'
 import { i18n } from '../i18n'
@@ -93,10 +93,7 @@ export function ChatProvider({ children, active = true }: { children: React.Reac
   const imRepositoryPromiseRef = useRef<{ accountId: string; promise: Promise<AccountImRepository> } | null>(null)
   const revisionCoordinatorRef = useRef<AccountRevisionCoordinator | null>(null)
   const revisionCoordinatorPromiseRef = useRef<Promise<AccountRevisionCoordinator> | null>(null)
-  // @@@revision-registrations - consumers outlive a failed account start: each waits here until a coordinator exists.
-  const revisionRegistrationsRef = useRef(new Set<{
-    events: AccountRevisionEvent | readonly AccountRevisionEvent[]; listener: AccountRevisionListener; unsubscribe: (() => void) | null
-  }>())
+  const revisionRegistrationsRef = useRef(new Set<RevisionRegistration>()) // @@@revision-registrations, see accountStartBeat
   const imRepositoryScope = useMemo(() => ({ accountId: userId, disposed: false }), [userId])
   const outboxRef = useRef<OutboxWiring | null>(null)
   // Live mirrors for the debug bridge; async window reads are fenced by their observer and snapshot epoch.
@@ -483,38 +480,10 @@ export function ChatProvider({ children, active = true }: { children: React.Reac
     })
   }, [appActive, cache, chatsRef, patchChat, userId]) // Activity changes remeasure the current visible rows; never replay cached history.
 
-  useEffect(() => {
-    if (!userId) {
-      setChats([]); setChatsLoad('unread') // 换号 / 登出:上一个号的读失败 ❌ 带到下一个号的「群」那一格
-      return
-    }
-    let cancelled = false
-    let opened = false
-    // @@@account-start-beat - one owner for the account's reconcile beat (interval / visible / online / foreground).
-    // Until the repository and coordinator have started, each beat advances that start again (a transient snapshot
-    // failure is one failed step, not a dead account); afterwards it is a head-unknown wake of the revision drain.
-    const open = () => {
-      if (!opened) void getImRepository()
-        .then(async (repository) => {
-          if (cancelled || opened) return
-          opened = true
-          paintLocal(repository) // initialization may have rebuilt the store from the account snapshot
-          await loadChats()
-        })
-        .catch((err) => {
-          console.error('[ChatStore] open IM repository failed', err)
-          if (!cancelled) setChatsLoad('failed') // an empty list here is a failure, not "no conversations"
-        })
-    }
-    open()
-    const stopBeat = watchRendererRevisionReconcile(() => {
-      open()
-      const coordinator = revisionCoordinatorRef.current
-      if (coordinator) coordinator.wake()
-      else if (revisionRegistrationsRef.current.size > 0) void getRevisionCoordinator().catch((error) => revisionLog.error({ error }, 'coordinator failed'))
-    })
-    return () => { cancelled = true; stopBeat() }
-  }, [getImRepository, getRevisionCoordinator, loadChats, paintLocal, setChats, userId])
+  useAccountStartBeat(userId, {
+    getImRepository, getRevisionCoordinator, coordinatorRef: revisionCoordinatorRef, registrationsRef: revisionRegistrationsRef,
+    paintLocal, loadChats, setChats, setChatsLoad,
+  })
 
   useEffect(() => {
     if (!userId || !imRepositoryRef.current) return
