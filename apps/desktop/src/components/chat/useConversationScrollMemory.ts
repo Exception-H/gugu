@@ -285,11 +285,12 @@ export function useConversationScrollMemory({
 
     let frame = 0
     let stableFrames = 0
+    const mountedRow = () => Array.from(scroller.querySelectorAll<HTMLElement>('[data-msg-id]'))
+      .find((candidate) => candidate.dataset.msgId === position.messageId)
     const settle = (now: number) => {
       if (restoringActivationRef.current !== activationKey) return
       // @@@6595 列表挂载时在第一次绘制之前就落在这一行(openLocation;锚点后载进来时整列表重挂),这里只核对偏移。
-      const row = Array.from(scroller.querySelectorAll<HTMLElement>('[data-msg-id]'))
-        .find((candidate) => candidate.dataset.msgId === position.messageId)
+      const row = mountedRow()
       if (row) {
         const actualOffset = row.getBoundingClientRect().top - scroller.getBoundingClientRect().top
         const delta = actualOffset - position.offset
@@ -319,9 +320,7 @@ export function useConversationScrollMemory({
       frame = requestAnimationFrame(settle)
     }
     // 已加载但尚未挂载的行也沿同一个 FlowList 句柄补挂;不为恢复再维护一份切片或位置。
-    if (!Array.from(scroller.querySelectorAll<HTMLElement>('[data-msg-id]')).some(row => row.dataset.msgId === position.messageId)) {
-      listRef.current?.scrollToIndex({ index: location.index, align: 'start', offset: location.offset })
-    }
+    if (!mountedRow()) listRef.current?.scrollToIndex({ index: location.index, align: 'start', offset: location.offset })
     // An already loaded target also moves before paint; a window replacement uses openLocation above.
     settle(performance.now())
     return () => {
