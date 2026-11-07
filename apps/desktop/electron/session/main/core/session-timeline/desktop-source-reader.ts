@@ -20,8 +20,10 @@ export function createDesktopSourceWindowReader(options: {
   reportError(error: unknown): void;
   observed?(conversationId: string, io: Readonly<WindowIoCounters>, phase: 'window' | 'discovery'): void;
 }) {
-  const resolver = createSourceReopenResolver();
-  let discovery: { key: string; abort: AbortController; promise: Promise<WindowSourceLocator>; waiters: number } | undefined;
+  type Discovery = { abort: AbortController; promise: Promise<WindowSourceLocator>; waiters: number };
+  const discoveries = new Map<string, Discovery>();
+  let available!: () => void;
+  let capacity = new Promise<void>(resolve => { available = resolve; });
   const reported = new WeakSet<WindowReadRequest>();
   const listeners = new Set<() => void>();
   const locatedRequests = new WeakMap<WindowReadRequest, WindowSourceLocator>();
@@ -41,45 +43,52 @@ export function createDesktopSourceWindowReader(options: {
     if (reported.has(input)) return;
     reported.add(input); options.observed?.(input.conversationId, input.budget.counters, 'window');
   }
-  /** One selected background discovery, no whole-job queue. Known paths bypass it. */
+  async function cancellable<T>(promise: Promise<T>, signal?: AbortSignal): Promise<T> {
+    let cancel: (() => void) | undefined;
+    try {
+      return await Promise.race([promise, new Promise<never>((_yes, no) => {
+        cancel = () => no(signal?.reason ?? new Error('Source discovery cancelled'));
+        signal?.addEventListener('abort', cancel, { once: true });
+        if (signal?.aborted) cancel();
+      })]);
+    } finally { if (cancel) signal?.removeEventListener('abort', cancel); }
+  }
+  /** Two resolver slots; callers beyond capacity await cancellable backpressure.
+   * Only admitted jobs own directory handles; different sessions never cancel each other. */
   async function locateForRead(input: DesktopSourceRequest): Promise<WindowSourceLocator> {
     const saved = await locate(input);
     input.signal?.throwIfAborted();
     if (saved) return saved;
     const key = JSON.stringify([input.cacheDirectory, input.locator, input.cwd, input.nativeSourcePath]);
-    if (!discovery || discovery.key !== key || discovery.abort.signal.aborted) {
-      discovery?.abort.abort(new Error('Source discovery selection changed'));
-      const abort = new AbortController();
+    while (!discoveries.has(key) && discoveries.size >= 2) await cancellable(capacity, input.signal);
+    let selected = discoveries.get(key);
+    if (!selected) {
+      const abort = new AbortController(), resolver = createSourceReopenResolver();
       const promise = (async () => {
-        for (;;) {
-          abort.signal.throwIfAborted();
-          const budget = createWindowBudget();
-          try {
-            const result = await resolver.resolveSourceForReopen(input, budget, abort.signal);
-            if (result.kind === 'located') return { version: 1 as const, harness: input.locator.harness as 'claude' | 'codex',
-              providerSessionId: input.locator.providerSessionId, path: result.path, source: result.source, sourceLineage: result.sourceLineage };
-            if (result.kind === 'cache_miss') throw Object.assign(new Error('Native record source was not found'), { code: 'record_not_found' });
-          } finally { options.observed?.(input.conversationId, budget.counters, 'discovery'); }
-          await setImmediate(undefined, { signal: abort.signal });
+        try {
+          for (;;) {
+            abort.signal.throwIfAborted();
+            const budget = createWindowBudget();
+            try {
+              const result = await resolver.resolveSourceForReopen(input, budget, abort.signal);
+              if (result.kind === 'located') return { version: 1 as const, harness: input.locator.harness as 'claude' | 'codex',
+                providerSessionId: input.locator.providerSessionId, path: result.path, source: result.source, sourceLineage: result.sourceLineage };
+              if (result.kind === 'cache_miss') throw Object.assign(new Error('Native record source was not found'), { code: 'record_not_found' });
+            } finally { options.observed?.(input.conversationId, budget.counters, 'discovery'); }
+            await setImmediate(undefined, { signal: abort.signal });
+          }
+        } finally {
+          await resolver.dispose(); discoveries.delete(key);
+          const wake = available; capacity = new Promise<void>(resolve => { available = resolve; }); wake();
         }
       })();
-      discovery = { key, abort, promise, waiters: 0 };
+      selected = { abort, promise, waiters: 0 }; discoveries.set(key, selected);
     }
-    const selected = discovery; selected.waiters += 1;
-    let cancel: (() => void) | undefined;
+    selected.waiters += 1;
     try {
-      const cancelled = new Promise<never>((_resolve, reject) => {
-        cancel = () => reject(input.signal?.reason ?? new Error('Source discovery cancelled'));
-        input.signal?.addEventListener('abort', cancel, { once: true });
-        if (input.signal?.aborted) cancel();
-      });
-      const value = await Promise.race([selected.promise, cancelled]);
+      const value = await cancellable(selected.promise, input.signal);
       locatedRequests.set(input, value); return value;
-    } finally {
-      if (cancel) input.signal?.removeEventListener('abort', cancel);
-      selected.waiters -= 1;
-      if (selected.waiters === 0) { selected.abort.abort(); if (discovery === selected) discovery = undefined; }
-    }
+    } finally { selected.waiters -= 1; if (selected.waiters === 0) selected.abort.abort(); }
   }
   function reader(input: WindowReadRequest) {
     return createRecentReader({
@@ -131,5 +140,5 @@ export function createDesktopSourceWindowReader(options: {
       return () => { listeners.delete(changed); unwatchFile(located.path, changed); };
     },
   });
-  return { ...bridge, async dispose() { discovery?.abort.abort(); await scheduler.dispose(); await resolver.dispose(); } };
+  return { ...bridge, async dispose() { for (const job of discoveries.values()) job.abort.abort(); await scheduler.dispose(); await Promise.allSettled([...discoveries.values()].map(job => job.promise)); } };
 }

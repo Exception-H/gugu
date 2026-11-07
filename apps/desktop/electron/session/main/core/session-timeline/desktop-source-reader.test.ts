@@ -43,6 +43,7 @@ async function fixture(multipleBatches = false) {
   const row = (text: string) => JSON.stringify({ type: 'response_item', payload: {
     type: 'message', role: 'assistant', content: [{ type: 'output_text', text }] } }) + '\n';
   await writeFile(path, row('old'.repeat(24000)) + row('latest real body'));
+  await writeFile(join(directory, 'rollout-2026-11-07T00-00-00-other-id.jsonl'), row('other real body'));
   const roots = [sourceRoot];
   if (multipleBatches) {
     const unrelated = join(root, 'unrelated'); await mkdir(unrelated);
@@ -52,7 +53,7 @@ async function fixture(multipleBatches = false) {
   const measured: WindowIoCounters[] = [], observed: { id: string; phase: string; io: WindowIoCounters }[] = [], requests: DesktopSourceRequest[] = [];
   const reader = createDesktopSourceWindowReader({
     request: async (conversationId, limit, signal) => {
-      const request: DesktopSourceRequest = { conversationId, locator: { harness: 'codex', providerSessionId: conversationId === 'missing' ? 'missing' : 'native-id', roots },
+      const request: DesktopSourceRequest = { conversationId, locator: { harness: 'codex', providerSessionId: conversationId === 'missing' ? 'missing' : conversationId === 'other' ? 'other-id' : 'native-id', roots },
         cacheDirectory: join(root, 'cache'), scope: 'a'.repeat(64), conversationScope: 'conversation', branchLineage: 'branch',
         budget: createWindowBudget(), limit, signal };
       requests.push(request); return request;
@@ -152,5 +153,21 @@ describe('desktop default source reopening', () => {
     const terminal = observed.filter(value => value.id === 'missing' && value.phase === 'window');
     expect(terminal).toHaveLength(1); expect(terminal[0].io).toEqual(requests[0].budget.counters);
     expect(observed.reduce((sum, value) => sum + value.io.indexBytes, 0)).toBe(reads.index);
+  });  it('admits two valid unregistered subscriptions without cross-session cancellation', async () => {
+    const { reader } = await fixture(true);
+    const failed = vi.fn();
+    const open = async (conversationId: string) => {
+      let resolve!: (text: string) => void;
+      const text = new Promise<string>(yes => { resolve = yes; });
+      const stop = await reader.subscribe({ conversationId, subscriptionId: conversationId, cursor: null }, event => {
+        const value = event.result.ok ? event.result.batch : event.result.snapshot;
+        const body = value.sourceFragments?.find(value => value.text)?.text;
+        if (body) resolve(body);
+      }, failed);
+      cleanup.push(async () => stop()); return text;
+    };
+    expect(await Promise.all([open('conversation'), open('other')])).toEqual(['latest real body', 'other real body']);
+    expect(failed).not.toHaveBeenCalled();
   });
+
 });
