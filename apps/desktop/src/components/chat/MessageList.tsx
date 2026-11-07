@@ -115,7 +115,7 @@ export interface MessageListRowProps {
   /** 这条线上「agent 超过 5 个已自动转 passive」的那条系统消息(每条线至多一条)。 */
   agentFloodNoticeMessageId: string | null | undefined
   onAgentFloodUndone: (() => void) | undefined
-  onOpenFile: ((meta: ParsedAttachment, message?: MessageItem) => void) | undefined; onOpenLocalFileLink: ((path: string) => void) | undefined
+  onOpenFile: ((meta: ParsedAttachment, message?: MessageItem) => void) | undefined
   onMentionMember: ((target: MentionTarget) => void) | undefined // @@@6386 入群灰字里点名字 → 输入框插 @
   // @@@multi-select (#988) — 多选态：行首勾选框 + 整行点击切换选中；onEnterSelectMode 透传给气泡「多选」菜单项。
   selectMode: boolean
@@ -175,7 +175,7 @@ const MessageListRow = memo(function MessageListRow({
   onVisible,
   onOpenMemberProfile,
   onOpenTopic, topicAnchors, onOpenTopicAnchor, agentFloodNoticeMessageId, onAgentFloodUndone,
-  onOpenFile, onOpenLocalFileLink, onMentionMember,
+  onOpenFile, onMentionMember,
   selectMode,
   selectedIds,
   onToggleSelect,
@@ -263,7 +263,7 @@ const MessageListRow = memo(function MessageListRow({
       onOpenMemberProfile={onOpenMemberProfile}
       compactMobile={mobile}
       // 直接透传稳定 handler；话题里不传则不显示「开话题」菜单项(单层不嵌套)。
-      onOpenTopic={onOpenTopic} onOpenTopicAnchor={msg.content_type === 'system' ? onOpenTopicAnchor : undefined} onOpenFile={onOpenFile} onOpenLocalFileLink={onOpenLocalFileLink}
+      onOpenTopic={onOpenTopic} onOpenTopicAnchor={msg.content_type === 'system' ? onOpenTopicAnchor : undefined} onOpenFile={onOpenFile}
       memberProfiles={bubbleMemberProfiles}
       // @@@multi-select (#988) — More 菜单「多选」入口;多选态的勾选/底色在外层 MessageListRow 处理。
       onEnterSelectMode={onEnterSelectMode}
@@ -386,12 +386,12 @@ export function MessageList({
   return (
     <div style={frameStyle}>
       {/* 每换一条线(resetKey)换一个滚动容器:落点、贴底电平、锚定都从这条线自己的第一帧开始。 */}
-      <div key={resetKey} ref={handleScrollerRef} data-testid={SCROLLER_TEST_ID[surface]} data-unread-stream-surface={surface} data-message-avatars="true" data-image-gallery="" style={scrollerStyle}>
+      <div key={resetKey} ref={handleScrollerRef} data-testid={SCROLLER_TEST_ID[surface]} data-unread-stream-surface={surface} data-chat-dock-reads="" data-message-avatars="true" data-image-gallery="" style={scrollerStyle}>
         <div ref={contentRef}>
           {rows.slice(start, end).map((row, i) => <MessageListRow key={row.message.id} index={start + i} {...rowProps} onVisible={onVisible} bubbleMemberProfiles={bubbleMemberProfiles} showReplyQuote={quoteIds.has(row.message.id)} />)}
           {end >= rows.length ? footer : null}
           {/* 会话底部那一摞浮在消息流上(ChatBottomDock 写的 --chat-dock-h),滚到底的最后一条落在它上面;没有它就是 0。 */}
-          <div aria-hidden className="h-[var(--chat-dock-h,0px)]" />
+          <div aria-hidden data-chat-dock-reads="" className="h-[var(--chat-dock-h,0px)]" />
         </div>
       </div>
       {unreadAbove && showUnreadAbove && <Button variant="primary" size="sm" data-unread-above="" style={UNREAD_ABOVE_STYLE} onClick={unreadAbove.onJump}>{unreadAbove.label}</Button>}

@@ -54,8 +54,7 @@ export default {
         "retry": "Retry",
         "retrying": "Retrying…",
         "title": "Task failed to start"
-      },
-      "statusReadFailed": "Could not read the task status: {{reason}}"
+      }
     },
     "turnFailure": {
       "card": {
@@ -364,6 +363,8 @@ export default {
     "usageUnavailable": "File storage usage is unavailable right now.",
 
     "fileUnavailable": "File unavailable right now",
+    "fileNoAccess": "You no longer have access to this file",
+    "fileUpdated": "This file was updated; open it again",
     "holderOffline": "{{machine}} is offline. This file opens when it is back online.",
     "holderMachine": "The computer that keeps it",
     "besideOffline": "On {machine}, not connected",
@@ -852,6 +853,7 @@ export default {
     "title": "Send to"
   },
   "topic": {
+    "leave": "Leave topic",
     "calledYou": "Someone @ you",
     "pins": {
       "pin": "Pin {{name}} to group",

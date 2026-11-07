@@ -54,8 +54,7 @@ export default {
         "retry": "重试",
         "retrying": "重试中…",
         "title": "任务启动失败"
-      },
-      "statusReadFailed": "无法读取任务状态：{{reason}}"
+      }
     },
     "turnFailure": {
       "card": {
@@ -363,6 +362,8 @@ export default {
     "usageUnavailable": "文件用量暂不可用。",
 
     "fileUnavailable": "文件暂时打不开",
+    "fileNoAccess": "你已无权访问这个文件",
+    "fileUpdated": "文件已更新，请重新打开",
     "holderOffline": "{{machine}} 离线，上线后才能打开这个文件。",
     "holderMachine": "保存它的那台电脑",
     "besideOffline": "在「{machine}」上，未连接",
@@ -850,6 +851,7 @@ export default {
     "title": "发送到"
   },
   "topic": {
+    "leave": "退出话题",
     "calledYou": "有人 @ 你",
     "pins": {
       "pin": "将“{{name}}”置顶到主群",
