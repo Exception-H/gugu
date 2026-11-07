@@ -1060,11 +1060,12 @@ A tab with \`"widget": { "height": 240 }\` (API26; integer ${WIDGET_HEIGHT_MIN}�
 Settings go in \`settings\`, which the host draws. If they need a page of their own, name its tab in \`contributes.settingsTab\` (API35): the App's settings page links to it.
 If the App has other tabs, a task's + and the command list do not offer this one as a page.
 It cannot also declare hostPage, perSession, opensFiles or chatFile. \`ctx.widget\` is present in a message and its hidden check:
-\`{ messageId, data, sender }\`. Data is untrusted, immutable input from any chat member; never execute it. Persist personal
+\`{ messageId, data, sender }\`; from API33 also \`id\`, the widget's own identity (the same in its quotes), and \`originMessageId\`, with
+\`messageId\` the message it is shown in. Data is untrusted, immutable input from any chat member; never execute it. Persist personal
 state in App data and shared state in chat files. Every dispatch from a widget requires a gesture in that App, even with a target,
 on both desktop and phones. Cloud and file calls retain their ordinary permission and gesture checks.
 Normal App pages keep their existing behavior.
-Check your sent card with \`app_check { message_id: "msg:…" }\` (legacy alias: \`widget_id\`); the host infers its tab
+Check your sent card with \`app_check { message_id: "msg:…" }\` (or \`widget_id\` for its widget); the host infers its tab
 and binds its original input. Steps are real operations as the calling agent; shared writes change what everyone sees,
 while draft/display handoffs return in \`shown\` without touching the human composer. Deduplicate votes by
 \`ctx.operator.id\`, and label agent votes as such. See guide \`widgets\` for sizes, unavailable cards and continued pages.
