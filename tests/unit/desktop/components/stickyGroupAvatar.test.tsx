@@ -99,3 +99,17 @@ describe('sticky group avatar geometry', () => {
     await resize([list])
   })
 })
+
+
+it('bounds a continued group from its first mounted row when the true group head is outside the slice', async () => {
+  await harness.render(createElement('div', { 'data-list': '' }, row('middle', true, true), row('tail', true)))
+  vi.spyOn(Element.prototype, 'getBoundingClientRect').mockImplementation(function (this: Element) {
+    const id = this.closest('[data-row]')!.getAttribute('data-row')
+    return { top: id === 'head' ? -50 : id === 'middle' ? 10 : 70, bottom: id === 'head' ? -10 : id === 'middle' ? 60 : 120 } as DOMRect
+  })
+  await resize([])
+  expect(harness.container.querySelector<HTMLElement>('[data-row="tail"] .absolute')!.style.height).toBe('110px')
+  await harness.render(createElement('div', { 'data-list': '' }, row('head', false, true), row('middle', true, true), row('tail', true)))
+  await resize([harness.container.querySelector('[data-list]')!])
+  expect(harness.container.querySelector<HTMLElement>('[data-row="tail"] .absolute')!.style.height).toBe('170px')
+})

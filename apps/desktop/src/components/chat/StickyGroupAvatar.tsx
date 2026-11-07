@@ -42,10 +42,14 @@ function StickyGroupAvatar({ width, continuesGroup, children }: { width: string;
     const measure = () => {
       // 一条成组的消息,组首就是自己这一行 ⇒ 不往上找(往上找会落到上一组的组首,层伸进别的组)。
       let top: Element | null = null
-      for (let r = continuesGroup ? row.previousElementSibling : null; r && !top; r = r.previousElementSibling) top = r.querySelector(`[${GROUP_TOP_ATTR}]`)
+      let firstMounted = row
+      for (let r = continuesGroup ? row.previousElementSibling : null; r && !top; r = r.previousElementSibling) {
+        firstMounted = r
+        top = r.querySelector(`[${GROUP_TOP_ATTR}]`)
+      }
       // 层的上下沿 = 组首那条气泡的上沿、这一条气泡的下沿:名字/时间行、表情回应都不算。
       const bubble = (r: Element) => r.querySelector('[data-message-bubble-row]')?.getBoundingClientRect()
-      const own = bubble(row), first = bubble(top?.closest('[role="listitem"]') ?? row), box = slot.getBoundingClientRect()
+      const own = bubble(row), first = bubble(top?.closest('[role="listitem"]') ?? firstMounted), box = slot.getBoundingClientRect()
       if (!own || !first) return
       return { layer, bottom: box.bottom - own.bottom, height: own.bottom - first.top }
     }

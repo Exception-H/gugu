@@ -39,7 +39,7 @@ class FakeResizeObserver {
   unobserve() {}
 }
 const resize = () => act(async () => { for (const callback of [...observers]) callback() })
-// 首帧只渲染落点附近那段,第一次绘制之后的下一帧补齐整窗(两层 rAF)。
+// 等几次绘制,证明没有无条件补满整窗。
 const nextFrames = () => act(async () => { for (let i = 0; i < 3; i += 1) await new Promise((resolve) => requestAnimationFrame(() => resolve(null))) })
 
 type Row = { id: string; h: number }
@@ -79,24 +79,24 @@ afterEach(() => {
 })
 
 describe('useFlowList 落点(第一次绘制之前放好)', () => {
-  it('最新一条:首帧只排最后那段并贴到它的底;下一帧补齐整窗后仍在真底', async () => {
+  it('最新一条:只挂视口和余量,空闲绘制不补满整窗、仍在真底', async () => {
     await harness.render(createElement(List, { rows: rowsOf(20), landing: { index: 'LAST', align: 'end' } }))
     expect(rendered()).toEqual(rowsOf(6).map((_, i) => `r${14 + i}`))
     expect(topOf('r19')).toBe(200)
     expect(events.atBottom).toEqual([true])
     await nextFrames()
     await resize()
-    expect(rendered()).toHaveLength(20)
-    expect(scroller().scrollTop).toBe(1700)
+    expect(rendered()).toHaveLength(6)
+    expect(scroller().scrollTop).toBe(300)
     expect(topOf('r19')).toBe(200)
   })
   it('读到一半的那一行:首帧它的上沿就离视口顶 -offset;上方补齐后它不动', async () => {
     await harness.render(createElement(List, { rows: rowsOf(20), landing: { index: 5, align: 'start', offset: 16 } }))
-    expect(rendered()).toEqual(['r4', 'r5', 'r6', 'r7', 'r8', 'r9', 'r10', 'r11'])
+    expect(rendered()).toEqual(rowsOf(12).map(row => row.id))
     expect(topOf('r5')).toBe(-16)
     expect(events.atBottom).toEqual([false])
     await nextFrames()
-    expect(rendered()).toHaveLength(20)
+    expect(rendered()).toHaveLength(12)
     expect(topOf('r5')).toBe(-16)
   })
   it('首帧那段不够填满视口(行矮)就再补一段,仍在第一次绘制之前放好', async () => {
@@ -112,7 +112,7 @@ describe('useFlowList 落点(第一次绘制之前放好)', () => {
     await harness.render(createElement(List, { rows: rowsOf(20, 100, 'b'), landing: { index: 'LAST', align: 'end' }, resetKey: 'k2' }))
     await nextFrames()
     await resize()
-    expect(scroller().scrollTop).toBe(1700)
+    expect(scroller().scrollTop).toBe(300)
   })
 })
 
@@ -122,7 +122,7 @@ describe('useFlowList 贴底', () => {
     await nextFrames()
     await harness.render(createElement(List, { rows: rowsOf(12), landing: null }))
     await resize()
-    expect(scroller().scrollTop).toBe(900)
+    expect(topOf('r11')).toBe(200)
 
     await scrollTo(400)
     expect(events.atBottom.at(-1)).toBe(false)
@@ -135,7 +135,7 @@ describe('useFlowList 贴底', () => {
     await nextFrames()
     await harness.render(createElement(List, { rows: rowsOf(12), landing: null, followTail: false }))
     await resize()
-    expect(scroller().scrollTop).toBe(700)
+    expect(scroller().scrollTop).toBe(300)
   })
 })
 
@@ -150,6 +150,7 @@ describe('useFlowList 头部插行', () => {
     expect(topOf('r3')).toBe(-20)
 
     // 阳性对照:顶在 0 时接一页,不纠正就会停在新插进来的最早一条上。
+    await scrollTo(0)
     await scrollTo(0)
     const before = topOf('old0')
     await harness.render(createElement(List, { rows: [...rowsOf(3, 80, 'older'), ...rowsOf(5, 120, 'old'), ...rows], landing: null }))
@@ -193,14 +194,52 @@ describe('useFlowList 句柄与回调', () => {
     expect(rects.mock.calls.length + height.mock.calls.length + top.mock.calls.length, 'layout reads inside the scroll event').toBe(0)
     await act(async () => { await new Promise((resolve) => requestAnimationFrame(() => setTimeout(resolve))) })
     expect(events.atBottom.at(-1)).toBe(false)
-    expect(events.startReached).toBe(1)
+    expect(events.startReached).toBe(0)
   })
   it('滚到离顶 120px 以内就报到顶(交给调用方翻页)', async () => {
     await harness.render(createElement(List, { rows: rowsOf(20), landing: { index: 'LAST', align: 'end' } }))
     await nextFrames()
+    while (rendered()[0] !== 'r0') await scrollTo(0)
+    events.startReached = 0
     await scrollTo(500)
     expect(events.startReached).toBe(0)
     await scrollTo(100)
     expect(events.startReached).toBe(1)
+  })
+})
+
+
+describe('grow-only mounted window', () => {
+  it('grows at local edges without evicting mounted rows or paginating before the real head', async () => {
+    await harness.render(createElement(List, { rows: rowsOf(120), landing: { index: 'LAST', align: 'end' } }))
+    await nextFrames()
+    const tail = harness.container.querySelector('[data-id="r119"]')
+    expect(rendered()).toHaveLength(6)
+    await scrollTo(0)
+    expect(rendered().length).toBeGreaterThan(6)
+    expect(rendered().length).toBeLessThan(120)
+    expect(events.startReached).toBe(0)
+    expect(harness.container.querySelector('[data-id="r119"]')).toBe(tail)
+    expect(topOf('r117')).toBe(300)
+  })
+  it('does not label a middle slice as the global tail and grows newer rows when reaching its bottom', async () => {
+    await harness.render(createElement(List, { rows: rowsOf(120), landing: { index: 50, align: 'start' } }))
+    expect(events.atBottom).toEqual([false])
+    const before = rendered()
+    await scrollTo(1e6)
+    expect(events.atBottom.every(value => !value)).toBe(true)
+    expect(rendered().length).toBeGreaterThan(before.length)
+    expect(rendered()).toEqual(expect.arrayContaining(before))
+    expect(rendered()).not.toContain('r119')
+  })
+  it('keeps the mounted tail through full-window head trimming and follows new retained rows', async () => {
+    await harness.render(createElement(List, { rows: rowsOf(120), landing: { index: 'LAST', align: 'end' } }))
+    const kept = harness.container.querySelector('[data-id="r114"]')
+    await harness.render(createElement(List, { rows: rowsOf(124).slice(4), landing: null }))
+    await resize()
+    expect(rendered()).toEqual(rowsOf(10).map((_, i) => `r${114+i}`))
+    expect(harness.container.querySelector('[data-id="r114"]')).toBe(kept)
+    expect(topOf('r123')).toBe(200)
+    expect(events.atBottom.at(-1)).toBe(true)
   })
 })
