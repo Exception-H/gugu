@@ -667,7 +667,7 @@ async function applyContext(ctx) {
       await refreshList(!restored)
       if (restored && Number.isFinite(restored.scrollTop)) $('file-list').scrollTop = restored.scrollTop
     }
-  }
+  } else if (restored && inWorkspace() && !ctx.file) void listDownTo(state.folder ?? '')
   // The host hands this page a file when it picked this App for it (真源 §2.6: a click goes to the host,
   // which picks the most specific claim; .md and plain .json are this App's). The host's header then has
   // the way back, so this page's own Back is not drawn; going back takes the file away again.
@@ -749,7 +749,7 @@ function renderChrome() {
 // while it is on its way goes over it again when it is back: the list may be from before (#7257).
 async function refreshList(readPreferences = false) {
   if (!state.root || !canRead()) return showList()
-  if (inWorkspace()) return listFolder(state.folder ?? '', true)
+  if (inWorkspace()) return listDownTo(state.folder ?? '')
   const asked = (state.listing = { heard: [] })
   let entries
   let listError = null
@@ -777,6 +777,13 @@ async function refreshList(readPreferences = false) {
  * One folder of the working copy ('' the top), as the file panel has it: what is directly in it, into the list beside the
  * folders read before — a folder of ten thousand files is never read whole. `again`: read it anew.
  */
+// A folder named from outside (a path, a page restored): those above it first, whose rows its trail is drawn from.
+async function listDownTo(folder) {
+  const parts = folder ? folder.split('/') : []
+  for (let depth = 0; depth < parts.length; depth++) await listFolder(parts.slice(0, depth).join('/'))
+  return listFolder(folder, true)
+}
+
 async function listFolder(folder, again = false) {
   if (!inWorkspace() || (!again && state.listed.has(folder))) return showList()
   const workspace = state.ctx.workspace.id
@@ -929,8 +936,10 @@ function renderList() {
   const t = state.t
   const list = $('file-list')
   const empty = $('files-empty')
-  // The folder on screen is gone (deleted, or no longer seen): back to the top.
-  if (state.folder && !state.entries.some((e) => e.id === state.folder)) state.folder = null
+  // The folder on screen is gone (deleted, or no longer seen): back to the top. A working copy's may not have been reached
+  // yet: only the list of the one above says.
+  const heardOf = !inWorkspace() || state.listed.has(state.folder?.includes('/') ? state.folder.slice(0, state.folder.lastIndexOf('/')) : '')
+  if (state.folder && heardOf && !state.entries.some((e) => e.id === state.folder)) state.folder = null
   renderCrumbs()
   if (!state.root) return renderRoots()
   const needle = state.filter.trim().toLocaleLowerCase()
