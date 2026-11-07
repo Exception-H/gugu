@@ -262,3 +262,14 @@ it('starts the same filled slice when rows arrive after an initially empty loadi
   expect(rendered()).toHaveLength(6)
   expect(topOf('r119')).toBe(200)
 })
+
+it('clamps a stale landing beyond rows arriving after an empty loading render', async () => {
+  const landing: ListLanding = { index: 10, align: 'start' }
+  await harness.render(createElement(List, { rows: [], landing }))
+  await nextFrames()
+  await harness.render(createElement(List, { rows: rowsOf(3), landing }))
+  await nextFrames()
+  expect(rendered()).toEqual(['r0', 'r1', 'r2'])
+  expect(topOf('r2')).toBe(200)
+  expect(events.atBottom.at(-1)).toBe(true)
+})

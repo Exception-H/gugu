@@ -51,7 +51,7 @@ type Slice = { key: string | number | undefined; fromId: string | undefined; toI
 // 首帧那一段:最新处 = 最后几行;锚点 = 它上面一行起往下几行。toId 为空 = 一直到末尾(新消息照常接上)。
 function firstSlice(key: Slice['key'], landing: ListLanding, ids: ReadonlyArray<string>): Slice {
   if (landing.index === 'LAST') return { key, fromId: ids[Math.max(0, ids.length - FIRST_FRAME_ROWS)], toId: undefined }
-  return { key, fromId: ids[Math.max(0, landing.index - 1)], toId: landing.index + FIRST_FRAME_ROWS >= ids.length - 1 ? undefined : ids[landing.index + FIRST_FRAME_ROWS] }
+  return { key, fromId: ids[Math.min(ids.length - 1, Math.max(0, landing.index - 1))], toId: landing.index + FIRST_FRAME_ROWS >= ids.length - 1 ? undefined : ids[landing.index + FIRST_FRAME_ROWS] }
 }
 
 export function useFlowList({ scrollerRef, contentRef, resetKey, rowIds, landing, followTail, atBottomThreshold, onAtBottomChange, onTotalHeightChanged, onStartReached, handleRef }: {
