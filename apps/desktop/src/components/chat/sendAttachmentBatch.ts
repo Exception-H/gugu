@@ -56,8 +56,6 @@ export async function placeholderRow(file: File, caption: string | undefined, ar
     } catch { /* A local decoder need not support every uploadable image format. */ }
   }
   const previewUrl = URL.createObjectURL(file)
-  // Kept by content while it uploads, so the committed row draws these bytes instead of downloading them again.
-  if (inferAttachmentKind(file) === 'image') void keepSentAttachment(file).catch((error) => rendererLogger('chat/send').error({ error: String(error) }, 'sent image local copy not kept'))
   const message: MessageItem = {
     id: crypto.randomUUID(),
     chat_id: args.chatId,
@@ -126,6 +124,8 @@ export async function sendAttachmentBatch(args: {
     for (; index < args.files.length; index++) {
       const file = args.files[index], row = placeholders[index]
       const prepared = await uploads[index]
+      // Uploaded bytes are kept by content before the commit, so the committed row draws them instead of downloading them again.
+      if (inferAttachmentKind(file) === 'image') void keepSentAttachment(file).catch((error) => rendererLogger('chat/send').error({ error: String(error) }, 'sent image local copy not kept'))
       await args.outbox.commitAttachment(row.message, prepared, {
         message_id: row.message.id, chat_id: args.chatId, sender_user_id: args.senderId,
         file_name: file.name || 'file', content_type: resolveFileMimeType(file), to_user_ids: args.toUserIds ?? [],
