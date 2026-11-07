@@ -20,7 +20,7 @@ import {
   trimAfterResultForTransport,
   trimOlderForTransport,
   trimSnapshotForTransport,
-} from '@gugu/session-core/session-record';
+} from '../../../../../../../packages/session-core/src/session-record/transport-trim';
 import { events } from '@main/lib/events';
 import {
   sessionpageSessionListChannel,
@@ -68,10 +68,17 @@ export function releaseSubscriptionsOf(sender: number): void {
  * ❌ 订成之后才记 —— 那时线可能已经死了,这条订阅就再也没人拆。
  */
 async function owning<T extends { ok: boolean }>(sender: number, kind: 'timeline' | 'sessions', id: string, start: () => Promise<T>): Promise<T> {
+  const existing = ownedBy(sender)[kind].has(id);
   ownedBy(sender)[kind].add(id);
   const result = await start();
-  if (!result.ok) owned.get(sender)?.[kind].delete(id);
+  if (!result.ok && !existing) owned.get(sender)?.[kind].delete(id);
   return result;
+}
+
+function openingOwned<T extends { ok: boolean }>(sender: number, id: string, start: () => Promise<T>) {
+  for (const [owner, entry] of owned) if (owner !== sender && entry.timeline.has(id))
+    return Promise.resolve({ ok: false as const, error: { code: 'invalid_subscription', message: 'Subscription belongs to another connection' } });
+  return owning(sender, 'timeline', id, start);
 }
 
 function trimmed<T>(result: service.SessionTimelineResult<T>, trim: boolean | undefined, cut: (value: T) => T) {
@@ -105,12 +112,17 @@ export const sessionTimelineController = createRPCController({
   sessionNativeAttachment: service.nativeAttachment,
   sessionReadState: (input: { conversationId: string }) => ({ unreadKeys: nativeConversationUnread(input.conversationId), ownerNotificationUnreadKeys: nativeOwnerNotificationUnread(input.conversationId) }),
   sessionVisible: (input: { conversationId: string; itemIds: string[] }) => ({ unreadKeys: markNativeConversationVisible(input.conversationId, input.itemIds) }),
+  sessionWindowPrepare: withSender(async (sender: number, input: { conversationId: string; subscriptionId: string }) => {
+    const result = await openingOwned(sender, input.subscriptionId, () => service.windowPrepare(input));
+    if (result.ok && result.value.source === 'legacy') owned.get(sender)?.timeline.delete(input.subscriptionId);
+    return result;
+  }),
   sessionWindowSnapshot: (input: SessionpageSessionSnapshotRequest) => service.windowSnapshot(input),
   sessionWindowAfter: (input: SessionpageSessionAfterRequest) => service.windowAfter(input),
   sessionWindowOlder: (input: SessionpageSessionOlderRequest) => service.windowOlder(input),
   sessionBody: (input: SessionpageSessionBodyReadRequest) => service.body(input),
   sessionWindowSubscribe: withSender(async (sender: number, input: SessionpageSessionSubscribeRequest) =>
-    owning(sender, 'timeline', input.subscriptionId, () => service.windowSubscribe(input, event =>
+    openingOwned(sender, input.subscriptionId, () => service.windowSubscribe(input, event =>
       events.emit(sessionpageSessionTimelineChannel, event, input.subscriptionId), status =>
       events.emit(sessionpageSessionWindowStatusChannel, status, input.subscriptionId)))),
   sessionSnapshot: async (input: SessionpageSessionSnapshotRequest) =>

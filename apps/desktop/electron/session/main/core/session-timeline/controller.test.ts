@@ -1,5 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
+vi.mock('./turn-files', () => ({ prefetchFiles: vi.fn() }));
+
 vi.mock('../sessions/session-conversation-read', () => ({
   markNativeConversationVisible: vi.fn(), nativeConversationUnread: () => [], nativeOwnerNotificationUnread: () => [],
 }));
@@ -28,6 +30,7 @@ vi.mock('./create-session', () => ({
 }));
 vi.mock('./service', () => ({
   nativeRecord: vi.fn(), nativeToolImage: vi.fn(), nativeAttachment: vi.fn(),
+  windowPrepare: async () => { if (state.gate) await state.gate; return { ok: true, value: { source: 'window' } }; },
   snapshot: async () => ({ ok: true, value: { cursor: { epoch: 'e', seq: 1 }, turns: [turnWith(HUGE)], settlements: [], hasOlder: false } }),
   subscribe: async (input: { subscriptionId: string }, emit: (event: unknown) => void) => {
     state.pushes.set(input.subscriptionId, emit);
@@ -76,6 +79,16 @@ beforeEach(() => {
 });
 
 describe('会话时间线路由(本机窗口、别的电脑、手机同一张)', () => {
+  it('owns a pending window preparation before its ACK and refuses another connection using that UUID', async () => {
+    let release!: () => void;
+    state.gate = new Promise<void>(yes => { release = yes; });
+    const opening = call(801, 'sessionWindowPrepare', { conversationId: 's', subscriptionId: 'prepared' });
+    await expect(call(802, 'sessionWindowSubscribe', { conversationId: 's', subscriptionId: 'prepared', cursor: null }))
+      .resolves.toMatchObject({ ok: false, error: { code: 'invalid_subscription' } });
+    releaseSubscriptionsOf(801);
+    expect(state.unsubscribe).toHaveBeenCalledWith('prepared');
+    release(); await opening;
+  });
   it('routes window failures only through the typed status channel and subscription topic', async () => {
     await call(799, 'sessionWindowSubscribe', { conversationId: 'window-session', subscriptionId: 'window-generation', cursor: null });
     const status = { conversationId: 'window-session', subscriptionId: 'window-generation', state: 'failed',

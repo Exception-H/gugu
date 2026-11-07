@@ -70,7 +70,8 @@ export function createDesktopWindowReader(io: DesktopWindowIo) {
     return value;
   }
   async function subscribe(input: SessionpageSessionSubscribeRequest, emit: (event: SessionpageSessionEvent) => void,
-    failed: (status: SessionpageSessionWindowStatusEvent) => void, signal?: AbortSignal): Promise<() => void> {
+    failed: (status: SessionpageSessionWindowStatusEvent) => void, signal?: AbortSignal,
+    opening?: () => void): Promise<() => void> {
     const abort = new AbortController();
     let cursor = input.cursor, running = false, dirty = false, stopped = false;
     let stopWatch: (() => void) | undefined;
@@ -96,6 +97,8 @@ export function createDesktopWindowReader(io: DesktopWindowIo) {
           initialRequest = undefined;
           const value = await readWindowSnapshot(request);
           if (stopped) return;
+          opening?.();
+          if (!value.pendingLongRecords?.length) opening = undefined;
           const result = afterPage(value, cursor);
           cursor = value.cursor;
           emit({ subscriptionId: input.subscriptionId, result });
@@ -105,9 +108,11 @@ export function createDesktopWindowReader(io: DesktopWindowIo) {
     };
     try {
       abort.signal.throwIfAborted();
+      opening?.();
       const request = await io.request(input.conversationId, undefined, abort.signal);
       initialRequest = request;
       stopWatch = await io.watch(input.conversationId, () => { void pump(); }, request, fail);
+      opening?.();
       if (stopped) { stopWatch(); io.finish?.(request); }
       else void pump();
       return stop;

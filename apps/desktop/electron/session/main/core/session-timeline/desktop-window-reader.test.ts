@@ -24,6 +24,29 @@ function setup() {
 }
 
 describe('desktop bounded window bridge', () => {
+  it('checks the stopped runtime proof after a deferred first page and rejects ABA before publication', async () => {
+    const { reader, io, value, stopped } = setup();
+    let version = 0, release!: (page: WindowPage) => void;
+    vi.mocked(io.openRecent).mockImplementationOnce(() => new Promise(yes => { release = yes; }));
+    const emit = vi.fn(), failed = vi.fn();
+    await reader.subscribe({ conversationId: 'session', subscriptionId: 'opening', cursor: null }, emit, failed, undefined,
+      () => { if (version !== 0) throw Object.assign(new Error('Stopped session changed'), { code: 'scope_changed' }); });
+    await vi.waitFor(() => expect(io.openRecent).toHaveBeenCalledOnce());
+    version += 2; release(value);
+    await vi.waitFor(() => expect(failed).toHaveBeenCalledOnce());
+    expect(failed.mock.calls[0][0].error.code).toBe('scope_changed');
+    expect(emit).not.toHaveBeenCalled(); expect(stopped).toHaveBeenCalledOnce();
+  });
+  it('releases the setup watcher when the stopped proof changes while source EOF is being pinned', async () => {
+    const { reader, io, stopped } = setup(); let valid = true;
+    vi.mocked(io.watch).mockImplementationOnce(async () => { valid = false; return stopped; });
+    const emit = vi.fn(), failed = vi.fn();
+    await expect(reader.subscribe({ conversationId: 'session', subscriptionId: 'pin-race', cursor: null }, emit, failed, undefined,
+      () => { if (!valid) throw Object.assign(new Error('Stopped session changed'), { code: 'scope_changed' }); }))
+      .rejects.toMatchObject({ code: 'scope_changed' });
+    expect(stopped).toHaveBeenCalledOnce(); expect(io.openRecent).not.toHaveBeenCalled();
+    expect(emit).not.toHaveBeenCalled(); expect(failed).not.toHaveBeenCalled();
+  });
   it('preserves pending state and never reports an unknown prefix as complete', async () => {
     const { reader, io, value } = setup();
     const snapshot = await reader.snapshot({ conversationId: 'session' });
