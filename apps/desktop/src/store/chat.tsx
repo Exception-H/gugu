@@ -265,11 +265,7 @@ export function ChatProvider({ children, active = true }: { children: React.Reac
     }
   }, [cache, userId, getImRepository, subscribeAccountRevision, chatsRef])
 
-  const { epochOf: getMessageSnapshotEpoch, bump: bumpEpoch } = useMessageSnapshotEpochs()
-  const bumpMessageSnapshotEpoch = useCallback((chatId: string) => {
-    unreadNavigationRef.current?.dropUnreadEntry(chatId)
-    return bumpEpoch(chatId)
-  }, [bumpEpoch])
+  const { epochOf: getMessageSnapshotEpoch, bump: bumpMessageSnapshotEpoch } = useMessageSnapshotEpochs((id) => unreadNavigationRef.current?.dropUnreadEntry(id))
 
   const invalidateMessageSnapshots = useCallback((chatId: string): number => {
     const next = bumpMessageSnapshotEpoch(chatId)
