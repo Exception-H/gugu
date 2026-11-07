@@ -168,8 +168,8 @@ export function GlobalSearch({ tasks, names = false, onClose, onOpen }: { tasks:
               className="grid h-5 w-5 place-items-center rounded text-foreground/40 hover:bg-foreground/10 hover:text-foreground"><X className="h-3 w-3" /></button>
           </span>
         ))}
-        <input ref={inputRef} autoFocus enterKeyHint="search" value={composition ?? text} data-testid="global-search-input" aria-label={translate('globalSearch.placeholder')}
-          placeholder={translate(chips.length ? 'globalSearch.placeholderScoped' : 'globalSearch.placeholder')}
+        <input ref={inputRef} autoFocus enterKeyHint="search" value={composition ?? text} data-testid="global-search-input" aria-label={translate(names ? 'globalSearch.placeholderNames' : 'globalSearch.placeholder')}
+          placeholder={translate(chips.length ? 'globalSearch.placeholderScoped' : names ? 'globalSearch.placeholderNames' : 'globalSearch.placeholder')}
           className="h-full min-w-24 flex-1 bg-transparent text-[length:var(--font-title)] outline-none placeholder:text-foreground/35"
           onCompositionStart={(event) => setComposition(event.currentTarget.value)}
           onCompositionEnd={(event) => { setComposition(null); updateSearchSession({ text: event.currentTarget.value, selectedId: null }) }}
