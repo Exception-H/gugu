@@ -167,7 +167,9 @@ export async function readWorkingCopy(place: WorkspacePlace, file: string, offse
   const { readWorkspaceChunk, WorkspaceTransferError } = await import('@main/core/files/workspace-transfer');
   const found = await fileRootOf(place, file);
   try {
-    const chunk = await readWorkspaceChunk(found.root, { path: found.path, offset, length: Math.min(length, REMOTE_WORKSPACE_CHUNK_BYTES) });
+    // Named absolute, it is read where it is, a link followed: who may name one was decided where the page is.
+    const named = path.isAbsolute(file) ? file : found.path;
+    const chunk = await readWorkspaceChunk(found.root, { path: named, offset, length: Math.min(length, REMOTE_WORKSPACE_CHUNK_BYTES) }, 'machine');
     return { size: chunk.size, etag: chunk.etag, offset: chunk.offset, data: chunk.data };
   } catch (error) {
     if (error instanceof WorkspaceTransferError) throw new AppFileError(error.code === 'not_a_file' ? 'invalid' : 'not-found', error.message);

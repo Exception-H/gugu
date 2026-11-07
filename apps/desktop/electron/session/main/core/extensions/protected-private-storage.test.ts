@@ -65,6 +65,9 @@ it('refuses App chunk reads and workspace transfers of private bytes and missing
   const relative = path.relative(root, secret);
   await expect(readWorkingCopy(surface.place, relative, 0, 100)).rejects.toThrow(PROTECTED);
   await expect(readWorkspaceChunk(root, { path: relative, offset: 0, length: 100 })).rejects.toThrow(PROTECTED);
+  // A read anywhere on the machine (a file outside the project opened read-only) still never reaches private storage.
+  await expect(readWorkspaceChunk(root, { path: secret, offset: 0, length: 100 }, 'machine')).rejects.toThrow(PROTECTED);
+  await expect(readWorkingCopy(surface.place, secret, 0, 100)).rejects.toThrow(PROTECTED);
   const flag = path.join(privatePasswordVaultDirectory(), 'switch.json');
   const uploads = createWorkspaceUploads();
   await expect(uploads.write(root, { path: path.relative(root, flag), uploadId: 'private', offset: 0,

@@ -35,6 +35,30 @@ describe('路径只能落在这个工作区里', () => {
   });
 });
 
+describe('读这台机器上工作区外的文件(只读)', () => {
+  it('人点名的绝对路径在工作区外也读得到,链接照常跟过去', async () => {
+    const outside = path.join(base, 'notes.md');
+    writeFileSync(outside, 'outside');
+    symlinkSync(outside, path.join(base, 'link.md'));
+    for (const named of [outside, path.join(base, 'link.md')]) {
+      const chunk = await readWorkspaceChunk(root, { path: named, offset: 0, length: 100 }, 'machine');
+      expect(Buffer.from(chunk.data, 'base64').toString()).toBe('outside');
+    }
+  });
+
+  it('只放宽读:工作区相对路径、默认的读和写照旧关在工作区里', async () => {
+    writeFileSync(path.join(base, 'secret.txt'), 'x');
+    symlinkSync(path.join(base, 'secret.txt'), path.join(root, 'link.txt'));
+    await expect(readWorkspaceChunk(root, { path: '../secret.txt', offset: 0, length: 1 }, 'machine')).rejects.toMatchObject({ code: 'outside_workspace' });
+    await expect(readWorkspaceChunk(root, { path: 'link.txt', offset: 0, length: 1 }, 'machine')).rejects.toMatchObject({ code: 'outside_workspace' });
+    await expect(readWorkspaceChunk(root, { path: path.join(base, 'secret.txt'), offset: 0, length: 1 })).rejects.toMatchObject({ code: 'outside_workspace' });
+    const uploads = createWorkspaceUploads();
+    await expect(uploads.write(root, { path: path.join(base, 'written.txt'), uploadId: 'w', offset: 0, data: b64('x'), total: 1, final: true, expectedEtag: null }))
+      .rejects.toMatchObject({ code: 'outside_workspace' });
+    expect(readdirSync(base).includes('written.txt')).toBe(false);
+  });
+});
+
 describe('按块读', () => {
   it('读一段,带版本号;越过末尾是空串', async () => {
     writeFileSync(path.join(root, 'a.txt'), 'hello world');
