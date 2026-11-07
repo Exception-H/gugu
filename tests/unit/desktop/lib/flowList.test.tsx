@@ -233,6 +233,18 @@ describe('grow-only mounted window', () => {
     expect(rendered()).toEqual(expect.arrayContaining(before))
     expect(rendered()).not.toContain('r119')
   })
+  it('keeps the reader and the retained rows when a 120→40 head crop removes the slice start', async () => {
+    await harness.render(createElement(List, { rows: rowsOf(120), landing: { index: 'LAST', align: 'end' }, followTail: false }))
+    for (let i = 0; i < 6 && !rendered().includes('r78'); i += 1) await scrollTo(0)
+    const kept = harness.container.querySelector('[data-id="r100"]')
+    const top = topOf('r100')
+    await harness.render(createElement(List, { rows: rowsOf(120).slice(80), landing: null, followTail: false }))
+    await resize()
+    expect(rendered()).toEqual(rowsOf(120).slice(80).map((row) => row.id))
+    expect(harness.container.querySelector('[data-id="r100"]')).toBe(kept)
+    expect(topOf('r100')).toBe(top)
+    expect(events.startReached).toBe(0)
+  })
   it('keeps the mounted tail through full-window head trimming and follows new retained rows', async () => {
     await harness.render(createElement(List, { rows: rowsOf(120), landing: { index: 'LAST', align: 'end' } }))
     const kept = harness.container.querySelector('[data-id="r114"]')
