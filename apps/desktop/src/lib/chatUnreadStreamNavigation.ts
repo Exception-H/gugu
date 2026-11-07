@@ -52,6 +52,16 @@ export function useChatUnreadStreamNavigation(deps: Deps) {
     })
   }, [])
 
+  // A new snapshot epoch replaces the window an entry was captured against. Dropping it is a state change, so memoized
+  // readers of entryFor refresh too; the epoch check in entryFor alone is only seen by whoever happens to render next.
+  const dropUnreadEntry = useCallback((chatId: string) => {
+    setUnreadEntries((previous) => {
+      if (!(chatId in previous)) return previous
+      const { [chatId]: _dropped, ...remaining } = previous
+      return remaining
+    })
+  }, [])
+
   const settleChatOpen = useCallback((chatId: string, error?: Error) => {
     const waiters = chatOpenWaitersRef.current.get(chatId)
     if (!waiters) return
@@ -203,7 +213,7 @@ export function useChatUnreadStreamNavigation(deps: Deps) {
     ownsChat,
     ownsThread,
     openStreamAtLocator,
-    openUnreadChat, unreadEntry: entry, entryFor, jumpToUnreadEntry,
+    openUnreadChat, unreadEntry: entry, entryFor, jumpToUnreadEntry, dropUnreadEntry,
     beginChatOpen,
     finishChatOpen,
     cancelChatOpen,
