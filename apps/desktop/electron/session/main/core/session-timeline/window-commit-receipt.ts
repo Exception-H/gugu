@@ -51,6 +51,11 @@ function decode(row: unknown): WindowCommitReceipt | null {
   return JSON.parse(normalized) as WindowCommitReceipt;
 }
 
+/** A bounded scalar snapshot for asynchronous projection jobs, never a turn. */
+export function snapshotWindowCommitReceipt(input: WindowCommitReceipt): WindowCommitReceipt {
+  return JSON.parse(encode(input)) as WindowCommitReceipt;
+}
+
 /** Caller inserts/updates the canonical row and calls put in that very same transaction.
  * This is a raw-source receipt, not yet an ACKable projection/reference. */
 export function createWindowCommitReceipts(connection: WindowReceiptDatabase) {
