@@ -356,6 +356,22 @@ describe('reveal and Open in, to a program of this computer', () => {
   });
 });
 
+describe('reading a file outside the working copy', () => {
+  it('a page, or the agent working it, reads no absolute path it was not handed; the handed one reads, through a link too', async () => {
+    f.capabilities.add('files:read');
+    const file = path.join(outside, 'notes.md');
+    fs.writeFileSync(file, 'outside');
+    fs.symlinkSync(file, path.join(outside, 'link.md'));
+    const agentPage = { pageId: 7, extensionId: 'reader', handed: null, asAgent: 'agent-of-someone' } as never;
+    for (const named of [file, path.join(outside, 'link.md')]) {
+      await expect(readAppFileText(page(), { ref: { workspace, id: named } })).rejects.toThrow(DENIED);
+      await expect(readAppFileText(agentPage, { ref: { workspace, id: named } })).rejects.toThrow(DENIED);
+      const handed = { pageId: 7, extensionId: 'reader', handed: { workspace, id: named } } as never;
+      expect((await readAppFileText(handed, { ref: { workspace, id: named } })).content).toBe('outside');
+    }
+  });
+});
+
 describe('saving a file', () => {
   it('a file outside the working copy, handed to the page, saves with no capability', async () => {
     const file = path.join(outside, 'mine.txt');
