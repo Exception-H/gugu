@@ -17,7 +17,7 @@ export function fileTabTarget(path: string, external?: boolean): { kind: string;
 
 /** The folder App's list, at one folder of the working copy, in the tab asked from (or the tab that shows the list already). */
 export const FOLDER_APP_LIST_TAB = 'workspace.main';
-type FolderTabLayout = { open(kind: string, args: Record<string, unknown>, config: { from: string | null; intent: 'navigate'; viewState: Record<string, unknown> }): string | undefined };
+type FolderTabLayout = { open(kind: string, args: Record<string, unknown>, config: { from: string | null; intent: 'navigate'; inPlace: true; viewState: Record<string, unknown> }): string | undefined };
 export function openFolderInTab(layout: FolderTabLayout, from: string | null, folder: string): void {
-  layout.open(FOLDER_APP_LIST_TAB, {}, { from, intent: 'navigate', viewState: { root: 'workspace', folder } });
+  layout.open(FOLDER_APP_LIST_TAB, {}, { from, intent: 'navigate', inPlace: true, viewState: { root: 'workspace', folder } });
 }

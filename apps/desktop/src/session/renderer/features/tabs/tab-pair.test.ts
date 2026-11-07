@@ -121,16 +121,21 @@ describe('every side-by-side entry ends in one strip with one pair', () => {
     expectOneStrip(layout);
   });
 
-  it('a click inside a page navigates that tab, though the page it asks for was last closed beside', () => {
+  it("a folder in a file's path stays in that tab, though it was last closed beside; any other page stays beside", () => {
     const memory = new Map<string, 'separate' | 'beside'>();
     const { layout, open } = setup({ read: (id) => memory.get(id), write: (id, placement) => void memory.set(id, placement) });
     const folder = open('src', undefined, 'navigate', 'folder');
     close(layout, folder);
     expect([...memory.values()]).toEqual(['beside']);
     const file = open('a.ts');
-    expect(open('src', file, 'navigate', 'folder')).toBe(file);
+    expect(layout.open('folder', { path: 'src' }, { from: file, intent: 'navigate', inPlace: true })).toBe(file);
     expect(paths(layout)).toEqual(['conversation', 'src']);
     expectOneStrip(layout);
+    // Control (owner 11-03): beside stays beside for a page asked for without `inPlace`.
+    memory.set([...memory.keys()][0]!.replace('src', 'other'), 'beside');
+    const other = open('other', file, 'navigate', 'folder');
+    expect(other).not.toBe(file);
+    expect(layout.pair?.side).toBe(other);
   });
 
   it('a page opened at a place keeps it, on the page it opened and not the one left', () => {

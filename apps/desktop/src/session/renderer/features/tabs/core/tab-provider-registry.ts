@@ -50,6 +50,8 @@ export type TabOpenArgs<R extends TabRegistry> = {
 export interface TabOpenOptions {
   /** Where the page shows once open (`TabPageSnapshot.viewState`). */
   viewState?: Record<string, unknown>;
+  /** Asked from inside a page, for a place of that tab's own: `beside` remembered does not move it. */
+  inPlace?: boolean;
   /** Trusted source context; null only for an explicit root open. */
   from: string | null;
   intent?: TabOpenIntent;
