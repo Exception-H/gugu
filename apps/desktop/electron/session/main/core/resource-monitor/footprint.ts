@@ -3,7 +3,7 @@ import { readFile } from 'node:fs/promises';
 /**
  * Memory a process alone accounts for, so per-process numbers add up: macOS phys_footprint (through the bundled native
  * helper, `process.footprint`), Linux anonymous resident + swap from /proc. Summing RSS instead counts every shared page
- * once per process — on mac1 (11-07) 1542 MB of RSS for 665 MB of footprint. Windows and a Mac without the helper
+ * once per process — on macOS (11-07) 1542 MB of RSS for 665 MB of footprint. Windows and a Mac without the helper
  * (an uncompiled dev checkout) have no reader and keep RSS, labelled as such.
  */
 export type FootprintReader = (pids: number[]) => Promise<Map<number, number>>;

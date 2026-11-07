@@ -11,6 +11,7 @@ const append = vi.fn();
 const ownershipRoots = vi.fn();
 const processRows = vi.fn();
 const activePtys = vi.fn();
+const readTotals = vi.fn();
 const appEvents = new EventEmitter();
 vi.mock('electron', () => ({
   app: {
@@ -34,7 +35,7 @@ vi.mock('../acp/runtime-process/resource-roots', () => ({ collectAcpResourceRoot
 vi.mock('./owned-processes', () => ({ listResourceProcesses: () => processRows(), collectLedgerResourceRoots: async () => [] }));
 vi.mock('./footprint', () => ({ footprintReader: () => null }));
 vi.mock('./page-metrics', () => ({
-  readPageTotals: async () => ({ at: 0, frameKey: '', longFrames: 0, blockingMs: 0, slowInteractions: 0 }),
+  readPageTotals: (...args: unknown[]) => readTotals(...args),
   pageMetricsSince: () => undefined, commitPageTotals: vi.fn(), stopPageCounters: vi.fn(),
 }));
 
@@ -52,6 +53,7 @@ beforeEach(() => {
   ownershipRoots.mockResolvedValue([]);
   processRows.mockResolvedValue([]);
   activePtys.mockReturnValue([]);
+  readTotals.mockResolvedValue({ at: 0, frameKey: '', longFrames: 0, blockingMs: 0, slowInteractions: 0 });
   vi.useFakeTimers();
   vi.setSystemTime(0);
 });
@@ -349,5 +351,23 @@ describe('page-scoped advanced diagnostics', () => {
     await vi.advanceTimersByTimeAsync(3000);
     expect(metrics).toHaveBeenCalled();
     expect(append.mock.calls.some(([snapshot]) => 'internals' in (snapshot as object))).toBe(false);
+  });
+});
+
+describe('resource sampler page counters', () => {
+  it('reads the counters while sampling, and not for a sample still running when monitoring stops', async () => {
+    settings.mockResolvedValue({ enabled: true, pageCounters: true });
+    const { startResourceSampler, stopResourceSampler } = await import('./resource-sampler');
+    startResourceSampler();
+    await vi.advanceTimersByTimeAsync(11_000);
+    expect(readTotals).toHaveBeenLastCalledWith([], true); // Positive control: a running sampler reads them.
+    let renderers!: (value: unknown[]) => void;
+    collect.mockImplementationOnce(() => new Promise((resolve) => { renderers = resolve; }));
+    await vi.advanceTimersByTimeAsync(10_000);
+    expect(renderers).toBeDefined();
+    stopResourceSampler();
+    renderers([]);
+    await vi.advanceTimersByTimeAsync(0);
+    expect(readTotals).toHaveBeenLastCalledWith([], false);
   });
 });

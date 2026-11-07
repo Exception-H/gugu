@@ -142,7 +142,8 @@ async function completeSnapshot(
     collectRendererMetrics(),
     appSettingsService.get('resourceMonitor').then((settings) => settings.pageCounters, () => false),
   ]);
-  const totals = await readPageTotals(renderers, countersOn);
+  // Checked after the awaits: a sample still running when monitoring stops must not attach to the window again.
+  const totals = await readPageTotals(renderers, countersOn && timer !== null);
   const page = pageMetricsSince(totals);
   const snapshot: ResourceSnapshot = {
     timestamp: Date.now(),

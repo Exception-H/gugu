@@ -48,6 +48,7 @@ import { claimDeviceFreeCredits, readDeviceClaimStatus } from './device-free-cre
 import { createDeviceActionsRuntime, nativeComponentsDir, type DeviceActionsRuntime } from './device-actions/runtime'
 import { captureReading, currentReading, historyReading } from './session/main/core/resource-monitor/reading'
 import { setMacFootprintReader } from './session/main/core/resource-monitor/footprint'
+import { clearTraceLeftovers } from './session/main/core/resource-monitor/capture'
 import { sampleCuaImage } from './device-actions/native/cua-image-sample'
 import { createComputerControlWindow } from './device-actions/computer-control-window'
 import { computerControlWindowReaders } from './device-actions/computer-control-foreground'
@@ -2022,6 +2023,8 @@ if (process.platform === 'darwin') setMacFootprintReader(() => {
     return new Map(Object.entries(footprints).map(([pid, bytes]) => [Number(pid), bytes]))
   }
 })
+// A raw resource trace left by a crash mid-recording (it can hold full URLs) does not outlive the next start.
+void app.whenReady().then(clearTraceLeftovers).catch((error: unknown) => createLogger('resource-monitor').warn({ error }, 'could not clear trace leftovers'))
 
 function deviceActionsRuntime(): DeviceActionsRuntime {
   if (deviceActionsRuntimeInstance) return deviceActionsRuntimeInstance

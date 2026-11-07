@@ -1,7 +1,6 @@
-import { readFile, rm } from 'node:fs/promises';
-import os from 'node:os';
+import { mkdir, readFile, rm } from 'node:fs/promises';
 import path from 'node:path';
-import { contentTracing, webContents } from 'electron';
+import { app, contentTracing, webContents } from 'electron';
 import type { ResourceCapture, ResourceCaptureTask } from '@shared/resource-monitor';
 
 /**
@@ -24,16 +23,24 @@ export type TraceEvent = {
 
 let tracing = false;
 /**
- * Record `ms` of a Chromium trace and return its events; the raw trace goes to a temp file that is read once and deleted.
+ * Raw traces are browser-wide and can hold full URLs, so they go to the app's own folder, never the shared temp dir.
+ * A crash between stopping and deleting leaves one behind; startup clears the folder.
+ */
+const traceDir = () => path.join(app.getPath('userData'), 'resource-traces');
+export async function clearTraceLeftovers(): Promise<void> { await rm(traceDir(), { recursive: true, force: true }); }
+
+/**
+ * Record `ms` of a Chromium trace and return its events; the raw trace is read once and deleted.
  * One trace at a time for the whole app (this module's stretch and the deep sample's memory dump).
  */
 export async function recordTrace<E>(config: Parameters<typeof contentTracing.startRecording>[0], ms: number, name: string): Promise<E[]> {
   if (tracing) throw new Error('another recording is in progress');
   tracing = true;
   try {
+    await mkdir(traceDir(), { recursive: true, mode: 0o700 });
     await contentTracing.startRecording(config);
     await new Promise((resolve) => setTimeout(resolve, ms));
-    const written = await contentTracing.stopRecording(path.join(os.tmpdir(), `gugu-${name}-${process.pid}-${Date.now()}.json`));
+    const written = await contentTracing.stopRecording(path.join(traceDir(), `${name}-${process.pid}-${Date.now()}.json`));
     try {
       const trace = JSON.parse(await readFile(written, 'utf8')) as { traceEvents?: E[] } | E[];
       return Array.isArray(trace) ? trace : (trace.traceEvents ?? []);

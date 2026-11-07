@@ -8,7 +8,7 @@ import type { RendererMetrics } from '@shared/renderer-metrics';
  * interval out of the history:
  * - frame counters the main window keeps itself (long animation frames, slow interactions — src/lib/frameCounters.ts);
  * - Blink's own style/layout counters through the window's debugger (`Performance.getMetrics`), no port opened.
- *   Measured on mac1 (11-07, PR0): on a whole-page restyle workload the cost stayed inside the ±1% resolution of the
+ *   Measured on macOS (11-07): on a whole-page restyle workload the cost stayed inside the ±1% resolution of the
  *   measurement; idle it was ~2 M instructions per 45 s. Still switchable off in settings.
  */
 const PROTOCOL_VERSION = '1.3';
@@ -27,24 +27,35 @@ export interface PageTotals {
   countersUnavailable?: ResourcePageMetrics['countersUnavailable'];
 }
 
-const attached = new Map<number, WebContents>();
+/** Windows whose Performance domain this module enabled; `own` = this module attached the debugger and may detach it. */
+const attached = new Map<number, { contents: WebContents; own: boolean }>();
 let committed: PageTotals | null = null;
+/** Bumped on every detach, so a read still awaiting the debugger when monitoring or the counters stop never re-attaches. */
+let generation = 0;
 
 const isMainWindow = (contents: WebContents) => !contents.isDestroyed() && contents.getType() === 'window' && contents.getURL().startsWith('gugu-app://app/');
 
 async function attach(contents: WebContents): Promise<void> {
   if (attached.has(contents.id)) return;
-  if (!contents.debugger.isAttached()) contents.debugger.attach(PROTOCOL_VERSION);
-  await contents.debugger.sendCommand('Performance.enable', { timeDomain: 'timeTicks' });
-  attached.set(contents.id, contents);
+  const own = !contents.debugger.isAttached();
+  if (own) contents.debugger.attach(PROTOCOL_VERSION);
+  // Registered before the await: a detach while Performance.enable is pending undoes it too.
+  attached.set(contents.id, { contents, own });
   const forget = () => { attached.delete(contents.id); };
   contents.debugger.once('detach', forget);
   contents.once('destroyed', forget);
+  await contents.debugger.sendCommand('Performance.enable', { timeDomain: 'timeTicks' });
 }
 
 function detachAll(): void {
-  for (const contents of attached.values()) {
-    try { if (!contents.isDestroyed() && contents.debugger.isAttached()) contents.debugger.detach(); } catch { /* already gone */ }
+  generation += 1;
+  for (const { contents, own } of attached.values()) {
+    try {
+      if (contents.isDestroyed() || !contents.debugger.isAttached()) continue;
+      // Someone else's debugger (DevTools, another module) stays attached; only the domain this module enabled goes.
+      if (own) contents.debugger.detach();
+      else void contents.debugger.sendCommand('Performance.disable').catch(() => {});
+    } catch { /* already gone */ }
   }
   attached.clear();
 }
@@ -58,16 +69,19 @@ export function stopPageCounters(): void {
 async function readCounters(): Promise<Pick<PageTotals, 'counters' | 'counterKey' | 'countersUnavailable'>> {
   const windows = webContents.getAllWebContents().filter(isMainWindow);
   if (!windows.length) return { countersUnavailable: 'no-window' };
+  const started = generation;
   try {
     const sum = Object.fromEntries(COUNTERS.map((key) => [key, 0])) as Record<Counter, number>;
     for (const contents of windows) {
+      if (started !== generation) return { countersUnavailable: 'off' };
       await attach(contents);
+      if (started !== generation) return { countersUnavailable: 'off' };
       const { metrics } = await contents.debugger.sendCommand('Performance.getMetrics') as { metrics: { name: string; value: number }[] };
       for (const { name, value } of metrics) if ((COUNTERS as readonly string[]).includes(name)) sum[name as Counter] += value;
     }
     return { counters: sum, counterKey: windows.map((w) => `${w.id}:${w.getOSProcessId()}`).sort().join(',') };
   } catch {
-    return { countersUnavailable: 'failed' };
+    return { countersUnavailable: started === generation ? 'failed' : 'off' };
   }
 }
 

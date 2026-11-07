@@ -5,6 +5,7 @@
  * perf.capture 会录几秒主窗口的 trace(期间有开销),每次先问人。
  */
 import { fail, ok, type ActionDef, type ActionFamily, type Args } from '../catalog'
+import { CONFIRMED_PROP } from './calendar'
 
 const MONITOR_OFF = 'The resource monitor is off on this computer. Ask its owner to turn it on in 咕咕 → Settings → Resource monitor.'
 const READING = 'cpuPercent (100 = one core), memoryBytes and memoryMetric (footprint = memory each process alone accounts for; rss = older sum that counts shared pages repeatedly), per-kind usage (app processes by type, services, sessions, terminals), page = the main window since the previous sample (longFrames >= 50 ms, blockingMs, slowInteractions >= 100 ms, styleLayoutMs, nodes, listeners), recent = page metrics summed over the last minute'
@@ -59,7 +60,7 @@ const capture: ActionDef = {
   risk: 'medium',
   confirm: 'always',
   question: (args) => `要录 ${num(args, 'seconds') ?? 10} 秒咕咕主窗口的性能记录吗?录的时候会稍微变慢,只回耗时汇总,不含内容。`,
-  input_schema: { type: 'object', properties: { seconds: { type: 'number', minimum: 1, maximum: 15 } }, additionalProperties: false },
+  input_schema: { type: 'object', properties: { seconds: { type: 'number', minimum: 1, maximum: 15 }, ...CONFIRMED_PROP }, additionalProperties: false },
   validate: (args) => (args.seconds === undefined || ((num(args, 'seconds') ?? 0) >= 1 && (num(args, 'seconds') ?? 99) <= 15) ? null : 'seconds must be between 1 and 15'),
   async run(args, ctx) {
     ctx.note('正在录…')

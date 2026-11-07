@@ -28,6 +28,8 @@ describe('性能读数 perf.*', () => {
   it('登记 3 个工具;读数不问,录制每次问', () => {
     const actions = setup(readings()).capability()!.actions
     expect(Object.fromEntries(actions.map((a) => [a.name, a.confirm]))).toEqual({ 'perf.snapshot': 'never', 'perf.history': 'never', 'perf.capture': 'always' })
+    // An agent that follows the schema must be able to send the confirmation.
+    expect(actions.find((a) => a.name === 'perf.capture')!.input_schema).toMatchObject({ properties: { confirmed: { type: 'boolean' } } })
   })
 
   it('读数与历史原样转出;历史默认最近一小时', async () => {

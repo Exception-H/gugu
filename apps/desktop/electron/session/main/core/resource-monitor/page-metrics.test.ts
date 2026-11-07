@@ -69,4 +69,26 @@ describe('main-window page metrics', () => {
     state.windows = [];
     expect(await readPageTotals([renderer(40, 0, 0)], true)).toMatchObject({ countersUnavailable: 'no-window' });
   });
+
+  it('leaves a debugger someone else attached, and only turns off the domain it enabled', async () => {
+    const w = window(); w.debugger.attach(); w.debugger.attach.mockClear(); state.windows = [w]; counters(1, 1);
+    await readPageTotals([renderer(40, 0, 0)], true);
+    expect(w.debugger.attach).not.toHaveBeenCalled();
+    stopPageCounters();
+    expect(w.debugger.detach).not.toHaveBeenCalled();
+    expect(w.debugger.sendCommand).toHaveBeenCalledWith('Performance.disable');
+  });
+
+  it('does not stay attached when monitoring stops while a read is still waiting on the debugger', async () => {
+    const w = window(); state.windows = [w]; counters(1, 1);
+    let enable!: () => void;
+    w.debugger.sendCommand.mockImplementationOnce(() => new Promise((resolve) => { enable = () => resolve({}); }));
+    const reading = readPageTotals([renderer(40, 0, 0)], true);
+    await vi.waitFor(() => expect(enable).toBeDefined());
+    stopPageCounters();
+    enable();
+    expect(await reading).toMatchObject({ countersUnavailable: 'off' });
+    expect(w.debugger.isAttached()).toBe(false);
+    expect(w.debugger.sendCommand).not.toHaveBeenCalledWith('Performance.getMetrics');
+  });
 });

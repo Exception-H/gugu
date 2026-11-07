@@ -1,7 +1,9 @@
 import { writeFileSync, existsSync } from 'node:fs';
+import { tmpdir } from 'node:os';
 import { describe, expect, it, vi } from 'vitest';
 const tracing = vi.hoisted(() => ({ release: () => {}, file: '' }));
 vi.mock('electron', () => ({
+  app: { getPath: () => tmpdir() },
   webContents: { getAllWebContents: () => [] },
   contentTracing: {
     startRecording: async () => {},
