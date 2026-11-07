@@ -46,6 +46,8 @@ import {
 import { listAgents, listDevices, listReapedAgents, provisionSessionpageAgentOneTrip, resolveMachineHardwareId, type DeviceTableClient, type RuntimeAuthProvider } from '@gugu/core'
 import { claimDeviceFreeCredits, readDeviceClaimStatus } from './device-free-credits'
 import { createDeviceActionsRuntime, nativeComponentsDir, type DeviceActionsRuntime } from './device-actions/runtime'
+import { captureReading, currentReading, historyReading } from './session/main/core/resource-monitor/reading'
+import { setMacFootprintReader } from './session/main/core/resource-monitor/footprint'
 import { sampleCuaImage } from './device-actions/native/cua-image-sample'
 import { createComputerControlWindow } from './device-actions/computer-control-window'
 import { computerControlWindowReaders } from './device-actions/computer-control-foreground'
@@ -2010,6 +2012,17 @@ function selfAppForComputerControl(): { pids: ReadonlySet<number>; names: Readon
  */
 let computerUseOn: () => boolean = () => false
 
+// The resource monitor reads macOS phys_footprint through the same native helper (System.swift `process.footprint`);
+// without the helper (an uncompiled dev checkout) it keeps RSS and says so.
+if (process.platform === 'darwin') setMacFootprintReader(() => {
+  const helper = deviceActionsRuntimeInstance?.macHelper()
+  if (!helper) return null
+  return async (pids) => {
+    const { footprints } = await helper.call<{ footprints: Record<string, number> }>('process.footprint', { pids }, { timeoutMs: 5_000 })
+    return new Map(Object.entries(footprints).map(([pid, bytes]) => [Number(pid), bytes]))
+  }
+})
+
 function deviceActionsRuntime(): DeviceActionsRuntime {
   if (deviceActionsRuntimeInstance) return deviceActionsRuntimeInstance
   const log = createLogger('device-actions')
@@ -2037,6 +2050,11 @@ function deviceActionsRuntime(): DeviceActionsRuntime {
       },
       openExternal: (url) => shell.openExternal(url),
       trashItem: (target) => shell.trashItem(target),
+      perf: {
+        snapshot: () => currentReading(),
+        history: (since, until) => historyReading(since, until),
+        capture: (seconds) => captureReading(seconds),
+      },
       sampleImage: data => sampleCuaImage(nativeImage.createFromBuffer, data),
       shrinkImage: async (image, { maxEdge, quality }) => {
         const source = nativeImage.createFromBuffer(Buffer.from(image.data, 'base64'))

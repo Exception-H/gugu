@@ -224,7 +224,11 @@ export const browserSettingsSchema = z
       settings.profiles.some((profile) => profile.id === settings.defaultProfileId)
   );
 
-export const resourceMonitorSettingsSchema = z.object({ enabled: z.boolean() });
+/**
+ * `pageCounters`: read the main window's style/layout counters through its debugger while monitoring (on by default;
+ * no measurable cost on mac1, 11-07). `api`: serve the read-only reading on 127.0.0.1 with a token (off by default).
+ */
+export const resourceMonitorSettingsSchema = z.object({ enabled: z.boolean(), pageCounters: z.boolean() });
 
 export const openInSettingsSchema = z.object({
   default: openInAppIdSchema,
