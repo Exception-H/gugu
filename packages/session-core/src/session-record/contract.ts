@@ -579,6 +579,11 @@ export type AppCallAction = {
   version: string;
   method: string;
   args: Record<string, unknown>;
+  /**
+   * The working copy's file the host handed the page (`ctx.file`), stamped by the host from the page's binding, never from
+   * the page's args: the one absolute path a file call may name. The machine the file is on checks it (`fileRootOf`).
+   */
+  handed?: { workspace: string; id: string };
 };
 
 /**
