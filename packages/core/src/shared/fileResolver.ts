@@ -52,9 +52,9 @@ export type FileMetadata = { status: 'ready'; revision: FileRevision } | { statu
 export class MissingFileObjectError extends Error {
   constructor() { super('missing') }
 }
-/** The read acknowledgement found access withdrawn or the version moved on: bytes already shown must be taken down. */
+/** The read acknowledgement found access withdrawn, the file gone or expired, or the version moved on: bytes already shown must be taken down. */
 export class FileReadRevokedError extends Error {
-  constructor(readonly reason: 'access' | 'revision') { super('File access or revision changed during download') }
+  constructor(readonly reason: 'access' | 'revision' | 'gone' | 'expired') { super(reason === 'gone' || reason === 'expired' ? reason : 'File access or revision changed during download') }
 }
 export interface FileBytes {
   /** An authorized immutable snapshot with exact length; stored digests are verified when present. */
@@ -140,7 +140,8 @@ export async function openFileBytes(providers: FileProviders, revision: FileRevi
   local?: Awaited<ReturnType<FileProviders['local']>>, destination?: FileSink): Promise<FileBytes> {
   const consume = async (source: FileBytes) => {
     if (!destination) return source
-    try { return await copyVerifiedFile(revision, source, destination, context.signal) }
+    // A copy written to a sink cannot be taken back: it waits for the read acknowledgement.
+    try { await source.acknowledged; return await copyVerifiedFile(revision, source, destination, context.signal) }
     finally { await source.dispose() }
   }
   if (local) return consume(await local.open())

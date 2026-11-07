@@ -6,6 +6,9 @@ import { resolveFile, fileReader, fileReadSignal, attachmentCache, attachmentCac
 import { attachmentQuery, attachmentQueryClient } from './attachmentQueryClient'
 import { platform } from '../platform'
 import { openImageViewer, type ImageViewerItem } from './imageViewer'
+import { rendererLogger } from './log'
+
+const log = rendererLogger('attachment-bytes')
 
 export async function resolveAttachment(source: AttachmentSource, showFirst?: true) {
   const ref = attachmentFileRef(source)
@@ -58,7 +61,8 @@ async function readAttachmentBytes(source: AttachmentSource, variant: Attachment
   // A preview that can take itself down shows the bytes before the server's read acknowledgement. The plaintext is kept
   // only once acknowledged; a revoked read also removes the copy an earlier open kept.
   const { blob, acknowledged } = await shownFileBlob(file)
-  return { status: 'ready', blob, link: file.revision, acknowledged: acknowledged.then(() => keep(blob), async (error) => {
+  // The kept copy only saves a later download: failing to write it never takes down an acknowledged read.
+  return { status: 'ready', blob, link: file.revision, acknowledged: acknowledged.then(() => keep(blob).catch((error) => log.warn({ error }, 'acknowledged copy not kept')), async (error) => {
     if (key && (error instanceof FileReadRevokedError || error instanceof MissingFileObjectError)) await (await attachmentCache()).delete(key)
     throw error
   }) }

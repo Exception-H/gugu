@@ -87,7 +87,7 @@ describe('file preview missing-object actions', () => {
     }
   })
   // Shown before the server acknowledged the read: a refusal behind it takes the preview down and says why.
-  it.each([['access', 'attachmentView.fileNoAccess'], ['revision', 'attachmentView.fileUpdated']] as const)('takes a shown preview down when its read acknowledgement is refused (%s)', async (reason, said) => {
+  it.each([['access', 'attachmentView.fileNoAccess'], ['revision', 'attachmentView.fileUpdated'], ['gone', 'attachmentView.fileGone'], ['expired', 'attachmentView.fileExpired']] as const)('takes a shown preview down when its read acknowledgement is refused (%s)', async (reason, said) => {
     let refuse!: (error: Error) => void
     io.bytes.mockResolvedValue({ status: 'ready', blob: new Blob(['shown plaintext']), acknowledged: new Promise<void>((_resolve, reject) => { refuse = reject }) })
     await render()

@@ -7,6 +7,9 @@ import { withBoundedOperation } from './boundedOperation'
 import { anySignal } from '../shared/anySignal'
 import { isTransientFileReadError, retryFileDownload } from './fileDownloadRetry'
 
+/** How long bytes shown before their read acknowledgement may stay up while it is pending. */
+const ACKNOWLEDGEMENT_MS = 15_000
+
 export type { FileChunkCache } from '../shared/fileCache'
 type Download = { status: string; code?: string; url: string; expires_at?: string; origin_available?: boolean; thumb_url?: string | null; download_id: string; key?: string; codec?: string; sha256: string | null; size_bytes: number; ciphertext_bytes?: number; ciphertext_sha256?: string; bucket_id?: string; object_name?: string; message_id?: string }
 const missingObject = (row: { status: string; code?: string }) => row.status === 'missing' && row.code === 'object_not_found'
@@ -143,19 +146,27 @@ export function cloudFileProviders(deps: {
       const file = encrypted ? (await transformFile({ direction: 'decrypt', revision, source, sink: writing, key: dataKey!, ciphertextSha256: lease!.ciphertext_sha256!, signal: context.signal })).file : await copyVerifiedFile(revision, source, writing, context.signal)
       const changed = (current: Download) => {
         if (missingObject(current)) throw new MissingFileObjectError()
-        if (current.status !== 'ready') throw new FileReadRevokedError('access')
+        if (current.status !== 'ready') throw new FileReadRevokedError(current.status === 'gone' || current.status === 'expired' ? current.status : 'access')
         if (current.sha256 !== revision.sha256 || current.size_bytes !== revision.size_bytes || !sameLegacyObject(revision, current)) throw new FileReadRevokedError('revision')
       }
       if (encrypted && combined) {
         const downloadId = lease!.download_id
-        const acknowledge = async () => {
-          const read = await request(context, 'file-read-complete', { download_id: downloadId, as: context.actor.actorId,
-            ref, expect: { sha256: revision.sha256, size_bytes: revision.size_bytes } }).catch(error => {
-            throw error instanceof AttachmentsError && (error.status === 403 || error.status === 404) ? new FileReadRevokedError('access') : error
-          }) as { acknowledged: boolean; current: Download }
-          changed(read.current)
-          if (!read.acknowledged) throw new FileReadRevokedError('revision')
-        }
+        // Bounded, so a stalled request cannot keep a shown read up; one retry for a transient failure, never for a refusal.
+        const acknowledge = () => withBoundedOperation(ACKNOWLEDGEMENT_MS, () => new Error('File read acknowledgement timed out'), async timeout => {
+          const acknowledging = { ...context, signal: anySignal([context.signal, timeout]) }
+          for (let attempt = 0; ; attempt++) {
+            try {
+              const read = await request(acknowledging, 'file-read-complete', { download_id: downloadId, as: context.actor.actorId,
+                ref, expect: { sha256: revision.sha256, size_bytes: revision.size_bytes } }) as { acknowledged: boolean; current: Download }
+              changed(read.current)
+              if (!read.acknowledged) throw new FileReadRevokedError('revision')
+              return
+            } catch (error) {
+              if (error instanceof AttachmentsError && (error.status === 403 || error.status === 404)) throw new FileReadRevokedError('access')
+              if (attempt || !isTransientFileReadError(error)) throw error
+            }
+          }
+        })
         // A saved copy cannot be taken back: a download still waits. Bytes for display are returned now and the
         // acknowledgement follows; whoever shows them takes them down if it fails (`acknowledged`).
         if (destination) { await acknowledge(); return await sink.commit() }

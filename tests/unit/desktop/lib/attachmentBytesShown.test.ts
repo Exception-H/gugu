@@ -45,3 +45,12 @@ it('a read that could not be acknowledged for another reason keeps nothing and l
   await expect(bytes.acknowledged).rejects.toThrow('network')
   expect(io.put).not.toHaveBeenCalled(); expect(io.remove).not.toHaveBeenCalled()
 })
+
+it('a failure to keep the acknowledged copy leaves the read up', async () => {
+  io.shown.mockResolvedValue({ blob: new Blob(['page']), acknowledged: Promise.resolve() })
+  io.put.mockRejectedValueOnce(new DOMException('quota', 'QuotaExceededError'))
+  const bytes = await attachmentBytes(source, 'shown')
+  if (bytes.status !== 'ready' || !bytes.acknowledged) throw Error('shown bytes expected')
+  await expect(bytes.acknowledged).resolves.toBeUndefined()
+  expect(io.put).toHaveBeenCalledTimes(1); expect(io.remove).not.toHaveBeenCalled()
+})
