@@ -123,7 +123,10 @@ export async function startMove(env: MoveEnv, direction: MoveDirection, names: M
     const report = await runAssistantMove(env, direction, (progress) => publish({ phase: { kind: 'moving', direction, progress } }));
     // 没收好的几件事原因只进日志(文案只说「不影响使用」)
     for (const detail of report.warnings) log.warn({ detail, direction }, 'move finished with a warning');
-    publish({ phase: { kind: 'done', direction, report, names } });
+    // 「接着搬」从日志接上时没有确认框那份服务名:重连清单要显示名字,向本机要一份(各家名字哪台机器都一样)。
+    const shown = names.size > 0 || report.accounts.reconnect.length === 0 ? names
+      : new Map((await rpcOn(null).integrations.list(language).catch(() => [] as { id: string; name: string }[])).map((item) => [item.id, item.name]));
+    publish({ phase: { kind: 'done', direction, report, names: shown } });
   } catch (error) {
     log.error({ error: String(error), direction }, 'move failed');
     const intact = error instanceof MoveError ? error.sourceIntact : false;
