@@ -139,10 +139,18 @@ export async function resolveCanonicalOwner(input: SourceIdentityEnvelope, conte
   const refs = [...(uuid ? [{ kind: 'record' as const, nativeId: uuid }] : []),
     ...sourceDependencies(input).filter(ref => ref.kind !== 'record')];
   const keys = refs.map(ref => sourceOwnershipKey(input.provider, ref.kind, ref.nativeId));
-  for (const key of keys) {
-    const owner = await lookup(context.branchLineage, key, context.atCommit);
-    if (owner) { scalar(owner.turnId); scalar(owner.itemId, true); return { kind: 'found', owner }; }
+  let known: CanonicalOwner | null = null;
+  for (let index = 0; index < keys.length; index++) {
+    const owner = await lookup(context.branchLineage, keys[index], context.atCommit);
+    if (!owner) continue;
+    scalar(owner.turnId); scalar(owner.itemId, true);
+    const itemId = refs[index].kind === 'task' ? null : owner.itemId;
+    if (known && (known.turnId !== owner.turnId || (known.itemId && itemId && known.itemId !== itemId))) {
+      throw new SourceIdentityError('identity_conflict', 'native ownership aliases disagree');
+    }
+    known = { turnId: owner.turnId, itemId: itemId ?? known?.itemId ?? null };
   }
+  if (known) return { kind: 'found', owner: known };
   const proof = context.ownerParentProof;
   if (proof) {
     scalar(proof.nativeId); scalar(proof.branchLineage); integer(proof.atCommit);

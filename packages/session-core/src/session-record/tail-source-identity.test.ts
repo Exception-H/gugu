@@ -90,4 +90,13 @@ describe('tail source identities', () => {
     expect(await resolveCanonicalOwner(child, { ...context(), ownerParentProof: proof }, async branch => branch === 'parent' ? owner : null)).toEqual({ kind: 'found', owner: { turnId: owner.turnId, itemId: null } });
     await expect(resolveCanonicalOwner(envelope(), { ...context(), ownerParentProof: proof }, async () => null)).rejects.toMatchObject({ code: 'invalid_anchor' });
   });
+  it('resolves a real call item beyond a task-only turn alias and rejects conflicting turns', async () => {
+    const input = { ...envelope('codex'), recordMetadata: { taskId: 'task', callId: 'call' } };
+    const callKey = sourceOwnershipKey('codex', 'call', 'call');
+    const owner = { turnId: 'real:turn', itemId: 'real:tool:call' };
+    expect(await resolveCanonicalOwner(input, context(), async (_branch, key) => key === callKey ? owner : { turnId: owner.turnId, itemId: null }))
+      .toEqual({ kind: 'found', owner });
+    await expect(resolveCanonicalOwner(input, context(), async (_branch, key) => key === callKey ? owner : { turnId: 'wrong:turn', itemId: null }))
+      .rejects.toMatchObject({ code: 'identity_conflict' });
+  });
 });
