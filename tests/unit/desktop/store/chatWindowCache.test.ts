@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from 'vitest'
 import { ChatWindowCache } from '../../../../apps/desktop/src/store/chatWindowCache'
 import { message } from '../../../support/testHarness'
-import { reconcileMemberReadSeqs } from '../../../../apps/desktop/src/store/chatRealtimeMutations'
+import { mergeMemberReadSeqs } from '@gugu/core/shared/ui/messageState'
 
 const row = (seq: number) => message({ id: `m-${seq}`, chat_id: 'chat', seq, is_mine: false })
 describe('cached scoped history ownership', () => {
@@ -12,13 +12,8 @@ describe('cached scoped history ownership', () => {
     expect(cache.view('other').memberReadSeqs).toEqual({})
     const stop = cache.subscribe('chat', () => undefined)
     // The network snapshot is older for u-b (its read is in flight), newer for u-c, and no longer has u-left.
-    reconcileMemberReadSeqs('chat', { 'u-b': 5, 'u-c': 6 }, {
-      memberReadSeqsChatRef: { current: 'chat' },
-      setMemberReadSeqs: (update) => {
-        const previous = cache.view('chat').memberReadSeqs
-        cache.patchView('chat', { memberReadSeqs: typeof update === 'function' ? update(previous) : update })
-      },
-    })
+    // The same-chat merge reconcileMemberReadSeqs applies when the network read lands.
+    cache.patchView('chat', { memberReadSeqs: mergeMemberReadSeqs(cache.view('chat').memberReadSeqs, { 'u-b': 5, 'u-c': 6 }) })
     expect(cache.view('chat').memberReadSeqs).toEqual({ 'u-b': 9, 'u-c': 6 })
     stop()
   })
