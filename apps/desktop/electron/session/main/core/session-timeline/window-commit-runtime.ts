@@ -71,7 +71,11 @@ export function createWindowCommitRuntime(ports: {
       if (closed) return;
       if (tap) { invalidated(fault('live_source_gap', 'The committed-event worker was replaced')); tap.close(); }
       const selected = createWindowCommitTap({ onCommit: dispatch, onInvalidated: invalidated, onObservationError: report }); tap = selected;
-      await selected.attach(source);
+      try { await selected.attach(source); }
+      catch (error) {
+        if (tap === selected) { invalidated(fault('live_source_gap', `Committed-event attachment failed: ${String(error)}`)); tap = undefined; }
+        selected.close(); throw error;
+      }
     },
     /** Caller registers before awaiting lifecycle proof. prepare samples metadata only. */
     reserve(id: string, conversationId: string, failed: Owner['failed']) {

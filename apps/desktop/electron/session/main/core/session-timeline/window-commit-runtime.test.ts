@@ -100,4 +100,13 @@ describe('non-waking commit reservations', () => {
     a.close(); await rejected; expect(failed).not.toHaveBeenCalled();
     snapshot.resolve(f.source.snapshot()); await second; expect(f.runtime.inspect()).toEqual({ owners: 1 }); f.runtime.close();
   });
+
+  it('fails a cold prepared owner and settles its empty read when source attachment rejects', async () => {
+    const f = fixture(), failed = vi.fn(), owner = f.runtime.reserve('one', 'a', failed), cut = await owner.prepare(); owner.authorize();
+    const rejected = expect(owner.read(cut)).rejects.toMatchObject({ code: 'live_source_gap' });
+    f.stream.attach.mockRejectedValueOnce(new Error('private attach failed'));
+    await expect(f.runtime.attach(f.stream)).rejects.toThrow('private attach failed'); await rejected;
+    expect(failed).toHaveBeenCalledExactlyOnceWith(expect.objectContaining({ code: 'live_source_gap' }));
+    expect(f.runtime.inspect()).toEqual({ owners: 0 }); expect(f.persist).not.toHaveBeenCalled(); f.runtime.close();
+  });
 });
