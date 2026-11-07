@@ -73,10 +73,12 @@ export function createWindowCommitReceipts(connection: WindowReceiptDatabase) {
       const data = encode(input);
       const previous = decode(connection.prepare(`SELECT ${columns} FROM session_window_commit_receipts r
         WHERE r.row_id=? ORDER BY r.rowid DESC LIMIT 1`).get(input.rowId));
-      if (previous && previous.firstCommitCursor && previous.latestRevisionCursor.workerEpoch === input.latestRevisionCursor.workerEpoch
-        && previous.latestRevisionCursor.storeEpoch === input.latestRevisionCursor.storeEpoch
-        && (previous.referenceId !== input.referenceId || JSON.stringify(previous.firstCommitCursor) !== JSON.stringify(input.firstCommitCursor)
-          || previous.latestRevisionCursor.sequence >= input.latestRevisionCursor.sequence)) throw new Error('Commit first proof changed or revision regressed');
+      if (previous && (previous.referenceId !== input.referenceId
+        || (previous.latestRevisionCursor.workerEpoch === input.latestRevisionCursor.workerEpoch
+          && previous.latestRevisionCursor.storeEpoch === input.latestRevisionCursor.storeEpoch
+          && (JSON.stringify(previous.firstCommitCursor) !== JSON.stringify(input.firstCommitCursor)
+            || previous.latestRevisionCursor.sequence >= input.latestRevisionCursor.sequence))))
+        throw new Error('Commit first proof changed or revision regressed');
       const row = connection.prepare('SELECT session_id,seq FROM session_turns WHERE id=?').get(input.rowId) as { session_id: string; seq: number } | undefined;
       if (!row || row.session_id !== input.sessionId || row.seq !== input.storedSeq) throw new Error('Canonical commit row binding mismatch');
       connection.prepare(`INSERT INTO session_window_commit_receipts(source_id,session_id,row_id,stored_seq,reference_id,receipt)

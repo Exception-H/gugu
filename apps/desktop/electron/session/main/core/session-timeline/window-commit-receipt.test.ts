@@ -128,4 +128,19 @@ describe('canonical row and bounded write-ahead receipt transaction', () => {
     expect(receipts.byRow('s:17')).toBeNull(); expect(receipts.byReference('s', 'ref')).toBeNull();
     expect(receipts.byReference('other', 'ref')).toEqual(other);
   });
+
+  it('keeps same-epoch revisions monotonic and identity fixed even without a first-insert proof', async () => {
+    const f = await fixture(), receipts = f.store();
+    const current = { ...f.receipt, sourceId: 'source-10', firstCommitCursor: null, latestRevisionCursor: cursor(10) };
+    transaction(f.db, () => { f.insert(); receipts.put(current); });
+    const revise = (next: WindowCommitReceipt) => transaction(f.db, () => {
+      f.db.prepare('UPDATE session_turns SET data=data WHERE id=?').run('s:17'); receipts.put(next);
+    });
+    expect(() => revise({ ...current, sourceId: 'source-9', latestRevisionCursor: cursor(9) })).toThrow('revision regressed');
+    expect(() => revise({ ...current, sourceId: 'wrong-ref', referenceId: 'another', latestRevisionCursor: cursor(11) })).toThrow('first proof changed');
+    expect(() => revise({ ...current, sourceId: 'false-first', firstCommitCursor: cursor(3), latestRevisionCursor: cursor(11) })).toThrow('first proof changed');
+    expect(receipts.byRow('s:17')).toEqual(current);
+    const next = { ...current, sourceId: 'source-11', latestRevisionCursor: cursor(11) }; revise(next);
+    expect(receipts.byRow('s:17')).toEqual(next);
+  });
 });
