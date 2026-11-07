@@ -245,6 +245,19 @@ describe('the host\'s Back (the phone\'s back key)', () => {
     expect(back.releases - releases).toBe(1)
   })
 
+  test('with the App\'s own menu open, Back closes the menu first and stays in the folder', async () => {
+    await enter('contracts')
+    await until('the back step held', () => back.handler !== null)
+    more('y2026').click()
+    expect($('menu').hidden, 'the row menu is open').toBe(false)
+    back.handler!()
+    expect($('menu').hidden, 'Back closed the menu').toBe(true)
+    expect(crumbs(), 'and stayed in the folder').toEqual(['聊天文件', '合同'])
+    back.handler!()
+    expect(crumbs(), 'the next Back is a folder up').toBeNull()
+    await until('let go at the top', () => back.handler === null)
+  })
+
   test('a claim that fails is said, tried again on the next change, and held once it succeeds', async () => {
     gugu.navigation.onBack.mockImplementationOnce(async () => { throw coded('failed', 'no back here') })
     const claims = gugu.navigation.onBack.mock.calls.length

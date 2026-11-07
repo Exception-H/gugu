@@ -1318,7 +1318,7 @@ function sortMenu() {
 function renderCrumbs() {
   const nav = $('crumbs')
   const t = state.t
-  holdBack(!!state.folder && !state.ctx?.file)
+  holdBack(backStepWanted())
   if (!state.folder || state.filter.trim()) {
     nav.hidden = true
     nav.replaceChildren()
@@ -1376,9 +1376,11 @@ function goUp() {
   enterFolder(state.entries.find((e) => e.id === state.folder)?.parentId ?? null)
 }
 
-// In a folder, the host's Back (the phone's back key) is a folder up rather than leaving the App (gugu.navigation.onBack);
-// at the top it is the host's again. One claim or release at a time; `state.releaseBack` is set only once a claim has
+// In a folder, or with this page's own menu open, the host's Back (the phone's back key) is a step here rather than leaving
+// the App (gugu.navigation.onBack): the menu closes first, then a folder up; at the top it is the host's again. One claim or release at a time; `state.releaseBack` is set only once a claim has
 // succeeded, so a failed claim is tried again on the next change.
+const backStepWanted = () => (!!state.folder && !state.ctx?.file) || !$('menu').hidden
+const stepBack = () => (!$('menu').hidden ? closeMenu() : goUp())
 let backStep = Promise.resolve()
 function holdBack(want) {
   if (typeof gugu.navigation?.onBack !== 'function') return
@@ -1391,7 +1393,7 @@ function holdBack(want) {
         state.releaseBack = null
         await release()
       } else {
-        state.releaseBack = await gugu.navigation.onBack(goUp)
+        state.releaseBack = await gugu.navigation.onBack(stepBack)
       }
     } catch (error) {
       showBanner(fmt(state.t.failed, { e: error.message }), 'error')
@@ -3896,6 +3898,7 @@ function toggleMenu(anchor, items, context = {}) {
   state.menuAnchor = anchor
   anchor.setAttribute('aria-expanded', 'true')
   menu.hidden = false
+  holdBack(backStepWanted())
   menu.style.top = menu.style.left = ''
   if (!fileContext || !touchPane?.matches) {
     const box = context.point ? { left: context.point.x, right: context.point.x, top: context.point.y, bottom: context.point.y } : anchor.getBoundingClientRect()
@@ -4178,6 +4181,7 @@ function closeMenu() {
   state.menuAnchor?.setAttribute('aria-expanded', 'false')
   state.menuAnchor = null
   $('menu').hidden = true
+  holdBack(backStepWanted())
 }
 
 // ─── start ──────────────────────────────────────────────────────────────────
