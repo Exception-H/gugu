@@ -189,6 +189,9 @@ export function createExtensionTabProvider(
   return createTabProvider({
     kind,
     resourceKey: (state: ExtensionTabState) => (state?.filePath ? filePathKey(state.filePath) : 'app'),
+    // Its own page beside the conversation takes the width its manifest declares (`sideWidth`, read now: an update can
+    // change it); a file opened in it is the conversation's peer, half each.
+    sideWidth: (state: ExtensionTabState) => (state?.filePath ? undefined : installedExtensionsStore.sideWidth(kind)),
     onBeforeOpen: (args: ExtensionTabState): ExtensionTabState => args?.filePath ? { filePath: args.filePath } : (isPerSession(kind) ? { perSession: true } : {}),
     // `entry.state` is the only path a per-tab fact travels on, and until now it
     // was read by nobody — which is why a tab could not be told which file it was
