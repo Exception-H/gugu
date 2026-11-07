@@ -15,6 +15,8 @@ export interface PendingAttachment {
   file: File
   previewUrl: string | null
   kind: AttachmentKind
+  // A phone photo that compressed smaller: `file` is one of the two, the chip's quality switch picks which.
+  photo?: { original: File; compressed: File }
 }
 
 // Stable empty singletons — the sync effect skips a dimension by reference-equality, so an empty store slot
@@ -38,10 +40,10 @@ export function withPreviewUrl<T extends { file: File; kind: AttachmentKind }>(a
   return { ...attachment, previewUrl: renderable ? URL.createObjectURL(attachment.file) : null }
 }
 
-// Strip the transient blob previewUrl before persisting to the per-chat draft store (store keeps only
-// durable id/file/kind; the preview URL is regenerated on restore).
+// Strip the transient blob previewUrl before persisting to the per-chat draft store; the preview URL is
+// regenerated on restore.
 function toDraftAttachments(attachments: PendingAttachment[]): DraftAttachment[] {
-  return attachments.map(({ id, file, kind }) => ({ id, file, kind }))
+  return attachments.map(({ previewUrl: _previewUrl, ...draft }) => draft)
 }
 
 // Rehydrate stored draft attachments into live composer attachments, regenerating each image's preview URL.
