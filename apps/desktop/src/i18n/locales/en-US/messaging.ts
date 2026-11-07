@@ -292,7 +292,6 @@ export default {
     "markUnreadFailed": "Could not mark this chat unread. Try again.",
     "muted": "Notifications muted",
     "noResults": "No chats found",
-    "searchMessages": "Search messages for “{{query}}”",
     "searchMessagesTitle": "Search messages",
     "listLabel": "Chats",
     "pin": "Pin",
