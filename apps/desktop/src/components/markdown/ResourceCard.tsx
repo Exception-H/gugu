@@ -74,10 +74,11 @@ function MessageCard({ chatId, messageId, mine, onOpen }: { chatId: string; mess
   const chat = chats.find(row => row.id === chatId)
   const box = useRef<HTMLDivElement>(null)
   const near = useNearViewport(box)
-  // The same reader and checks as opening the link (useLinkNavigation): the reader's own chat, a live message in it.
-  const read = useQuery({ ...messageCardQuery(user?.id ?? '', messageId), enabled: near && !!user && !!chat }, attachmentQueryClient)
+  // Read even when the chat is not in this window's list (a topic, a chat not loaded yet): the reader's row access decides,
+  // with the same checks as opening the link (a live message in that chat). Unavailable only once that read says so.
+  const read = useQuery({ ...messageCardQuery(user?.id ?? '', messageId), enabled: near && !!user }, attachmentQueryClient)
   const message = read.data && read.data.chat_id === chatId && !read.data.retracted_at ? read.data : null
-  const unavailable = !chat || read.isError || (read.isSuccess && !message)
+  const unavailable = read.isError || (read.isSuccess && !message)
   const sender = message?.sender_user_id ? identitiesById[message.sender_user_id]?.display_name : undefined
   const head = sender ?? chat?.name ?? t('messaging:resourceCard.message')
   const text = unavailable ? t('messaging:resourceCard.unavailable') : message ? quotedContentView(widgetMessagePreview(message.content) ?? message.content).text : '…'

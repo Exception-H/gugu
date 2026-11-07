@@ -99,6 +99,19 @@ describe('link cards in a chat bubble', () => {
     expect(cards()?.textContent).toContain('Ship the blue header today')
   })
 
+  it('reads a message whose chat is not in this window\'s list, showing it loading until the read answers', async () => {
+    const OTHER = '88888888-8888-4888-8888-888888888888'
+    let answer!: (row: unknown) => void
+    mocks.getMessageById.mockReturnValue(new Promise(resolve => { answer = resolve }))
+    await render(`see [the topic](${conversationLink(OTHER, MESSAGE)})`)
+    await settle(() => expect(mocks.getMessageById).toHaveBeenCalledWith(MESSAGE, ME))
+    expect(cards()?.textContent).toContain('…')
+    expect(cards()?.textContent).not.toContain('不可用')
+    await act(async () => answer({ id: MESSAGE, chat_id: OTHER, sender_user_id: ALICE, content: 'Topic decision: ship Friday', retracted_at: null }))
+    await settle(() => expect(cards()?.textContent).toContain('Topic decision: ship Friday'))
+    expect(cards()?.textContent).toContain('Alice')
+  })
+
   it('draws a task item as its task title', async () => {
     mocks.listedSession.mockReturnValue({ row: { deviceId: 'mac', session: { conversationId: 'S1', title: 'Fix login' } } })
     await render(`from [the plan](${guguLink({ kind: 'session', sessionId: 'S1', itemId: 'turn:2' })})`)
@@ -110,7 +123,7 @@ describe('link cards in a chat bubble', () => {
     mocks.getMessageById.mockResolvedValue(null)
     mocks.listedSession.mockReturnValue({ unread: [] })
     mocks.rowOpens.mockReturnValue(false)
-    await render([groupFileLink(GONE), conversationLink(CHAT, MESSAGE), conversationLink('88888888-8888-4888-8888-888888888888', MESSAGE),
+    await render([groupFileLink(GONE), conversationLink(CHAT, MESSAGE), conversationLink('88888888-8888-4888-8888-888888888888', '99999999-9999-4999-8999-999999999999'),
       guguLink({ kind: 'session', sessionId: 'S9', itemId: 'x' })].map((uri, index) => `[ref ${index}](${uri})`).join(' '))
     await settle(() => expect(container.querySelector('.gg-resource-card-box')?.textContent).toContain('文件已删除'))
     await settle(() => expect(container.querySelectorAll('.gg-resource-card-box')[1]?.textContent).toContain('不可用：已删除，或你无权查看'))
@@ -119,8 +132,8 @@ describe('link cards in a chat bubble', () => {
     expect(boxes).toHaveLength(4)
     expect(boxes[0]).toContain('文件已删除')
     for (const text of boxes.slice(1)) expect(text).toContain('不可用：已删除，或你无权查看')
-    // A chat this reader is not in is never read.
-    expect(mocks.getMessageById).toHaveBeenCalledTimes(1)
+    // A chat missing from this window's list is still read; it is the read that says unavailable.
+    expect(mocks.getMessageById).toHaveBeenCalledWith('99999999-9999-4999-8999-999999999999', ME)
   })
 
   it('leaves bare chats, @ file pills and non-chat documents without cards', async () => {
