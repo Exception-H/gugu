@@ -12,8 +12,8 @@ import { translateSessionMessage } from '../../session/renderer/localization/loc
 import { TaskDropGroupInvite } from './TaskDropGroupInvite'
 import type { ChatMessageComposerProps } from './chatComposerModels'
 
-const folderNotice = () => notify({ title: translateSessionMessage('chat.folderDropUnsupportedTitle'),
-  description: translateSessionMessage('chat.folderDropUnsupportedDescription'), tier: 'error' })
+// The title only: the description is a task's (about SSH machines), and a chat takes files, never a folder.
+const folderNotice = () => notify({ title: translateSessionMessage('chat.folderDropUnsupportedTitle'), tier: 'error' })
 
 /** A computer file dropped on a chat goes as the file, the paperclip's way: read where it is, never its local path. */
 async function readWorkspaceFile({ projectId, workspaceId, targetPath }: DraggedWorkspaceFile & { projectId: string }): Promise<File> {
