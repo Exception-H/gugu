@@ -19,7 +19,10 @@ vi.mock('../../../../apps/desktop/src/store/chatContext', () => ({
   appendToDraft: (old: string, text: string) => [old, text].filter(Boolean).join('\n'),
   useChatStore: () => ({ drafts: scope.drafts, draftAttachments: scope.attachments, writeDraft: scope.write, setDraftAttachments: scope.setFiles, identitiesById: scope.identities, setActiveChatId: scope.select }),
 }))
-vi.mock('../../../../apps/desktop/src/store/devicesContext', () => ({ useDevicesStore: () => ({ devices: scope.devices, phones: [] }) }))
+vi.mock('../../../../apps/desktop/src/session/shared/remote-sessions/session-directory', async (importOriginal) => ({
+  ...await importOriginal<typeof import('../../../../apps/desktop/src/session/shared/remote-sessions/session-directory')>(),
+  directoryDevices: () => scope.devices,
+}))
 vi.mock('../../../../apps/desktop/src/platform/desktopIpc', () => ({ desktopIpc: () => scope.native ? ({ invoke: scope.lookup }) : null }))
 vi.mock('../../../../apps/desktop/src/lib/composeDraft', () => ({ composeTaskDraft: scope.compose }))
 vi.mock('../../../../apps/desktop/src/lib/guguLinks', () => ({ openTarget: scope.open }))

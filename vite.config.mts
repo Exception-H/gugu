@@ -29,6 +29,7 @@ import {
   webHostEntries,
   desktopPreloadEntry,
   extensionPreloadEntry,
+  vaultLoginPreloadEntry,
 } from './scripts/build/product-build-entries.mts'
 import {
   EMDASH_EXTERNAL,
@@ -401,6 +402,13 @@ export const electronBuildEntries: ElectronOptions[] = [
       if (!viteOwnsElectronProcess) return
       options.reload()
     },
+  },
+  {
+    // Keep the existing main/preload positions stable; the private login bridge is an additional entry.
+    // It gets no application/App bridge and exposes nothing to the page world.
+    entry: vaultLoginPreloadEntry,
+    vite: { plugins: [deterministicModuleSideEffects()] },
+    onstart(options) { if (viteOwnsElectronProcess) options.reload() },
   },
 ]
 
