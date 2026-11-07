@@ -1,5 +1,4 @@
 import { useState } from 'react'
-import { flushSync } from 'react-dom'
 import { useTranslation } from 'react-i18next'
 import { Sheet } from '@/components/ui/Sheet'
 import { sessionSkinClassName } from '@/components/sessionpage/sessionSkin'
@@ -17,12 +16,7 @@ export function PhoneMessageSearch() {
   const { t } = useTranslation('messaging')
   const { theme } = useTheme()
   const [open, setOpen] = useState(false)
-  // Mount and focus inside the tap that opened it: Android raises the keyboard only for a focus in the user's gesture.
-  const show = () => {
-    flushSync(() => setOpen(true))
-    document.querySelector<HTMLInputElement>('[data-testid="global-search-input"]')?.focus({ preventScroll: true })
-  }
-  useCommandProvider({ scopeId: 'app', getCommands: () => [{ id: 'app.globalSearch', hideFromPalette: true, execute: show }] })
+  useCommandProvider({ scopeId: 'app', getCommands: () => [{ id: 'app.globalSearch', hideFromPalette: true, execute: () => setOpen(true) }] })
   const close = () => setOpen(false)
   return (
     <Sheet open={open} onClose={close} fullScreenMobile testId="phone-message-search" ariaLabel={t('chatList.searchMessagesTitle')}>
