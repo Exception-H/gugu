@@ -75,10 +75,10 @@ export const machineVerbs = {
     if (!isWorkspace(ref) || !('id' in ref)) throw invalid('A draft is of a working copy\'s file, by its path');
     return (await import('./app-files')).draftHere(ref as never, args.text);
   },
-  // The capability was judged where the page is; the absolute path it may name, here (`fileRootOf`, the handed file).
-  filesWriteChunk: async (_extensionId, args, _from, handed) => {
+  // The capability was judged where the page is; a write carries no handed file, so nothing outside the working copy.
+  filesWriteChunk: async (_extensionId, args) => {
     const place = placeOf(args.place);
     if (!isWorkspace(place)) throw invalid('A chat\'s file is uploaded whole: files.upload');
-    return (await import('./working-copy-files')).writeWorkingCopyChunk(place, args as never, handed);
+    return (await import('./working-copy-files')).writeWorkingCopyChunk(place, args as never);
   },
 } satisfies Record<MachineVerb | PlaceVerb, (extensionId: string, args: Record<string, unknown>, from: MachineCallFrom, handed: HandedFile) => Promise<unknown>>;

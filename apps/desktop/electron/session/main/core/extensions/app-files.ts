@@ -123,10 +123,10 @@ export interface DesktopFilePage {
   extensionId: string;
   handed: (AppFileRef & { id: string }) | null;
   /**
-   * The grant the host made when a person opened the handed file outside its working copy (`@@@outside-grant`): the host's,
-   * from the page's binding, never told the page. None for a file an agent or an App opened, or a page with no binding.
+   * A person opened `handed` in this page from the host's UI (`@@@outside-file`): only then may it be read outside its
+   * working copy. Not for a file an agent or an App opened, nor a page an agent works.
    */
-  grant?: string;
+  personOpened?: true;
   asAgent?: string | null;
   /** A page's own chat, as it was bound: already its resource container (`surfaceResourceChat`). */
   boundChat?: string | null;
@@ -294,7 +294,7 @@ const isHanded = (page: DesktopFilePage, ref: WorkspaceFileRef): boolean =>
 
 /** The file outside its working copy a person opened in this page, as a file call carries it to its machine (`fileRootOf`). */
 const handedOf = (page: DesktopFilePage): HandedFile =>
-  page.handed && isWorkspace(page.handed) && page.grant ? { workspace: page.handed.workspace, id: page.handed.id, grant: page.grant } : null;
+  page.handed && isWorkspace(page.handed) && page.personOpened ? { workspace: page.handed.workspace, id: page.handed.id } : null;
 
 /**
  * An absolute path reaches one file only: the one the host handed this page. Every read and write of a file's bytes says so
@@ -698,7 +698,7 @@ export async function writeAppFileChunk(page: DesktopFilePage, args: Record<stri
   const there = await onItsMachine(page, place, 'filesWriteChunk', args);
   if (there.there) return there.value;
   const { writeWorkingCopyChunk } = await import('./working-copy-files');
-  return writeWorkingCopyChunk(place, args as never, handedOf(page));
+  return writeWorkingCopyChunk(place, args as never);
 }
 
 /** A working copy's file or folder in this computer's file manager (another machine's has none here). */

@@ -49,7 +49,7 @@ export type ExtensionTabState = {
   filePath?: string;
   /**
    * The host opened `filePath` for an agent or an App (`open_in_tab`, `files.openWith`), not the person: a file outside the
-   * working copy gets no grant (`@@@outside-grant`). Its own tab: the person opening the same file gets one of their own.
+   * working copy is not read through it (`@@@outside-file`). Its own tab: the person opening the same file gets one of their own.
    */
   byHost?: true;
   /**

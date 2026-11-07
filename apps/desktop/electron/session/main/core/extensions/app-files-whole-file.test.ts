@@ -25,8 +25,8 @@ const { releaseWorkingCopies } = await import('./working-copy-files');
 
 const workspace = 'session:11111111-1111-4111-8111-111111111111';
 let outside = '';
-// A page opened on a file by a person: the host's grant for that opening (`@@@outside-grant`), one per page.
-const page = (handed: unknown = null) => ({ pageId: 3, extensionId: 'reader', handed, ...(handed ? { grant: crypto.randomUUID() } : {}) }) as never;
+// A page opened on a file by a person (`@@@outside-file`).
+const page = (handed: unknown = null) => ({ pageId: 3, extensionId: 'reader', handed, ...(handed ? { personOpened: true } : {}) }) as never;
 
 beforeEach(async () => {
   releaseWorkingCopies(3);

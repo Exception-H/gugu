@@ -5,11 +5,12 @@ import * as path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 /**
- * A file outside the working copy is read only through the grant the host made when a person opened it in the page
- * (`@@@outside-grant`), bound on the file's machine to the file it was then (real path, device, inode). The machine the
- * file is on says so (`fileRootOf`), whoever asks: a page on this desktop, a page on another desktop (its call carried
- * there in `app_call`), a page on the phone. Each case goes through the function its host really calls, and the machine
- * that answers is the real `answerAppCall` → `machineVerbs` → `readWorkingCopy`: only the device RPC is a loop here.
+ * A file outside the working copy is read, and never written, only as the file a person opened in the page
+ * (`@@@outside-file`), as the page's host stamps it. The machine the file is on says so (`fileRootOf`), whoever asks: a page
+ * on this desktop, a page on another desktop (its call carried there in `app_call`), a page on the phone. Each case goes
+ * through the function its host really calls, and the machine that answers parses the call as it arrives
+ * (`parseAgentSessionRequest`) and answers it for real (`answerAppCall` → `machineVerbs` → the working copy's reads and
+ * writes): only the device RPC itself is a loop here.
  */
 const f = vi.hoisted(() => ({
   capabilities: new Set<string>(),
@@ -17,6 +18,7 @@ const f = vi.hoisted(() => ({
   /** Which machine is answering now: `there` is the one with the session (inside a cross-machine call). */
   side: 'here' as 'here' | 'there',
   answer: null as null | ((caller: unknown, action: unknown) => Promise<unknown>),
+  parse: null as null | ((name: 'app_call', caller: unknown, action: unknown) => { caller: unknown; action: unknown } | { error: string }),
 }));
 vi.mock('electron', () => ({ BrowserWindow: { fromWebContents: () => null }, dialog: {}, shell: {} }));
 vi.mock('@main/lib/events', () => ({ events: { on: () => () => undefined, emit: () => undefined } }));
@@ -43,11 +45,13 @@ vi.mock('@main/core/extensions/extension-agent-context', () => ({
 vi.mock('@main/core/extensions/extension-agents', () => ({
   sessionsElsewhere: async () => ({ rows: [{ deviceId: 'dev-there', deviceLabel: 'there', session: { conversationId: SESSION, projectId: 'p', agent: null } }], unreached: [] }),
 }));
-/** The device RPC: the call arrives at the other machine's `answerAppCall`, answered there. */
+/** The device RPC: the call arrives at the other machine as JSON, is parsed as it is there, and answered there. */
 const across = async (caller: unknown, action: unknown) => {
   f.side = 'there';
   try {
-    return await f.answer!(caller, JSON.parse(JSON.stringify(action)));
+    const parsed = f.parse!('app_call', JSON.parse(JSON.stringify(caller)), JSON.parse(JSON.stringify(action)));
+    if ('error' in parsed) throw new Error(parsed.error);
+    return await f.answer!(parsed.caller, parsed.action);
   } finally {
     f.side = 'here';
   }
@@ -57,8 +61,10 @@ vi.mock('@main/core/sessions/session-family', () => ({
 }));
 vi.mock('../../../../../src/mobile/agent-watch/sessionpage-rpc', () => ({ appCallOn: (_device: string, caller: unknown, action: unknown) => across(caller, action) }));
 
-const { readAppFile } = await import('./app-files');
+const { readAppFile, writeAppFileText } = await import('./app-files');
 const { answerAppCall } = await import('./app-programs-elsewhere');
+const { parseAgentSessionRequest } = await import('../../../../cross-machine-sessions');
+f.parse = parseAgentSessionRequest as never;
 const { callOnComputer } = await import('../../../../../src/components/appSlot/phoneProgramCall');
 f.answer = answerAppCall as never;
 
@@ -67,8 +73,6 @@ const DENIED = /Not permitted/;
 let outside = '';
 let home = '';
 let file = '';
-let link = '';
-let grants = 0;
 
 beforeEach(async () => {
   f.capabilities.clear();
@@ -81,8 +85,6 @@ beforeEach(async () => {
   fs.writeFileSync(file, 'outside');
   fs.writeFileSync(path.join(outside, 'id_ed25519'), 'canary');
   fs.writeFileSync(path.join(f.root, 'in.txt'), 'inside');
-  link = path.join(outside, 'opened.md');
-  fs.symlinkSync(file, link);
 });
 afterEach(async () => {
   vi.unstubAllEnvs();
@@ -90,53 +92,40 @@ afterEach(async () => {
 });
 
 const text = (chunk: { data: Uint8Array | string }) => typeof chunk.data === 'string' ? Buffer.from(chunk.data, 'base64').toString() : Buffer.from(chunk.data).toString();
-/** A page as the host binds it: the file it was opened on, and the grant when a person opened it (`openedBy: 'person'`). */
+/** A page as the host binds it: the file it was opened on, and whether a person opened it (`openedBy: 'person'`). */
 const pageOn = (handed: string | null, openedBy: 'person' | 'host' | 'agent-working' = 'person') => ({
   pageId: 7, extensionId: 'reader',
   handed: handed === null ? null : { workspace, id: handed },
-  ...(handed !== null && openedBy === 'person' ? { grant: `grant-${++grants}` } : {}),
+  ...(handed !== null && openedBy === 'person' ? { personOpened: true } : {}),
   ...(openedBy === 'agent-working' ? { asAgent: 'agent-1' } : {}),
 }) as never;
 const read = (page: never, id: string) => readAppFile(page, { ref: { workspace, id }, offset: 0, length: 100 });
 
-/** Every way a page reads, by the four cases R&D named: each against a machine that answers for real. */
-function grantCases() {
+/** Every way a page reads and writes, each against a machine that answers for real. */
+function handedCases() {
   it('a file a person opened reads; one an agent or an App opened, or the page an agent works, does not', async () => {
     expect(text(await read(pageOn(file), file))).toBe('outside');
     await expect(read(pageOn(file, 'host'), file)).rejects.toThrow(DENIED);
     await expect(read(pageOn(file, 'agent-working'), file)).rejects.toThrow(DENIED);
     await expect(read(pageOn(null), file)).rejects.toThrow(DENIED);
-    // Opened on one file, the grant reaches no other.
+    // Opened on one file, the stamp reaches no other.
     await expect(read(pageOn(file), path.join(outside, 'id_ed25519'))).rejects.toThrow(DENIED);
     expect(text(await read(pageOn(null), 'in.txt'))).toBe('inside');
   });
 
-  it('a link opened, then turned to another file, reads nothing more; opened again, it is the new file', async () => {
-    const page = pageOn(link);
-    expect(text(await read(page, link))).toBe('outside');
-    fs.unlinkSync(link);
-    fs.symlinkSync(path.join(outside, 'id_ed25519'), link);
-    await expect(read(page, link)).rejects.toThrow(/no longer the file that was opened/);
-    expect(text(await read(pageOn(link), link))).toBe('canary');
-  });
-
-  it('a file replaced under its name after it was opened reads nothing more', async () => {
-    const page = pageOn(file);
-    expect(text(await read(page, file))).toBe('outside');
-    fs.renameSync(path.join(outside, 'id_ed25519'), file);
-    await expect(read(page, file)).rejects.toThrow(/no longer the file that was opened/);
-  });
-
-  it('its tab closed, the page bound again has no grant: the file reads no more', async () => {
-    expect(text(await read(pageOn(file), file))).toBe('outside');
-    // What the host hands a page with no binding for the file (`handedOf`): no grant.
-    await expect(read(pageOn(file, 'host'), file)).rejects.toThrow(DENIED);
+  it('a file a person opened is never written, even by an App that may write files: it stays as it was', async () => {
+    f.capabilities.add('files:write');
+    await expect(writeAppFileText(pageOn(file), { ref: { workspace, id: file }, text: 'overwritten' })).rejects.toThrow(/read-only/);
+    expect(fs.readFileSync(file, 'utf8')).toBe('outside');
+    // A file of the working copy still saves.
+    await writeAppFileText(pageOn(null), { ref: { workspace, id: 'in.txt' }, text: 'saved' });
+    expect(fs.readFileSync(path.join(f.root, 'in.txt'), 'utf8')).toBe('saved');
   });
 }
 
 describe('a page on this desktop, the session here', () => {
   beforeEach(() => { scene.sessionOn = 'here'; });
-  grantCases();
+  handedCases();
 });
 
 describe('a page on another desktop, the session on that machine', () => {
@@ -144,14 +133,25 @@ describe('a page on another desktop, the session on that machine', () => {
     scene.sessionOn = 'there';
     f.capabilities.add('files:read:all-machines');
   });
-  grantCases();
+  handedCases();
 
-  it('a grant for a file of another working copy, or for another file, reads nothing', async () => {
-    const caller = { kind: 'app', deviceId: 'dev-here', deviceLabel: 'here', extensionId: 'reader', extensionName: 'Reader' };
-    const call = (id: string, handed: unknown) => across(caller, { action: 'app_call', call_id: id, session_id: SESSION, version: '1.0.0',
-      method: 'filesRead', args: { ref: { workspace, id: file }, offset: 0, length: 100 }, handed });
-    await expect(call('other-copy', { workspace: 'session:another', id: file, grant: 'g-other' })).rejects.toThrow(DENIED);
-    await expect(call('other-file', { workspace, id: path.join(outside, 'id_ed25519'), grant: 'g-file' })).rejects.toThrow(DENIED);
+  const caller = { kind: 'app', deviceId: 'dev-here', deviceLabel: 'here', extensionId: 'reader', extensionName: 'Reader' };
+  const call = (id: string, method: string, args: Record<string, unknown>, handed: unknown) =>
+    across(caller, { action: 'app_call', call_id: id, session_id: SESSION, version: '1.0.0', method, args, handed });
+
+  it('the stamp crosses as the call is parsed there, and reaches only its own file of its own working copy', async () => {
+    const args = { ref: { workspace, id: file }, offset: 0, length: 100 };
+    expect(text(await call('stamped', 'filesRead', args, { workspace, id: file }) as never)).toBe('outside');
+    await expect(call('other-copy', 'filesRead', args, { workspace: 'session:another', id: file })).rejects.toThrow(DENIED);
+    await expect(call('other-file', 'filesRead', args, { workspace, id: path.join(outside, 'id_ed25519') })).rejects.toThrow(DENIED);
+    await expect(call('malformed', 'filesRead', args, { workspace })).rejects.toThrow(/handed is the file a person opened/);
+  });
+
+  it('a write that carries the stamp is refused there: the file it names stays as it was', async () => {
+    f.capabilities.add('files:write');
+    const part = { place: { workspace }, path: file, uploadId: 'u1', offset: 0, data: Buffer.from('overwritten').toString('base64'), total: 11, final: true, expectedEtag: 'any' };
+    await expect(call('write', 'filesWriteChunk', part, { workspace, id: file })).rejects.toThrow(/read-only/);
+    expect(fs.readFileSync(file, 'utf8')).toBe('outside');
   });
 });
 
@@ -160,9 +160,9 @@ describe('a page on the phone, the session on a computer', () => {
   const phone = (args: Record<string, unknown>) => callOnComputer({ extensionId: 'reader', extensionName: 'Reader', version: '1.0.0' },
     { id: SESSION, deviceId: 'dev-there', deviceLabel: 'there' }, 'filesRead', args);
 
-  it('reads no outside file: the phone grants none, and one the page names in its own args is not one', async () => {
+  it('reads no outside file: the phone stamps none, and one the page names in its own args is not one', async () => {
     await expect(phone({ ref: { workspace, id: file }, offset: 0, length: 100 })).rejects.toThrow(DENIED);
-    await expect(phone({ ref: { workspace, id: file }, offset: 0, length: 100, handed: { workspace, id: file, grant: 'forged' } })).rejects.toThrow(DENIED);
+    await expect(phone({ ref: { workspace, id: file }, offset: 0, length: 100, handed: { workspace, id: file } })).rejects.toThrow(DENIED);
     expect(text(await phone({ ref: { workspace, id: 'in.txt' }, offset: 0, length: 100 }) as never)).toBe('inside');
     // A file of the working copy named by its absolute path is the working copy's: read as its relative path is.
     expect(text(await phone({ ref: { workspace, id: path.join(f.root, 'in.txt') }, offset: 0, length: 100 }) as never)).toBe('inside');
