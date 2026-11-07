@@ -110,4 +110,28 @@ describe('actual canonical writer capture', () => {
     observer.cursor.sequence = 99; await pending;
     expect(createWindowCommitReceipts(fixture.sqlite).byReference('c', 'source:real')!.latestRevisionCursor).toEqual(cursor(3));
   });
+
+  it.each(['source_durable', 'canonical_committed'] as const)('keeps settlement aligned with DB facts when the %s observer throws', async phase => {
+    const completed = vi.fn(async () => {}), observer = capture(3, [], completed);
+    await expect(persistCommittedTurn({ sessionId: 'c', source: 'live', turn: turn('observed'), windowCapture: { ...observer,
+      phase(name, receipt) { observer.phase(name, receipt); if (name === phase) throw new Error('observation failed'); },
+    } })).rejects.toThrow('observation failed');
+    const committed = phase === 'canonical_committed';
+    expect(settled()).toEqual([committed ? 'persisted' : 'failed']);
+    expect(fixture.sqlite.prepare('SELECT count(*) n FROM session_turns').get()).toEqual({ n: committed ? 1 : 0 });
+    expect(createWindowCommitReceipts(fixture.sqlite).byReference('c', 'source:real') !== null).toBe(committed);
+    expect(completed).not.toHaveBeenCalled();
+  });
+
+  it('preserves persisted settlement for a revised row when its post-commit observer throws', async () => {
+    await persistCommittedTurn({ sessionId: 'c', source: 'live', turn: turn('before'), windowCapture: capture(3, []) });
+    vi.mocked(events.emit).mockClear();
+    const completed = vi.fn(async () => {});
+    await expect(persistCommittedTurn({ sessionId: 'c', source: 'revision', turn: turn('after'), windowCapture: {
+      ...capture(10, [], completed), phase(name) { if (name === 'canonical_committed') throw new Error('revision observer failed'); },
+    } })).rejects.toThrow('revision observer failed');
+    expect(settled()).toEqual(['persisted']); expect(completed).not.toHaveBeenCalled();
+    expect(createWindowCommitReceipts(fixture.sqlite).byReference('c', 'source:real')!.latestRevisionCursor).toEqual(cursor(10));
+    expect(JSON.parse((fixture.sqlite.prepare('SELECT data FROM session_turns').get() as { data: string }).data).items[0].text).toBe('after');
+  });
 });

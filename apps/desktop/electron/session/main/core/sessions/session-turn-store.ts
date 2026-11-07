@@ -60,9 +60,10 @@ export function persistCommittedTurn(input: PersistInput): Promise<void> {
   if (input.windowCapture) input = { ...input, windowCapture: { ...input.windowCapture, cursor: { ...input.windowCapture.cursor } } };
   const previous = persistenceTails.get(input.sessionId) ?? Promise.resolve();
   const write = async () => {
-    let captured: WindowCommitReceipt | undefined;
-    await persistWithTurnSettlement(input, async () => { captured = await persistCommittedTurnNow(input); },
+    let captured: WindowCommitReceipt | undefined, phaseError: unknown, phaseFailed = false;
+    await persistWithTurnSettlement(input, async () => { captured = await persistCommittedTurnNow(input, error => { phaseError = error; phaseFailed = true; }); },
       receipt => events.emit(sessionTurnSettledChannel, receipt));
+    if (phaseFailed) throw phaseError;
     if (input.windowCapture) await input.windowCapture.committed(captured ?? null);
   };
   const next = previous.then(write, write);
@@ -72,7 +73,12 @@ export function persistCommittedTurn(input: PersistInput): Promise<void> {
   });
 }
 
-async function persistCommittedTurnNow(input: PersistInput): Promise<WindowCommitReceipt | undefined> {
+async function persistCommittedTurnNow(input: PersistInput, observationFailed: (error: unknown) => void): Promise<WindowCommitReceipt | undefined> {
+  const observeCommit = (receipt: WindowCommitReceipt | undefined) => {
+    if (!receipt) return;
+    try { input.windowCapture?.phase?.('canonical_committed', receipt); }
+    catch (error) { observationFailed(error); }
+  };
   if (input.source === 'revision' || input.source === 'backfill') {
     const [row] = await db
       .select({ id: sessionTurns.id, seq: sessionTurns.seq })
@@ -94,7 +100,7 @@ async function persistCommittedTurnNow(input: PersistInput): Promise<WindowCommi
       if (captured) commitWindowReceipt(sqlite, captured);
       return noteNativeConversationReplies(input.sessionId, revised, input.turn, tx);
     });
-    if (captured) input.windowCapture?.phase?.('canonical_committed', captured);
+    observeCommit(captured);
     publish?.();
     return captured;
   }
@@ -131,7 +137,7 @@ async function persistCommittedTurnNow(input: PersistInput): Promise<WindowCommi
       ? queueNativeConversationInbox(input.sessionId, tx) : false;
     return { rows: result, publish, inbox };
   });
-  if (inserted.rows.length && captured) input.windowCapture?.phase?.('canonical_committed', captured);
+  if (inserted.rows.length) observeCommit(captured);
   inserted.publish?.();
   if (inserted.inbox) publishNativeConversationInbox();
   if (input.source === 'replay' && inserted.rows.length) didFillReplay(input.sessionId, input.turn.seq);
