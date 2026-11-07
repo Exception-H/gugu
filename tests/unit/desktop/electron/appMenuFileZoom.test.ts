@@ -38,7 +38,7 @@ function buildFromTemplate(template: Array<MenuItemConstructorOptions | FakeItem
 
 const setApplicationMenu = vi.fn<(menu: FakeMenu) => void>()
 class FakeBrowserWindow {
-  webContents = { executeJavaScript: vi.fn(async (_script: string) => false), selectAll: vi.fn(), getZoomLevel: vi.fn(() => 0), setZoomLevel: vi.fn() }
+  webContents = { executeJavaScript: vi.fn(async (_script: string) => false), selectAll: vi.fn(), getType: vi.fn(() => 'window'), getZoomLevel: vi.fn(() => 0), setZoomLevel: vi.fn() }
   isFullScreen() { return false }
   setFullScreen() {}
 }

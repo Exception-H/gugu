@@ -21,6 +21,7 @@ function fakeTarget(zoomLevel = 0, fullScreen = false) {
     copy: vi.fn(),
     paste: vi.fn(),
     selectAll: vi.fn(),
+    getType: vi.fn(() => 'window'),
     executeJavaScript: vi.fn(async () => false),
     getZoomLevel: vi.fn(() => level),
     setZoomLevel: vi.fn((next: number) => { level = next }),
@@ -61,6 +62,14 @@ describe('window menu commands(#6597)', () => {
     expect(contents.selectAll).not.toHaveBeenCalled()
     finish(true)
     await command
+    expect(contents.selectAll).toHaveBeenCalledOnce()
+  })
+
+  it.each(['webview', 'browserView'])('selects %s content without dispatching product preparation events', async (type) => {
+    const { target, contents } = fakeTarget()
+    contents.getType.mockReturnValue(type)
+    await runWindowMenuCommand('selectAll', target)
+    expect(contents.executeJavaScript).not.toHaveBeenCalled()
     expect(contents.selectAll).toHaveBeenCalledOnce()
   })
 
