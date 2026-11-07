@@ -639,10 +639,12 @@ export function mergeUnreadRows(
       is_marked_unread: row.is_marked_unread === true,
     }
     const previous = byChat.get(row.chat_id)
-    if (!previous) { byChat.set(row.chat_id, locator); continue }
+    if (!previous) { byChat.set(row.chat_id, locator.stream_kind === 'main' ? locator : { ...locator, first_addressed_message_id: null, first_addressed_seq: null }); continue }
     const first = (locator.message_seq ?? Number.MAX_SAFE_INTEGER) < (previous.message_seq ?? Number.MAX_SAFE_INTEGER)
       ? locator : previous
-    const addressed = (locator.first_addressed_seq ?? Number.MAX_SAFE_INTEGER) < (previous.first_addressed_seq ?? Number.MAX_SAFE_INTEGER) ? locator : previous
+    // A topic lands on its first addressed message, and only the main stream has a view to land in: a mention
+    // inside a reply thread still counts, but it is never where an opening lands.
+    const addressed = locator.stream_kind === 'main' && (locator.first_addressed_seq ?? Number.MAX_SAFE_INTEGER) < (previous.first_addressed_seq ?? Number.MAX_SAFE_INTEGER) ? locator : previous
     byChat.set(row.chat_id, { ...first, unread_count: previous.unread_count + locator.unread_count, addressed_count: previous.addressed_count + locator.addressed_count,
       first_addressed_message_id: addressed.first_addressed_message_id, first_addressed_seq: addressed.first_addressed_seq })
   }
