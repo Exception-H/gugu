@@ -28,6 +28,7 @@ import {
   type AgentInboxInjectionInput,
   type AgentInboxDeliveryTiming,
   type AgentInboxReaderDeps,
+  type AgentInboxSource,
   type AgentInboxUnreadRow,
   unreadRowFromRpc,
   combineCoalescedPulls,
@@ -334,6 +335,39 @@ describe('an enqueuing host (session-life)', () => {
     expect(cloud.markReadCalls).toEqual([])
     await markInboxRowsRead(AGENT, handed.flatMap((input) => input.sources ?? []), deps)
     expect(cloud.markReadCalls).toEqual([{ chatId: chat, messageId: row(1).id }, { chatId: chat, messageId: row(2).id }])
+  })
+
+  // A read receipt the host writes after acceptance runs outside any pull: when it fails (a network blip — `fetch
+  // failed`), a backoff re-pull settles it without waiting for the next message, and never re-delivers the row.
+  it('a failed host receipt is written by a backoff re-pull, without another message or a second delivery', async () => {
+    vi.useFakeTimers()
+    try {
+      const cloud = cloudWith(1)
+      const accepted = new Map<string, AgentInboxSource>()
+      const delivered: string[] = []
+      let failNext = true
+      const { deps } = makeDeps(cloud, {
+        markRead: async (input) => {
+          if (failNext) { failNext = false; throw new TypeError('fetch failed') }
+          await cloud.markRead(input)
+        },
+        // The host (session-life): a new row is delivered once; a row it already accepted is only settled again.
+        inject: async (input) => {
+          const sources = input.sources ?? []
+          if (sources.every((source) => accepted.has(source.row.id))) await markInboxRowsRead(AGENT, sources, deps)
+          else for (const source of sources) { delivered.push(source.row.id); accepted.set(source.row.id, source) }
+          return 'enqueued'
+        },
+      })
+      await pullAgentInbox(AGENT, deps)
+      await expect(markInboxRowsRead(AGENT, [...accepted.values()], deps)).rejects.toThrow('fetch failed')
+      expect(cloud.readRows.has(`${row(1).id}:${AGENT}`)).toBe(false)
+      await vi.advanceTimersByTimeAsync(1_000)
+      await vi.waitFor(() => expect(cloud.readRows.has(`${row(1).id}:${AGENT}`)).toBe(true))
+      expect(delivered).toEqual([row(1).id])
+    } finally {
+      vi.useRealTimers()
+    }
   })
 
   it('a rejected row is terminal while earlier queued rows remain unread', async () => {

@@ -1047,9 +1047,18 @@ async function settleAccepted(agentUserId: string, sources: readonly AgentInboxS
   }
 }
 
-/** An enqueuing host's agent accepted these rows: settle them exactly as an accepted injection does. */
-export function markInboxRowsRead(agentUserId: string, sources: readonly AgentInboxSource[], deps: AgentInboxReaderDeps): Promise<void> {
-  return settleAccepted(agentUserId, sources, deps)
+/**
+ * An enqueuing host's agent accepted these rows: settle them exactly as an accepted injection does. This runs outside
+ * any pull, so a failed read receipt schedules the same backoff re-pull a failed pull does — the re-pulled row is
+ * already accepted, so the host only writes its receipt again — ❌ waiting for the next message to re-pull it.
+ */
+export async function markInboxRowsRead(agentUserId: string, sources: readonly AgentInboxSource[], deps: AgentInboxReaderDeps): Promise<void> {
+  try {
+    await settleAccepted(agentUserId, sources, deps)
+  } catch (error) {
+    retryInboxFailure(agentUserId, error, () => kickAgentInboxPull(agentUserId, deps, 'failure-retry'))
+    throw error
+  }
 }
 
 /**
