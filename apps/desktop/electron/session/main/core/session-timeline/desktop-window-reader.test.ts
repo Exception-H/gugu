@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { createDesktopWindowReader, type DesktopWindowIo } from './desktop-window-reader';
 import { createWindowBudget } from '@gugu/session-core/session-record/window-cache/read-budget';
 import type { WindowPage } from '@gugu/session-core/session-record/window-cache/types';
+import { applySnapshot, applyTimelineResult, emptyAgentWatchTimeline } from '../../../../../src/mobile/agent-watch/agent-watch-store';
 
 function setup() {
   const value: WindowPage = { kind: 'continuation', scope: 'scope', sourceLineage: 'lineage', snapshotRevision: 'rev',
@@ -35,7 +36,7 @@ describe('desktop bounded window bridge', () => {
     const { reader, io } = setup();
     const cursor = { version: 1 as const, scope: 'scope', sourceLineage: 'lineage', snapshotRevision: 'rev', before: 100, segment: null };
     const result = await reader.older({ conversationId: 'session', cursor });
-    expect(result.epoch).toBe('lineage');
+    expect(result.epoch).toBe('lineage:rev');
     expect(vi.mocked(io.readOlder).mock.calls[0][0].cursor).toBe(cursor);
     const request = await vi.mocked(io.request).mock.results[0].value;
     expect(vi.mocked(io.readOlder).mock.calls[0][0].budget).toBe(request.budget);
@@ -43,7 +44,7 @@ describe('desktop bounded window bridge', () => {
   it('after carries explicit empty pending arrays instead of retaining resolved tickets', async () => {
     const { reader, value } = setup();
     value.pendingLongRecords = [];
-    const result = await reader.after({ conversationId: 'session', cursor: { epoch: 'lineage', seq: 0 } });
+    const result = await reader.after({ conversationId: 'session', cursor: { epoch: 'lineage:rev', seq: 0 } });
     if (!result.ok) throw new Error('Expected batch');
     expect(result.batch.pendingLongRecords).toEqual([]);
   });
@@ -58,5 +59,18 @@ describe('desktop bounded window bridge', () => {
     resolve(setup().value);
     await Promise.resolve(); await Promise.resolve();
     expect(emit).not.toHaveBeenCalled(); expect(failed).not.toHaveBeenCalled(); expect(stopped).toHaveBeenCalledOnce();
+  });
+  it('replaces the actual shared consumer window after a same-size source rewrite', async () => {
+    const { reader, value } = setup();
+    value.pendingLongRecords = []; value.coveredRanges = [{ start: 0, end: 100 }];
+    value.turns = [{ id: 'old', seq: 1, initiator: 'agent', items: [] }];
+    const initial = await reader.snapshot({ conversationId: 'session' });
+    let state = applySnapshot(emptyAgentWatchTimeline(), initial);
+    value.snapshotRevision = 'rewritten';
+    value.turns = [{ id: 'replacement', seq: 1, initiator: 'agent', items: [] }];
+    const result = await reader.after({ conversationId: 'session', cursor: initial.cursor });
+    expect(result.ok).toBe(false);
+    state = applyTimelineResult(state, result);
+    expect(state.turns.map(turn => turn.id)).toEqual(['replacement']);
   });
 });

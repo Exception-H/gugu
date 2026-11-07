@@ -24,7 +24,9 @@ function page(result: WindowResult): WindowPage {
 function project(value: WindowPage): TimelineSnapshot {
   const { kind: _kind, scope: _scope, commitSeq: _commit, io: _io, turns, ...fields } = value;
   const seq = Math.max(0, ...value.coveredRanges.map(range => range.end), ...value.pendingLongRecords.map(ticket => ticket.pinnedEnd));
-  return { ...fields, cursor: { epoch: value.sourceLineage, seq }, turns, settlements: [], hasOlder: value.moreBefore !== 'no' };
+  // A byte endpoint is not an event revision: same-size rewrites must replace the
+  // client window. Append rebasing requires a separately verified source anchor.
+  return { ...fields, cursor: { epoch: `${value.sourceLineage}:${value.snapshotRevision}`, seq }, turns, settlements: [], hasOlder: value.moreBefore !== 'no' };
 }
 function afterPage(snapshot: TimelineSnapshot, cursor: RecordCursor | null): TimelineAfterResult {
   if (!cursor || cursor.epoch !== snapshot.cursor.epoch) return { ok: false, reset: 'epoch_changed', snapshot };
