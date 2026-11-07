@@ -92,11 +92,17 @@ export function cloudFileProviders(deps: {
   imageCache?: Pick<Cache, 'match' | 'put'>
 }): Pick<FileProviders, 'metadata' | 'managed' | 'temporary' | 'preview' | 'download'> {
   const request = async (context: FileContext, route: string, body: Record<string, unknown>) => {
+    context.signal?.throwIfAborted()
     const endpoint = await deps.endpoint(context)
+    context.signal?.throwIfAborted()
     return attachmentRequest(endpoint, route, body, context.signal)
   }
-  const objectFetch = async (context: FileContext, url: RequestInfo | URL, init?: RequestInit) =>
-    (deps.fetch ?? (await deps.endpoint(context)).fetch ?? fetch)(url, init)
+  const objectFetch = async (context: FileContext, url: RequestInfo | URL, init?: RequestInit) => {
+    context.signal?.throwIfAborted()
+    const fetcher = deps.fetch ?? (await deps.endpoint(context)).fetch ?? fetch
+    context.signal?.throwIfAborted()
+    return fetcher(url, init)
+  }
   const read = async (revision: FileRevision, context: FileContext, encrypted: boolean, destination?: FileSink): Promise<FileBytes> => {
     const ref = 'item_id' in context.ref ? { ...context.ref, version: revision.version } : context.ref
     // A server that knows `download_request_id` answers `download` (the lease, once the copy is ready) and checks the
@@ -178,8 +184,12 @@ export function cloudFileProviders(deps: {
         acknowledged.catch(() => undefined)
         return { size: file.size, read: (offset, length) => file.read(offset, length), dispose: () => file.dispose(), acknowledged }
       }
-      changed(await metadata({ ...context, ref }) as Download)
+      context.signal?.throwIfAborted()
+      const current = await metadata({ ...context, ref }) as Download
+      context.signal?.throwIfAborted()
+      changed(current)
       if (encrypted) await request(context, 'file-read-complete', { download_id: lease!.download_id, as: context.actor.actorId })
+      context.signal?.throwIfAborted()
       return destination ? await sink.commit() : file
     } catch (error) {
       await sink?.abort()
@@ -191,7 +201,10 @@ export function cloudFileProviders(deps: {
   return {
     download: (revision, context, sink) => read(revision, context, revision.source === 'local', sink),
     async metadata(context): Promise<FileMetadata> {
-      return parseFileMetadata(await metadata(context), context.ref)
+      context.signal?.throwIfAborted()
+      const result = await metadata(context)
+      context.signal?.throwIfAborted()
+      return parseFileMetadata(result, context.ref)
     },
     managed: (revision, context) => read(revision, context, false),
     temporary: (revision, context) => read(revision, context, true),
