@@ -184,7 +184,7 @@ export function useFlowList({ scrollerRef, contentRef, resetKey, rowIds, landing
       grow(scroller)
     }
     report(scroller)
-  }, [resetKey, slice, rowIds, scrollerRef, contentRef, grow, report])
+  }, [resetKey, slice, rowIds, end, scrollerRef, contentRef, grow, report])
 
   // 内容长高/变矮:在底部就贴住(新消息、最后一条长高、图片晚到);ResizeObserver 在布局之后、绘制之前回调。
   // 不在底部时视口上方的变化交给浏览器的滚动锚定,这里不动。
