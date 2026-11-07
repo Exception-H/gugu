@@ -4,15 +4,14 @@ import type { PromptEditorRef } from '@gugu/session-ui/react/components'
 import type { useConversationQueue } from '@/components/chat/useConversationQueue'
 import { useSessionMessageQuotes } from '@renderer/features/sessions/acp/use-session-message-quotes'
 import { useSessionPromptEditor } from '@renderer/features/sessions/acp/use-session-prompt-editor'
-import { useSearchedTaskReveal, useSessionSourceMessage } from '@renderer/features/sessions/acp/use-session-source-message'
-import { useBoundChatView } from '@renderer/features/sessions/acp/use-bound-chat-view'
+import { useSessionSourceMessage } from '@renderer/features/sessions/acp/use-session-source-message'
 import { toast } from '@renderer/lib/hooks/use-toast'
 import { translateSessionMessage } from '@renderer/localization/locale-store'
 import type { AgentWatchTimeline } from './agent-watch-store'
 
 /** The phone owns data/RPC; quote identity, preview, serialization and reveal stay shared with desktop. */
 export function usePhoneSessionQuotes(input: {
-  deviceId: string; sessionId: string; timeline: AgentWatchTimeline; historyReady: boolean;
+  deviceId: string; sessionId: string; timeline: AgentWatchTimeline;
   draftText: string; setDraftText(text: string): void;
   queue: ReturnType<typeof useConversationQueue>['props']; onLoadOlder(): Promise<void>;
   editor: MutableRefObject<PromptEditorRef | null>; view: MutableRefObject<ChatView | null>;
@@ -22,8 +21,6 @@ export function usePhoneSessionQuotes(input: {
   const { deviceId, sessionId, editor, view } = input
   const owner = useMemo(() => ({
     deviceId, sessionId,
-    bindView: (ready: ChatView | null) => { view.current = ready },
-    get historyLoading() { return !latest.current.historyReady },
     get draftText() { return latest.current.draftText },
     setDraftText: (text: string) => latest.current.setDraftText(text),
     get queuedPromptEdit() { return latest.current.queue.queuedPromptEdit },
@@ -39,19 +36,15 @@ export function usePhoneSessionQuotes(input: {
       await new Promise<void>(resolve => requestAnimationFrame(() => resolve()))
       return latest.current.timeline.turns.filter(turn => !before.has(turn.id))
     },
-  }), [deviceId, sessionId, view])
+  }), [deviceId, sessionId])
   const menus = useSessionMessageQuotes(owner, editor)
   const composer = useSessionPromptEditor(owner, editor)
-  const bound = useBoundChatView(owner)
   const source = useSessionSourceMessage(owner, view, () => toast({ title: translateSessionMessage('transcript.originalMessageMissing'), tier: 'error' }))
-  useSearchedTaskReveal(owner, bound.view, source.reveal)
   const commands = useMemo(() => ({ onMessageTextMount: menus.onMessageTextMount, onRestorePrompt: menus.restorePrompt,
     onConversationReply: source.reveal, flashMessageId: source.flashMessageId }),
   [menus.onMessageTextMount, menus.restorePrompt, source.reveal, source.flashMessageId])
   return {
     composer,
-    onReady: bound.onReady,
-    onDisposed: bound.onGone,
     loadOlder: () => owner.canLoadOlderHistory ? source.loadOlder() : Promise.resolve([]),
     commands,
   }

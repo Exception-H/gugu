@@ -10,19 +10,21 @@ const FILE_ICON = (
 
 /**
  * The chat's file mention chip (App 引用 pill), drawn for a link: a group file's `@` pill, and a file, topic or message
- * link drawn in place (linkPills.ts). `file` gives it the file glyph; a link the reader cannot open is drawn greyed.
+ * link drawn in place (linkPills.ts). `file` gives it the file glyph; `mention` marks the `@` pill, which copies back as
+ * one (hookFilePillCopy) where a link pill copies as its words; a link the reader cannot open is drawn greyed.
  */
-export function MentionPill({ href, title, file, unavailable, onClick, children, rest }: {
+export function MentionPill({ href, title, file, mention, unavailable, onClick, children, rest }: {
   href: string
   title: string
   file?: boolean
+  mention?: boolean
   unavailable?: boolean
   onClick: (event: MouseEvent) => void
   children: ReactNode
   rest?: Omit<ComponentPropsWithoutRef<'a'>, 'href' | 'title' | 'onClick' | 'children' | 'className'>
 }) {
   return (
-    <a {...rest} className={`gg-md-mention ${FILE_PILL_CLASS}`} data-mention-kind={file ? 'file' : 'link'} data-unavailable={unavailable ? 'true' : undefined}
+    <a {...rest} className={`gg-md-mention ${FILE_PILL_CLASS}`} data-mention-kind={mention ? 'file' : 'link'} data-unavailable={unavailable ? 'true' : undefined}
       href={href} title={title} onClick={onClick}>
       {file ? <span className="gg-md-mention-icon" aria-hidden="true">{FILE_ICON}</span> : null}
       <span className="gg-file-pill-label">{children}</span>

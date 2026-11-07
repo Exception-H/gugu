@@ -1,10 +1,9 @@
 import { getSupabaseUrl } from '@gugu/core/cloud/config'
-import { guguLink, parseGuguLink, type FilePlace, type GuguLinkTarget, type LinkPlace, type OpenTarget } from '@gugu/core/shared/ui/guguLink'
+import { parseGuguLink, type FilePlace, type GuguLinkTarget, type LinkPlace, type OpenTarget } from '@gugu/core/shared/ui/guguLink'
 import type { MessageItem } from '@gugu/core/shared/types/chat'
 import { platform } from '../platform'
 import { notify } from './notices'
 import { readMobileShell } from '../hooks/useMobileShell'
-import { UI_EVENTS } from './uiEvents'
 
 /** One shell request for a resolved target, shared by the main and session renderer roots. */
 export const OPEN_LINK_TARGET = 'gugu:open-link-target'
@@ -39,13 +38,8 @@ export async function openTarget(target: OpenTarget, groupParticipantRequestId?:
       : await (await import('../components/appSlot/phoneAppHost')).openPhoneLink(target)
     if (outcome.kind === 'not-gugu-link') return false
     if (outcome.kind === 'failed') throw new Error(`${outcome.name}: ${outcome.detail ?? outcome.reason}`)
-    if (target.kind === 'session' && 'itemId' in target && target.itemId) window.dispatchEvent(new CustomEvent(UI_EVENTS.chatAsked))
     return true
   } catch (error) {
-    if (target.kind === 'session' && 'itemId' in target && target.itemId) {
-      const { takeTaskReveal } = await import('../hooks/useSourceMessageReveal')
-      takeTaskReveal(target.sessionId, guguLink(target))
-    }
     if (target.kind === 'file') throw new Error(await fileFailureMessage(target), { cause: error })
     throw error
   }

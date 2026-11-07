@@ -128,8 +128,6 @@ describe('Markdown local file links in chat', () => {
     const elsewhere = 'bbbbbbbb-bbbb-4ccc-8ddd-eeeeeeeeeeee'
     readable.set(itemId, chatId)
     await act(async () => root.render(createElement(Document, { trust: 'chat', content: `[plan.md](gugu-file://${itemId}) [local](notes/a.md) [theirs](gugu-file://${elsewhere})` })))
-    // A chat's file link is drawn as a link pill, loaded on first use: click the pill that stays, not its placeholder.
-    await act(async () => { await vi.dynamicImportSettled() })
     const links = [...container.querySelectorAll<HTMLAnchorElement>('a')]
     expect(links.map((anchor) => anchor.getAttribute('href'))).toEqual([`gugu-file://${itemId}`, 'notes/a.md', `gugu-file://${elsewhere}`])
     const click = async (anchor: HTMLAnchorElement) => {

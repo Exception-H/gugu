@@ -8,6 +8,7 @@ import {
   useMemo,
   useRef,
   useSyncExternalStore,
+  type ComponentProps,
   type ComponentPropsWithoutRef,
   type ReactNode,
 } from 'react'
@@ -33,7 +34,9 @@ import { PlatformCopyButton } from './PlatformCopyButton'
 import { PlatformTable } from './PlatformTable'
 import { useMobileShell } from '@/hooks/useMobileShell'
 import { FILE_PILL_CLASS, hookFilePillCopy, rehypeGroupFilePills } from './filePills'
-import { LINK_PILL_CLASS, rehypeLinkPills } from './linkPills'
+import { LINK_PILL_CLASS, linkPillTarget, rehypeLinkPills } from './linkPills'
+import { useAuth } from '../../store/auth'
+import { useChatStore } from '../../store/chatContext'
 import { MentionPill } from './MentionPill'
 // Lazy: a link pill reads through the chat's readers (file metadata, messages, topics); Markdown itself stays free of them.
 const LinkPill = lazy(() => import('./LinkPill').then(module => ({ default: module.LinkPill })))
@@ -128,6 +131,17 @@ function pluginsFor(options: MarkdownDialectOptions) {
 }
 
 /**
+ * A chat link pill reads as the person reading: a file needs someone signed in, a chat or message a chat list read here.
+ * Elsewhere (a document, a sample, the assistant's panels) the link stays the plain link, without loading the pill.
+ */
+function LinkPillGate({ plain, ...props }: { plain: ReactNode } & Omit<ComponentProps<typeof LinkPill>, 'accountId'>) {
+  const { user } = useAuth()
+  const { chatsRead } = useChatStore('chatsRead')
+  if (!user || (linkPillTarget(props.href)?.kind === 'chat' && !chatsRead)) return <>{plain}</>
+  return <Suspense fallback={plain}><LinkPill {...props} accountId={user.id} /></Suspense>
+}
+
+/**
  * The one markdown renderer of the React surfaces (chat, previews, documents, PR comments, extension notes).
  * Grammar, sanitizing and typography come from `@gugu/session-shared` — the transcript renders the same dialect.
  */
@@ -192,25 +206,16 @@ export const Markdown = memo(function Markdown({
         const groupFile = href ? parseGroupFileLink(href) : null
         const classes = typeof rest.className === 'string' ? rest.className.split(/\s+/) : []
         const { className: _className, ...attributes } = rest
-        // A chat link to a file, chat or message is drawn in place as the file pill, read as the person reading (linkPills.ts).
-        if (href && classes.includes(LINK_PILL_CLASS)) {
-          const words = onlyText(children) ?? href
-          return (
-            <Suspense fallback={<MentionPill href={href} file={groupFile !== null} title={words} onClick={onClick} rest={attributes}>{children}</MentionPill>}>
-              <LinkPill href={href} onClick={onClick} rest={attributes}>{children}</LinkPill>
-            </Suspense>
-          )
-        }
         // App 引用 pill: `@` + a group file's link (rehypeGroupFilePills) is the transcript's file pill; its click is the
         // link's, so it opens where that link opens — at the place it points at.
         if (href && groupFile && classes.includes(FILE_PILL_CLASS)) {
           const label = onlyText(children) ?? ''
           const picked = groupFile.version === undefined ? null : tRef.current('filePill.picked', { version: groupFile.version })
-          return <MentionPill href={href} file title={picked ? `${label} · ${picked}` : label} onClick={onClick} rest={attributes}>{children}</MentionPill>
+          return <MentionPill href={href} file mention title={picked ? `${label} · ${picked}` : label} onClick={onClick} rest={attributes}>{children}</MentionPill>
         }
         // A group file's link written as its name reads as the file list reads it (摩擦单 F39).
         const fileName = groupFile ? onlyText(children) : null
-        return (
+        const plain = (
           <a
             {...rest}
             href={href}
@@ -221,6 +226,11 @@ export const Markdown = memo(function Markdown({
             {fileName !== null ? <GroupFileName name={fileName} /> : children}
           </a>
         )
+        // A chat link to a file, chat or message is drawn in place as the file pill, read as the person reading (linkPills.ts).
+        if (href && classes.includes(LINK_PILL_CLASS)) {
+          return <LinkPillGate href={href} onClick={onClick} plain={plain} rest={attributes}>{children}</LinkPillGate>
+        }
+        return plain
       },
       ...(hasImageRenderer
         ? {

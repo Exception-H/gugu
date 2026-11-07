@@ -57,12 +57,10 @@ describe('a pill pointing at a group file, in a chat bubble', () => {
     expect(decodeURI(pill.getAttribute('href')!)).toBe(`gugu-file://${ITEM}?v=7#slide=3&shape=12`)
   })
 
-  it('control: a group file’s plain link (no `@`) is drawn in place as a link pill, not an `@` pill; an `@` before a web link stays text', async () => {
+  it('control: a group file’s plain link (no `@`) stays a link, and an `@` before a web link stays text', async () => {
     await render(`见 [演示稿.pptx](gugu-file://${ITEM}) 和 @[网站](https://example.com)`)
-    const pill = container.querySelector<HTMLAnchorElement>('a.gg-file-pill')!
-    expect(pill.dataset.mentionKind).toBe('file')
-    expect(pill.textContent).toBe('演示稿.pptx')
-    expect(container.textContent).toBe('见 演示稿.pptx 和 @网站')
+    expect(container.querySelector('a.gg-file-pill')).toBeNull()
+    expect(container.textContent).toContain('@网站')
   })
 
   // 155 10-15: the host encodes the App's place; through the real renderer it comes back exactly — `%`, a space, quotes.

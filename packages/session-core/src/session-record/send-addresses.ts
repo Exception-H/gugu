@@ -1,6 +1,7 @@
 import { readDeliveryEnvelope, type DeliveryReadFacts } from '@gugu/core/local/agent/deliveryEnvelope';
+import { catalogCall } from '../acp/models/turns/tool-calls';
 import type { TranscriptItem, TranscriptTurn } from '../acp/models/turns/turn';
-import { agentSendOf, messageSendTargetOf, replyItems, sendArgs, sourceChatMatches,
+import { agentSendOf, messageSendTargetOf, replyItems, sourceChatMatches,
   successfulGuguSendMessageId, successfulMessageSend, successfulSessionSend, type AgentSendTarget } from './reply-process';
 
 /** Original addressing facts. A missing recipient list is unknown, not a broadcast. */
@@ -37,7 +38,7 @@ export function sendAddressesOf(item: TranscriptItem, turn?: TranscriptTurn): Se
   const target = send?.to ?? messageSendTargetOf(item, turn);
   if (!target) return null;
   try {
-    const args = sendArgs(item);
+    const args = (catalogCall(item.tool, item.rawInput)?.args ?? JSON.parse(item.rawInput ?? '')) as Record<string, unknown>;
     if (!args || typeof args !== 'object') return null;
     const source = precedingDelivery(item, turn);
     const here = target.kind === 'chat' && source?.route === 'chat'
