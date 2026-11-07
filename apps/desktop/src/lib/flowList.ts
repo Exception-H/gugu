@@ -51,7 +51,7 @@ type Slice = { key: string | number | undefined; fromId: string | undefined; toI
 // 首帧那一段:最新处 = 最后几行;锚点 = 它上面一行起往下几行。toId 为空 = 一直到末尾(新消息照常接上)。
 function firstSlice(key: Slice['key'], landing: ListLanding, ids: ReadonlyArray<string>): Slice {
   if (landing.index === 'LAST') return { key, fromId: ids[Math.max(0, ids.length - FIRST_FRAME_ROWS)], toId: undefined }
-  return { key, fromId: ids[Math.max(0, landing.index - 1)], toId: ids[Math.min(ids.length - 1, landing.index + FIRST_FRAME_ROWS)] }
+  return { key, fromId: ids[Math.max(0, landing.index - 1)], toId: landing.index + FIRST_FRAME_ROWS >= ids.length - 1 ? undefined : ids[landing.index + FIRST_FRAME_ROWS] }
 }
 
 export function useFlowList({ scrollerRef, contentRef, resetKey, rowIds, landing, followTail, atBottomThreshold, onAtBottomChange, onTotalHeightChanged, onStartReached, handleRef }: {
@@ -131,8 +131,16 @@ export function useFlowList({ scrollerRef, contentRef, resetKey, rowIds, landing
   const dataHead = rowIds[0]
   const measuredHeadRef = useRef({ headKey, dataHead })
   if (measuredHeadRef.current.headKey !== headKey || measuredHeadRef.current.dataHead !== dataHead) {
+    const prepended = measuredHeadRef.current.dataHead !== dataHead
     measuredHeadRef.current = { headKey, dataHead }
-    if (scrollerRef.current) capture(scrollerRef.current)
+    const scroller = scrollerRef.current
+    if (scroller) {
+      capture(scroller)
+      // 旧首行接上历史后会丢掉日期头;近顶时让新头和它在同次提交出现,避免负向补偿先被0夹住。
+      if (prepended && start > 0 && scroller.scrollTop < scroller.clientHeight) {
+        setSlice(s => ({ ...s, fromId: rowIds[Math.max(0, start - GROW_ROWS)] }))
+      }
+    }
   }
 
   // 头部插进一页旧消息(或窗口从头部裁掉几行):把读者正看着的那一行放回原处,在这次提交的绘制之前。
@@ -169,7 +177,11 @@ export function useFlowList({ scrollerRef, contentRef, resetKey, rowIds, landing
         }
       }
       pending.current = null
-    } else grow(scroller)
+    } else {
+      // 新行进来时保留旧贴底意图,先贴住再重算电平;否则会在 ResizeObserver 前把意图清掉。
+      if (followRef.current && atBottomRef.current && end === rowIds.length) scroller.scrollTop = scroller.scrollHeight
+      grow(scroller)
+    }
     report(scroller)
   }, [resetKey, slice, rowIds, scrollerRef, contentRef, grow, report])
 
