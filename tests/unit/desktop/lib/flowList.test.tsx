@@ -6,6 +6,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { act, createElement, useRef } from 'react'
 import { createReactHarness } from '../../../support/testHarness'
 import { useFlowList, type FlowListHandle, type ListLanding } from '../../../../apps/desktop/src/lib/flowList'
+import { PREPARE_SELECT_ALL_EVENT } from '../../../../apps/desktop/shared/window-menu-commands'
 
 const VIEW = 300
 const scrollTops = new WeakMap<Element, number>()
@@ -300,6 +301,19 @@ it('leaves editing shortcuts and keys from another input alone, and supports Con
   expect(rendered()).toHaveLength(6)
   const before = topOf('r39')
   await act(async () => { scroller().dispatchEvent(new KeyboardEvent('keydown', { key: 'a', ctrlKey: true, bubbles: true })) })
+  expect(rendered()).toHaveLength(40)
+  expect(topOf('r39')).toBe(before)
+})
+
+it('uses the same fill for native menu preparation while leaving an editable target alone', async () => {
+  await harness.render(createElement(List, { rows: rowsOf(40), landing: { index: 'LAST', align: 'end' } }))
+  const editor = document.createElement('div')
+  editor.setAttribute('contenteditable', 'true')
+  scroller().append(editor)
+  await act(async () => { editor.dispatchEvent(new Event(PREPARE_SELECT_ALL_EVENT, { bubbles: true })) })
+  expect(rendered()).toHaveLength(6)
+  const before = topOf('r39')
+  await act(async () => { scroller().dispatchEvent(new Event(PREPARE_SELECT_ALL_EVENT, { bubbles: true })) })
   expect(rendered()).toHaveLength(40)
   expect(topOf('r39')).toBe(before)
 })

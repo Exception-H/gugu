@@ -7,6 +7,7 @@ import {
 } from '../../../../apps/desktop/electron/window-menu-commands'
 import {
   isWindowMenuCommand,
+  PREPARE_SELECT_ALL_EVENT,
   WINDOW_MENU_COMMANDS,
 } from '../../../../apps/desktop/shared/window-menu-commands'
 
@@ -40,15 +41,27 @@ describe('window menu commands(#6597)', () => {
     }
   })
 
-  it('编辑类命令各自落到 webContents 上的同名编辑命令,且只落这一个', () => {
+  it('编辑类命令各自落到 webContents 上的同名编辑命令,且只落这一个', async () => {
     for (const command of ['undo', 'redo', 'cut', 'copy', 'paste', 'selectAll'] as const) {
       const { target, contents } = fakeTarget()
-      runWindowMenuCommand(command, target)
+      await runWindowMenuCommand(command, target)
       for (const method of ['undo', 'redo', 'cut', 'copy', 'paste', 'selectAll'] as const) {
         expect(contents[method]).toHaveBeenCalledTimes(method === command ? 1 : 0)
       }
       expect(contents.setZoomLevel).not.toHaveBeenCalled()
     }
+  })
+
+  it('lets the focused transcript finish mounting before native Select All', async () => {
+    const { target, contents } = fakeTarget()
+    let finish!: (value: boolean) => void
+    contents.executeJavaScript.mockReturnValue(new Promise(resolve => { finish = resolve }))
+    const command = runWindowMenuCommand('selectAll', target)
+    expect(contents.executeJavaScript).toHaveBeenCalledWith(expect.stringContaining(PREPARE_SELECT_ALL_EVENT))
+    expect(contents.selectAll).not.toHaveBeenCalled()
+    finish(true)
+    await command
+    expect(contents.selectAll).toHaveBeenCalledOnce()
   })
 
   it('缩放:与应用菜单 zoomIn / zoomOut role 同一步长 0.5,实际大小 = 0 级', async () => {
