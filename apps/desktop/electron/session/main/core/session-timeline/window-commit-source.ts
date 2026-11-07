@@ -29,6 +29,14 @@ function bound(value: WindowCommitSourceManifest, binding: Binding): void {
 const same = (a: Physical, b: Physical) => a.dev === b.dev && a.ino === b.ino && a.mtimeNs === b.mtimeNs && a.ctimeNs === b.ctimeNs;
 const fileBytes = (source: WindowCommitSourceManifest) => source.bytes + source.chunks * (source.stride - CHUNK);
 
+/** Metadata-only publication check against the receipt's physical identity. */
+export async function assertWindowCommitSource(directory: string, binding: Binding, source: WindowCommitSourceManifest): Promise<void> {
+  bound(source, binding);
+  const current = await stat(sourcePath(directory, binding), { bigint: true });
+  if (!current.isFile() || current.size !== BigInt(fileBytes(source)) || !same(physical(current), source.physical))
+    throw new Error('Immutable commit source changed');
+}
+
 /** The existing canonical writer supplies its already serialized value. This
  * adds bounded encoding buffers, not a second full stringify/Buffer. The
  * writer's existing full serialization cost is deliberately not hidden. */
