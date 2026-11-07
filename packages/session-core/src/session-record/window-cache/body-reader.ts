@@ -126,22 +126,44 @@ export async function readIndexedBodyPage(io: BodyPageIo, input: {
     return { ...binding, kind: 'reset', reason: 'invalid_cursor', io: budget.counters };
   signal?.throwIfAborted();
   if (body.byteLength !== null && offset > body.byteLength) return { ...binding, kind: 'reset', reason: 'invalid_cursor', io: budget.counters };
-  if (offset === body.byteLength) return { ...binding, kind: 'body', text: '', offset, nextOffset: offset, moreAfter: 'no', io: budget.counters };
   const first = Math.floor(offset / BODY_CHUNK_BYTES);
-  const count = Math.min(maxBytes, body.byteLength === null ? maxBytes : body.byteLength - offset);
+  const count = Math.min(maxBytes, BODY_CHUNK_BYTES, body.byteLength === null ? maxBytes : body.byteLength - offset);
   const last = Math.floor((offset + count - 1) / BODY_CHUNK_BYTES);
-  const chunks: Uint8Array[] = [];
-  for (let ordinal = first; ordinal <= last; ordinal += 1) {
+  const loaded = new Map<number, Uint8Array>();
+  async function load(ordinal: number): Promise<Uint8Array | null> {
+    const cached = loaded.get(ordinal);
+    if (cached) return cached;
     signal?.throwIfAborted();
     const descriptor = await io.descriptor(body, ordinal, budget);
-    if (!descriptor?.content) return { ...binding, kind: 'needs_location', offset, io: budget.counters };
+    if (!descriptor?.content) return null;
     if (descriptor.bodyId !== body.id || descriptor.revision !== body.revision || descriptor.ordinal !== ordinal ||
       descriptor.decodedStart !== ordinal * BODY_CHUNK_BYTES || descriptor.decodedBytes < 1 || descriptor.decodedBytes > BODY_CHUNK_BYTES)
       throw new Error('Body chunk descriptor binding mismatch');
     const bytes = await io.content(descriptor.content, budget);
     if (bytes.length !== descriptor.decodedBytes) throw new Error('Body chunk length mismatch');
+    loaded.set(ordinal, bytes); return bytes;
+  }
+  const chunks: Uint8Array[] = [];
+  for (let ordinal = first; ordinal <= last; ordinal += 1) {
+    const bytes = await load(ordinal);
+    if (!bytes) return { ...binding, kind: 'needs_location', offset, io: budget.counters };
     chunks.push(bytes);
   }
+  let previousOffset: number | null = offset === 0 ? null : Math.max(0, offset - BODY_CHUNK_BYTES);
+  if (previousOffset !== null && previousOffset > 0) {
+    const candidate = previousOffset;
+    for (let scanned = 0; scanned <= 3; scanned += 1) {
+      const ordinal = Math.floor(previousOffset / BODY_CHUNK_BYTES);
+      const bytes = await load(ordinal);
+      if (!bytes) return { ...binding, kind: 'needs_location', offset, io: budget.counters };
+      const byte = bytes[previousOffset % BODY_CHUNK_BYTES];
+      if (byte === undefined) throw new Error('Previous body boundary is outside its chunk');
+      if ((byte & 0xc0) !== 0x80) break;
+      previousOffset += 1;
+    }
+    if (previousOffset - candidate > 3 || previousOffset >= offset) throw new Error('Invalid previous UTF-8 boundary');
+  }
+  if (offset === body.byteLength) return { ...binding, kind: 'body', text: '', offset, nextOffset: offset, previousOffset, moreAfter: 'no', io: budget.counters };
   const available = chunks.reduce((sum, chunk) => sum + chunk.length, 0);
   const combined = new Uint8Array(available);
   let written = 0;
@@ -160,6 +182,6 @@ export async function readIndexedBodyPage(io: BodyPageIo, input: {
   budget.charge('decodedBytes', length); budget.charge('outputBytes', length);
   signal?.throwIfAborted();
   const nextOffset = offset + length;
-  return { ...binding, kind: 'body', text, offset, nextOffset,
+  return { ...binding, kind: 'body', text, offset, nextOffset, previousOffset,
     moreAfter: body.byteLength === null ? 'unknown' : nextOffset < body.byteLength ? 'yes' : 'no', io: budget.counters };
 }

@@ -106,11 +106,11 @@ describe('indexed decoded body pages', () => {
   }
   it('directly reads page N above 32-bit offsets without earlier descriptors', async () => {
     const ordinal = 1_000_000;
-    const { io, queried } = indexed(new Map([[ordinal, new Uint8Array(BODY_CHUNK_BYTES).fill(120)]]));
+    const { io, queried } = indexed(new Map([[ordinal - 1, new Uint8Array(BODY_CHUNK_BYTES).fill(120)], [ordinal, new Uint8Array(BODY_CHUNK_BYTES).fill(120)]]));
     const result = await readIndexedBodyPage(io, { bodyRef: body, offset: ordinal * BODY_CHUNK_BYTES, maxBytes: 4096, budget: createWindowBudget() });
-    expect(queried).toEqual([ordinal]);
+    expect(queried).toEqual([ordinal, ordinal - 1]);
     expect(result.kind).toBe('body');
-    expect(result.io.indexBytes).toBe(BODY_CHUNK_BYTES + 128);
+    expect(result.io.indexBytes).toBe(2 * (BODY_CHUNK_BYTES + 128));
   });
   it('returns needs_location at an unknown page without reading from the body head', async () => {
     const { io, queried } = indexed(new Map());
@@ -124,9 +124,9 @@ describe('indexed decoded body pages', () => {
     const chunks = new Map(Array.from({ length: 4 }, (_, n) => [n, all.subarray(n * BODY_CHUNK_BYTES, (n + 1) * BODY_CHUNK_BYTES)]));
     const { io, queried } = indexed(chunks);
     const budget = createWindowBudget();
-    const first = await readIndexedBodyPage(io, { bodyRef: body, offset: BODY_CHUNK_BYTES - 1, maxBytes: 32768, budget });
+    const first = await readIndexedBodyPage(io, { bodyRef: body, offset: 2 * BODY_CHUNK_BYTES - 1, maxBytes: 32768, budget });
     if (first.kind !== 'body') throw new Error('Expected body');
-    expect(queried).toEqual([0, 1, 2]);
+    expect(queried).toEqual([1, 2, 0]);
     expect(first.nextOffset).toBe(3 * BODY_CHUNK_BYTES - 3);
     expect(first.text).not.toContain('�');
     expect(budget.counters.indexBytes).toBeLessThan(65536);
@@ -134,5 +134,11 @@ describe('indexed decoded body pages', () => {
     if (next.kind !== 'body') throw new Error('Expected body');
     expect(next.text).toBe('😀');
     expect(next.nextOffset - first.nextOffset).toBe(4);
+    expect(first.previousOffset).toBe(BODY_CHUNK_BYTES - 1);
+    const previous = await readIndexedBodyPage(io, { bodyRef: body, offset: first.previousOffset!,
+      maxBytes: first.offset - first.previousOffset!, budget: createWindowBudget() });
+    if (previous.kind !== 'body') throw new Error('Expected previous body page');
+    expect(previous.nextOffset).toBe(first.offset);
+    expect(previous.text).not.toContain('�');
   });
 });
