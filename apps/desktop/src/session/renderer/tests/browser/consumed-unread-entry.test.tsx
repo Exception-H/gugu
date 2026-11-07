@@ -161,7 +161,7 @@ describe('consumed first-unread entry', () => {
     await page.getByRole('button', { name: 'Return to latest' }).click()
     await until('the latest window has filled its rows and reached its actual bottom', () => {
       const surface = view.scroller()
-      return !view.history.getSnapshot().hasNewer && surface.querySelectorAll('[data-msg-id]').length === view.history.getSnapshot().messages.length
+      return !view.history.getSnapshot().hasNewer && Number(surface.querySelector('[aria-setsize]')?.getAttribute('aria-setsize')) === view.history.getSnapshot().messages.length
         && surface.scrollHeight - surface.scrollTop - surface.clientHeight <= 1
     })
     const visible = () => {
