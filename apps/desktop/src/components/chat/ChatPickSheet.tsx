@@ -61,7 +61,7 @@ interface ChatPickSheetProps {
 
 // The topic sub-row of the chat list (TopicSubRow): indented onto the `.gg-topic-subrows` rail, the topic mark for an avatar.
 const TOPIC_ROW_STYLE: CSSProperties = { paddingLeft: 40 }
-const TOPIC_MARK = <MessageSquare size={13} style={{ color: 'var(--text-tertiary)' }} />
+const TOPIC_MARK = <MessageSquare size={13} className="shrink-0 self-center" style={{ color: 'var(--text-tertiary)' }} />
 
 /**
  * Pick chats, several at once, in the invite picker's (MemberPicker) clothes: a title, a search field, the picked as chips,
