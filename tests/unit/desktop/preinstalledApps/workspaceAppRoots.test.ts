@@ -77,7 +77,7 @@ afterAll(() => vi.unstubAllGlobals())
 describe('a session\'s tab: one folder, two roots', () => {
   test('the two buttons stay above the chat files, with no roots page to enter', () => {
     expect(names()).toEqual(['plan.md'])
-    expect(listed()).toEqual([{ chat: 'dm-1' }])
+    expect(listed()).toEqual([{ chat: 'dm-1', folder: '' }, { chat: 'dm-1', folder: '附件' }])
     expect([...$('place-switch').querySelectorAll('button')].map((button) => button.textContent)).toEqual(['聊天文件', '电脑文件'])
     expect($('place-switch').querySelector('[aria-pressed="true"]')?.getAttribute('data-root')).toBe('chat')
     expect(crumbs()).toBeNull()

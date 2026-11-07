@@ -245,15 +245,14 @@ describe('the host\'s Back (the phone\'s back key)', () => {
     expect(back.releases - releases).toBe(1)
   })
 
-  test('a claim that fails is tried again on the next folder, and held only once it succeeds', async () => {
+  test('a claim that fails is said, tried again on the next change, and held once it succeeds', async () => {
     gugu.navigation.onBack.mockImplementationOnce(async () => { throw coded('failed', 'no back here') })
     const claims = gugu.navigation.onBack.mock.calls.length
     await enter('contracts')
     await until('the failed claim said', () => said().some((line) => line?.includes('no back here')))
-    expect(back.handler, 'nothing held after a failed claim').toBeNull()
     await enter('y2026')
-    await until('the claim tried again', () => back.handler !== null)
-    expect(gugu.navigation.onBack.mock.calls.length - claims).toBe(2)
+    await until('the claim tried again and held', () => back.handler !== null)
+    expect(gugu.navigation.onBack.mock.calls.length - claims, 'the failed claim, then one that held').toBe(2)
     goTop()
     await until('let go at the top', () => back.handler === null)
   })
