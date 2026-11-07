@@ -9,6 +9,7 @@ import { useTranslation } from 'react-i18next'
 import type { TFunction } from 'i18next'
 import { downloadBlob } from '../../lib/download'
 import { attachmentBytes, attachmentPreview, openAttachmentInSystemApp, sourceKeyOf } from '../../lib/attachmentBytes'
+import { FileReadRevokedError } from '@gugu/core/shared/fileResolver'
 import { rendererLogger } from '../../lib/log'
 import { offlineHolder } from '../../lib/fileHost'
 import { useDevicesStore } from '../../store/devicesContext'
@@ -52,18 +53,21 @@ export interface HostedPreviewSource {
 }
 export type HostedPreviewFile = Omit<PreviewFile, 'source' | 'document'> & { source: HostedPreviewSource; document?: undefined }
 
-/** 预览要读的那份字节:经 lib/attachmentBytes(签名链接 + Cache Storage);条目删了就说出来。 */
-async function previewBytes(file: PreviewFile | HostedPreviewFile): Promise<Blob> {
-  if (file.source.kind === 'hosted') return file.source.read()
+/**
+ * 预览要读的那份字节:经 lib/attachmentBytes(签名链接 + Cache Storage);条目删了就说出来。
+ * 'shown':先显示、后核验,`acknowledged` 失败时由显示它的预览撤下;下载不走这条。
+ */
+async function previewBytes(file: PreviewFile | HostedPreviewFile, variant: 'full' | 'shown' = 'full'): Promise<{ blob: Blob; acknowledged?: Promise<void> }> {
+  if (file.source.kind === 'hosted') return { blob: await file.source.read() }
   if (file.document && file.source.kind === 'item') {
     const { readChatFolderText } = await import('../../lib/chatFolder')
     const document = await readChatFolderText({ id: file.source.itemId })
     if (!document) throw new Error('gone')
-    return new Blob([document.text], { type: file.mimeType })
+    return { blob: new Blob([document.text], { type: file.mimeType }) }
   }
-  const bytes = await attachmentBytes(file.source)
+  const bytes = await attachmentBytes(file.source, variant)
   if (bytes.status !== 'ready') throw new Error(bytes.status)
-  return bytes.blob
+  return bytes
 }
 
 /**
@@ -71,8 +75,9 @@ async function previewBytes(file: PreviewFile | HostedPreviewFile): Promise<Blob
  * ranges); anything else, its bytes — as text for what is read as text. A file gone throws `gone`. The chat's preview and
  * a peek beside an App (AppPeek) read it this one way.
  */
-type PreviewRead = { content: string | ArrayBuffer | null; videoUrl?: string; expiresAt?: number; renew?: () => Promise<{ videoUrl: string; expiresAt: number }>; release?: () => Promise<void>; error?: string; errorStatus?: 'gone' | 'expired' | 'missing' | 'failed' }
+type PreviewRead = { content: string | ArrayBuffer | null; acknowledged?: Promise<void>; videoUrl?: string; expiresAt?: number; renew?: () => Promise<{ videoUrl: string; expiresAt: number }>; release?: () => Promise<void>; error?: string; errorStatus?: 'gone' | 'expired' | 'missing' | 'failed' }
 function previewFailure(error: unknown, t: TFunction<'messaging'>): PreviewRead {
+  if (error instanceof FileReadRevokedError) return { content: null, errorStatus: 'failed', error: t(error.reason === 'access' ? 'attachmentView.fileNoAccess' : 'attachmentView.fileUpdated') }
   const errorStatus = error instanceof Error && (error.message === 'gone' || error.message === 'expired' || error.message === 'missing') ? error.message : 'failed'
   return { content: null, errorStatus, error: t(errorStatus === 'gone' ? 'attachmentView.fileGone' : errorStatus === 'expired' ? 'attachmentView.fileExpired' : errorStatus === 'missing' ? 'attachmentView.fileMissing' : 'attachmentView.fileUnavailable') }
 }
@@ -94,12 +99,12 @@ async function readPreview(file: PreviewFile | HostedPreviewFile, kind: Document
     const release = async () => { if (objectUrl) URL.revokeObjectURL(objectUrl); await preview.dispose() }
     try { return { content: null, ...await renew(), renew, release } } catch (error) { await release(); throw error }
   }
-  const blob = await previewBytes(file)
+  const { blob, acknowledged } = await previewBytes(file, 'shown')
   if (kind === 'image') {
     const content = URL.createObjectURL(blob)
-    return { content, release: async () => URL.revokeObjectURL(content) }
+    return { content, acknowledged, release: async () => URL.revokeObjectURL(content) }
   }
-  return { content: kind === 'text' || kind === 'markdown' || kind === 'html' ? await blob.text() : await blob.arrayBuffer() }
+  return { content: kind === 'text' || kind === 'markdown' || kind === 'html' ? await blob.text() : await blob.arrayBuffer(), acknowledged }
 }
 
 /** The host's preview wherever a file opens: messages, the chat's folder and an App's peek. */
@@ -157,7 +162,13 @@ export function MessageFilePreview({ file, mobile = false, fill = false, tabbed 
     setRead(null)
     const source = file.source
     if (kind !== 'unsupported') void readPreview(file, kind).then(
-      (done) => { release = done.release; if (!live) { void release?.(); return } setRead(done) },
+      (done) => {
+        release = done.release
+        // Shown before the server acknowledged the read: a refusal takes it down and says why.
+        done.acknowledged?.catch((error) => { if (!live) return; void release?.(); release = undefined; setRead(previewFailure(error, t)) })
+        if (!live) { void release?.(); return }
+        setRead(done)
+      },
       async (error) => {
         // A project file kept on a machine that is off now says so, from a fresh read of where it is kept.
         const offline = source.kind === 'item' ? await offlineHolder(source.itemId, source.version) : null
@@ -202,7 +213,7 @@ export function MessageFilePreview({ file, mobile = false, fill = false, tabbed 
   const download = () => {
     if (missing) return
     if (file.source.kind === 'hosted') { file.source.download(); return }
-    void previewBytes(file).then((blob) => downloadBlob(blob, savedName)).catch((error) => {
+    void previewBytes(file).then(({ blob }) => downloadBlob(blob, savedName)).catch((error) => {
       if (rememberMissing(error)) return
       fileOpenLog.error({ error }, 'preview file download failed'); toast(t('chatArea.downloadFailed'), 'error', messageForUser(error))
     })
