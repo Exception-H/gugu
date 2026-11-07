@@ -11,7 +11,7 @@
 // Where it runs is read from the context, never assumed: with a chat it shows that chat's
 // workspace; with a file (ctx.file) it opens the file it was handed; with neither there is nothing to show.
 
-import { placeOf, plainWords, relocate, spanOf } from './lines.js'
+import { findIn, placeOf, plainWords, relocate, spanOf } from './lines.js'
 import { INSERT_BLOCKS, isFrontmatter, listInsertion, moveBlock, previewBlock, sourceBlocks, turnBlockChanges } from './blocks.js'
 import { HARD_MAX_BYTES, bufferAnchors, firstBytes, sourceFile } from './source-file.js'
 import { KINDS, SORTS, compareNames, comparer, defaultView, keepable, keptAs, kindOf, markOf, matches, rangeOf, sectionOf, sizeOf, timeLeft, wantsThumb } from './list.js'
@@ -149,6 +149,7 @@ const STRINGS = {
     lines: '第 {first}–{last} 行',
     placeMoved: '引用的那几行挪到了{lines}',
     placeGone: '引用的那几行之后改过了：这里是它们原来的位置',
+    findGone: '没找到“{words}”',
     failed: '出错了：{e}',
     you: '你',
     justNow: '刚刚',
@@ -376,6 +377,7 @@ const STRINGS = {
     lines: 'Lines {first}–{last}',
     placeMoved: 'The cited lines moved: {lines}',
     placeGone: 'The cited lines changed since: this is where they were',
+    findGone: 'Not found: “{words}”',
     failed: 'Something went wrong: {e}',
     you: 'You',
     justNow: 'just now',
@@ -2425,8 +2427,9 @@ async function openHanded(maxBytes) {
     showDoc(file.entry)
     watchStatus(current)
     watchPresence(current)
-    if (file.type === 'text') await mountText(current, previewReady)
-    else mountJson(current)
+    if (file.type !== 'text') mountJson(current)
+    else if (isMarkdownName(file.entry.name)) await mountText(current, previewReady)
+    else await mountPlain(current)
   } catch (error) {
     if (state.opening !== token) return
     showDocMessage(error.code === 'denied' ? state.t.denied : fmt(state.t.failed, { e: error.message }))
@@ -2792,6 +2795,20 @@ async function mountText(current, preview) {
   showPlace()
 }
 
+// A live text file that is not markdown (a chat's .txt): its text alone, as the code view shows a file, with no preview.
+async function mountPlain(current) {
+  document.body.dataset.kind = 'json'
+  const cm = await editorKit()
+  if (state.current !== current) return
+  current.marks ??= lineMarks(cm)
+  current.view = new cm.EditorView({
+    parent: $('editor'),
+    extensions: [cm.basicSetup, cm.EditorView.lineWrapping, editorTheme(cm, false), selectionWatch(cm), current.marks.extension],
+  })
+  current.unbind = current.file.bind ? current.file.bind(current.view) : gugu.bind.codemirror(current.view, current.file)
+  showPlace()
+}
+
 // The selected text — in the editor (the source, each range of a multiple selection) or the preview — kept as it
 // changes, with the lines it was written on and where it ends on screen: a small bar beside it offers Copy, Cite and
 // ＋ Keep. On a phone the sandboxed page gets no native copy menu (WebView 133, L1), so Copy hands the text to the host
@@ -2930,12 +2947,15 @@ function renderHeld() {
   applyMarks()
 }
 
-// Lines marked in the source — the kept places, and the place a pill pointed at — as line decorations that follow edits.
+// Lines marked in the source — the kept places, and the place a pill pointed at — as line decorations that follow edits;
+// a link's found words (`{ from, to, cls }`) as a mark on just them.
 function lineMarks(cm) {
   const { StateEffect, StateField } = cm.state
   const { Decoration } = cm.view
   const set = StateEffect.define()
-  const decorate = (doc, spans) => Decoration.set(spans.flatMap(([first, last, cls]) => {
+  const decorate = (doc, spans) => Decoration.set(spans.flatMap((span) => {
+    if (!Array.isArray(span)) return span.to <= doc.length ? [Decoration.mark({ class: span.cls }).range(span.from, span.to)] : []
+    const [first, last, cls] = span
     const lines = []
     for (let n = first; n <= Math.min(last, doc.lines); n += 1) lines.push(Decoration.line({ class: cls }).range(doc.line(n).from))
     return lines
@@ -2956,6 +2976,7 @@ function applyMarks() {
   const current = state.current
   const kept = state.held.map((ref) => spanOf(ref.at?.lines)).filter(Boolean)
   const spans = [...kept.map(([a, b]) => [a, b, 'cm-held']), ...(state.found?.lines ? [[...state.found.lines, 'cm-found']] : [])]
+  if (state.found?.text) spans.push({ ...state.found.text, cls: 'cm-found-text' })
   if (current?.view && current.marks) current.view.dispatch({ effects: current.marks.set.of(spans) })
   previewMarks()
 }
@@ -2974,10 +2995,41 @@ function previewMarks() {
     block.classList.toggle('md-held', held.has(block))
     block.classList.toggle('md-found', found.has(block))
   }
+  foundWords([...found])
+}
+
+// A link's found words within the preview's block, where the page can mark text without changing it (CSS Custom Highlight).
+function foundWords(blocks) {
+  if (!globalThis.CSS?.highlights) return
+  CSS.highlights.delete('found')
+  const words = state.found?.words
+  for (const block of words ? blocks : []) {
+    const range = textRange(block, words) ?? textRange(block, plainWords(words))
+    if (range) return void CSS.highlights.set('found', new globalThis.Highlight(range))
+  }
+}
+
+/** Where `words` first stand in `root`'s text, by the source's rule (`findIn`), as a range over its text nodes. */
+function textRange(root, words) {
+  const nodes = []
+  let all = ''
+  const walk = document.createTreeWalker(root, NodeFilter.SHOW_TEXT)
+  for (let node = walk.nextNode(); node; node = walk.nextNode()) {
+    nodes.push([node, all.length])
+    all += node.data
+  }
+  const hit = findIn(all, words)
+  if (!hit) return null
+  const point = (offset) => { const [node, start] = nodes.findLast(([, s]) => s <= offset); return [node, offset - start] }
+  const range = document.createRange()
+  range.setStart(...point(hit.from))
+  range.setEnd(...point(hit.to))
+  return range
 }
 
 // A pill opened this file (#7238: the `link` event a gugu link brings, `query` the pill's `at`): its lines, found again if
-// the file has changed since (`relocate`), scrolled to and marked in the source and the preview until the next press.
+// the file has changed since (`relocate`), scrolled to and marked in the source and the preview until the next press. A
+// link's `find=` names words instead (or within its lines): their first place, the words themselves marked too.
 // Held until that file's text is drawn: the link names its file (#7257: `link.file`).
 function goTo(link) {
   state.place = { query: link.query, file: link.file }
@@ -2987,22 +3039,30 @@ function goTo(link) {
 function showPlace() {
   const current = state.current
   if (!state.place || !current?.view || state.place.file !== current.entry.id) return
-  const { lines, h, n } = state.place.query
+  const { lines, h, n, find } = state.place.query
   state.place = null
   const span = spanOf(lines)
   // A JSON file's view has no lines of its text.
-  if (!span || current.file.type !== 'text') return
+  if ((!span && !find) || current.file.type !== 'text') return
   const { doc } = current.view.state
-  const found = h ? relocate(current.file.text, span, h, Number(n ?? 1)) : { first: span[0], last: span[1], moved: false }
-  const at = found ? [found.first, found.last] : span.map((n) => Math.min(n, doc.lines))
+  const kept = span && (h ? relocate(current.file.text, span, h, Number(n ?? 1)) : { first: span[0], last: span[1], moved: false })
+  const hit = find ? findIn(current.file.text, find, kept ? [kept.first, kept.last] : span) : null
+  const found = hit ? { first: hit.lines[0], last: hit.lines[1], moved: false } : find ? null : kept
   if (state.found?.said) hideBanner()
-  state.found = { lines: found ? at : null, said: !found || found.moved }
+  const gone = () => showBanner(find ? fmt(state.t.findGone, { words: find }) : state.t.placeGone, 'info', true)
+  if (!found && !span) {
+    state.found = { lines: null, said: true }
+    applyMarks()
+    return gone()
+  }
+  const at = found ? [found.first, found.last] : span.map((n) => Math.min(n, doc.lines))
+  state.found = { lines: found ? at : null, said: !found || found.moved, ...(hit ? { text: { from: hit.from, to: hit.to }, words: find } : {}) }
   applyMarks()
-  current.view.dispatch({ effects: state.cm.EditorView.scrollIntoView(doc.line(at[0]).from, { y: 'center' }) })
+  current.view.dispatch({ effects: state.cm.EditorView.scrollIntoView(hit ? hit.from : doc.line(at[0]).from, { y: 'center' }) })
   blocksOn(at)[0]?.scrollIntoView?.({ block: 'center' })
   // Said until the next press on the file, as the mark stays (the file's status coming in does not take it away).
   if (found?.moved) showBanner(fmt(state.t.placeMoved, { lines: fmt(at[0] === at[1] ? state.t.line : state.t.lines, { first: at[0], last: at[1] }) }), 'info', true)
-  else if (!found) showBanner(state.t.placeGone, 'info', true)
+  else if (!found) gone()
 }
 
 async function copySelection() {
