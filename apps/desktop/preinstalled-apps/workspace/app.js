@@ -94,8 +94,9 @@ const STRINGS = {
     previewCut: '全文较大，预览只显示前 {size}，请在源码里看全文。',
     deletedHere: '这个文件已经被删除了。正文还在，保存一下就重新建出来。',
     saveFailed: '{name} 没有保存：{e}',
-    saveFailedOn: '{name} 没存到 {machine}。此刻连不上「{machine}」。',
-    saveFailedOutdated: '{name} 没存到 {machine}。那台机器的咕咕版本太旧，升级后才能存。',
+    saveHeld: '{name} 在连不上的时候被别处改过，这次没有自动保存。两边的改动都合在这里，看过后再保存。',
+    machineUnreachable: '此刻连不上「{machine}」。',
+    machineOutdated: '「{machine}」上的咕咕版本太旧，升级后才能用。',
     tooLarge: '这个文件有 {size}，打开可能很慢。',
     grewTooLarge: '这个文件在外面变大了（{size}），这里没有读进来；现在保存会盖掉外面的内容。',
     openAnyway: '仍然打开',
@@ -156,7 +157,7 @@ const STRINGS = {
     download: '下载',
     forward: '转发',
     forwardReading: '正在读取 {name} · {done} / {total} · {speed}/s',
-    forwardFailedOn: '{name} 没转发出去：此刻连不上「{machine}」。',
+    forwardFailed: '{name} 没转发出去：{e}',
     createdBy: '{who} 创建 · {time}',
     editedBy: '{who} 编辑 · {time}',
     editedAt: '已编辑 · {time}',
@@ -321,8 +322,9 @@ const STRINGS = {
     previewCut: 'This file is large: the preview shows its first {size}. Read the whole file in its source.',
     deletedHere: 'This file has been deleted. Its text is still here: saving makes the file again.',
     saveFailed: '{name} was not saved: {e}',
-    saveFailedOn: "{name} wasn't saved to {machine}: {machine} can't be reached right now.",
-    saveFailedOutdated: "{name} wasn't saved to {machine}: its Gugu is too old. Upgrade it to save here.",
+    saveHeld: '{name} changed elsewhere while it could not be reached, so it was not saved automatically. Both changes are merged here: look them over, then save.',
+    machineUnreachable: "{machine} can't be reached right now.",
+    machineOutdated: 'Gugu on {machine} is too old. Update it to use this file.',
     tooLarge: 'This file is {size}: opening it may be slow.',
     grewTooLarge: 'This file grew to {size} outside and was not read in. Saving now writes over what is there.',
     openAnyway: 'Open anyway',
@@ -383,7 +385,7 @@ const STRINGS = {
     download: 'Download',
     forward: 'Forward',
     forwardReading: 'Reading {name} · {done} / {total} · {speed}/s',
-    forwardFailedOn: "{name} wasn't forwarded: {machine} can't be reached right now.",
+    forwardFailed: "{name} wasn't forwarded: {e}",
     createdBy: 'Created by {who} · {time}',
     editedBy: 'Edited by {who} · {time}',
     editedAt: 'Edited · {time}',
@@ -763,7 +765,7 @@ async function refreshList(readPreferences = false) {
     if (state.listing === asked && preferences) state.showAppData = preferences.showAppData
   } catch (error) {
     entries = []
-    listError = error.code === 'denied' ? state.t.denied : fmt(state.t.failed, { e: error.message })
+    listError = error.code === 'denied' ? state.t.denied : failureText(error)
   }
   if (state.listing !== asked) return
   state.listing = null
@@ -792,7 +794,7 @@ async function listFolder(folder, again = false) {
     listed = await gugu.files.list({ workspace, folder })
   } catch (error) {
     if (state.ctx?.workspace?.id !== workspace) return
-    state.listError = error.code === 'denied' ? state.t.denied : fmt(state.t.failed, { e: error.message })
+    state.listError = error.code === 'denied' ? state.t.denied : failureText(error)
     return showList()
   }
   if (!inWorkspace() || state.ctx?.workspace?.id !== workspace) return
@@ -881,7 +883,7 @@ async function folderContextMenu(x, y) {
     if (state.ctx?.chat?.id !== chat) return
     state.showAppData = preference.showAppData
     renderList()
-  } catch (error) { showBanner(fmt(state.t.failed, { e: error.message }), 'error') }
+  } catch (error) { showBanner(failureText(error), 'error') }
 }
 // What is directly in each folder, made once per list of entries (state.entries is replaced, never changed in place): a
 // drawing of the list, and every dragover, asks it for every folder row.
@@ -1319,7 +1321,7 @@ async function moveTo(entry, folderId) {
   try {
     await gugu.files.move(entry, { folder: folderId ?? '' })
   } catch (error) {
-    showBanner(error.code === 'name-taken' ? fmt(state.t.nameTaken, { name: entry.name }) : fmt(state.t.failed, { e: error.message }), 'error')
+    showBanner(error.code === 'name-taken' ? fmt(state.t.nameTaken, { name: entry.name }) : failureText(error), 'error')
   }
   if (inWorkspace()) await readAgain(entry, folderId ?? '')
   await refreshList()
@@ -1339,7 +1341,7 @@ async function showMoveDialog(entry) {
       state.entries = entries
     } catch (error) {
       if (state.current === current && state.ctx.file?.id === file.id && state.ctx.chat?.id === chat) {
-        showBanner(error.code === 'denied' ? state.t.denied : fmt(state.t.failed, { e: error.message }), 'error')
+        showBanner(error.code === 'denied' ? state.t.denied : failureText(error), 'error')
       }
       return
     }
@@ -1538,7 +1540,7 @@ const offline = (entry) => entry.storedOn?.online === false && !entry.keep
 // it is on is read afresh then, never from the list as it was loaded: the list is read again to show it.
 async function navigate(delta) {
   try { return await gugu.navigation.go(delta) }
-  catch (error) { showBanner(fmt(state.t.failed, { e: error.message }), 'error'); return false }
+  catch (error) { showBanner(failureText(error), 'error'); return false }
 }
 window.addEventListener('keydown', (event) => {
   if (event.defaultPrevented || event.isComposing || !(event.metaKey || event.ctrlKey) || event.altKey || event.shiftKey) return
@@ -1684,7 +1686,7 @@ function listItem(entry, now = new Date(Date.now())) {
   } else {
     // DataTransfer is writable only during dragstart, before any asynchronous host answer.
     void gugu.linkTo({ kind: 'file', file: entry }).then((link) => drag(link, true))
-      .catch((error) => showBanner(fmt(state.t.failed, { e: error.message }), 'error'))
+      .catch((error) => showBanner(failureText(error), 'error'))
   }
   if (folder) dropOnto(li, entry.id)
   // At the row's end: how long its cloud copy has left, and the machine it stays on.
@@ -1773,12 +1775,12 @@ function fileActions(target, entry, canDelete = false) {
 // What a working copy's row has besides: its paths and contents to copy, where it is on this computer.
 function copyActions(entry) {
   const t = state.t
-  const copied = (text) => gugu.clipboard.writeText(text).then(() => showBanner(t.copied, 'info'), (error) => showBanner(fmt(t.failed, { e: error.message }), 'error'))
+  const copied = (text) => gugu.clipboard.writeText(text).then(() => showBanner(t.copied, 'info'), (error) => showBanner(failureText(error), 'error'))
   return [
     ...(isFolder(entry) || entry.type === 'binary' ? [] : [{ text: t.copyContent, run: () => copyContent(entry, copied) }]),
     ...(absolutePathOf(entry) ? [{ text: t.copyPath, run: () => copied(absolutePathOf(entry)) }] : []),
     { text: t.copyRelativePath, run: () => copied(entry.id) },
-    ...(state.ctx?.workspace?.root && gugu.files.reveal ? [{ text: t.revealFile, run: () => gugu.files.reveal(entry).catch((error) => showBanner(fmt(t.failed, { e: error.message }), 'error')) }] : []),
+    ...(state.ctx?.workspace?.root && gugu.files.reveal ? [{ text: t.revealFile, run: () => gugu.files.reveal(entry).catch((error) => showBanner(failureText(error), 'error')) }] : []),
     ...openInActions(entry),
   ]
 }
@@ -1788,11 +1790,11 @@ let openInApps = []
 // Asked again with each context: settings can change the list, and main keeps the scan of what is installed.
 const hearOpenInApps = () => {
   if (!state.ctx?.workspace?.root || !gugu.files.openInApps) return
-  gugu.files.openInApps().then((apps) => { openInApps = apps }, (error) => showBanner(fmt(state.t.failed, { e: error.message }), 'error'))
+  gugu.files.openInApps().then((apps) => { openInApps = apps }, (error) => showBanner(failureText(error), 'error'))
 }
 function openInActions(entry) {
   if (!state.ctx?.workspace?.root || !openInApps.length) return []
-  const failed = (error) => showBanner(fmt(state.t.failed, { e: error.message }), 'error')
+  const failed = (error) => showBanner(failureText(error), 'error')
   return [{ text: state.t.openIn, children: openInApps.map((app) => ({ text: app.label, run: () => gugu.files.openIn(entry, app.id).catch(failed) })) }]
 }
 
@@ -1807,7 +1809,7 @@ async function copyContent(entry, copied) {
       file.close()
     }
   } catch (error) {
-    showBanner(fmt(state.t.failed, { e: error.message }), 'error')
+    showBanner(failureText(error), 'error')
   }
 }
 
@@ -1930,7 +1932,7 @@ async function keepAs(entry, how) {
   try {
     await gugu.files.keep(entry, how)
   } catch (error) {
-    showBanner(error.code === 'denied' ? state.t.keepNotMine : error.code === 'invalid' ? state.t.keepNone : fmt(state.t.failed, { e: error.message }), 'error')
+    showBanner(error.code === 'denied' ? state.t.keepNotMine : error.code === 'invalid' ? state.t.keepNone : failureText(error), 'error')
   }
   await refreshList()
 }
@@ -1946,9 +1948,8 @@ async function forwardEntries(entries, then) {
     then?.()
   } catch (error) {
     if (row?.signal.aborted) return
-    const { machine } = error.detail ?? {}
     const name = entries[0].name
-    showBanner(error.code === 'unavailable' && machine ? fmt(state.t.forwardFailedOn, { name, machine }) : error.code === 'too-large' ? fmt(state.t.forwardTooLarge, { name }) : error.code === 'content-changed' ? fmt(state.t.forwardChanging, { name }) : fmt(state.t.failed, { e: error.message }), 'error')
+    showBanner(machineSays(error) ? fmt(state.t.forwardFailed, { name, e: machineSays(error) }) : error.code === 'too-large' ? fmt(state.t.forwardTooLarge, { name }) : error.code === 'content-changed' ? fmt(state.t.forwardChanging, { name }) : failureText(error), 'error')
   } finally {
     row?.done()
   }
@@ -1962,7 +1963,7 @@ async function downloadEntry(entry) {
     if (saved?.skipped) showBanner(fmt(state.t.savedSkipped, { name: entry.name, n: saved.skipped.length, names: saved.skipped.join(', ') }), 'info')
     else if (row && saved) showBanner(fmt(state.t.saved, { name: entry.name }), 'info')
   } catch (error) {
-    if (!row?.signal.aborted) showBanner(fmt(state.t.failed, { e: error.message }), 'error')
+    if (!row?.signal.aborted) showBanner(failureText(error), 'error')
   } finally {
     row?.done()
   }
@@ -1994,7 +1995,7 @@ function transferRow(template, name) {
 }
 
 function showSource(messageId) {
-  gugu.showMessage(messageId).catch((error) => showBanner(error.code === 'not-found' ? state.t.sourceGone : fmt(state.t.failed, { e: error.message }), 'error'))
+  gugu.showMessage(messageId).catch((error) => showBanner(error.code === 'not-found' ? state.t.sourceGone : failureText(error), 'error'))
 }
 
 // A link to the file, or to its lines (`at`, a reading block's: the pill's own place).
@@ -2003,7 +2004,7 @@ async function copyLink(entry, at) {
     await gugu.clipboard.writeText(await gugu.linkTo(at ? { kind: 'file', file: entry, at } : { kind: 'file', file: entry }))
     showBanner(state.t.linkCopied, 'info')
   } catch (error) {
-    showBanner(fmt(state.t.failed, { e: error.message }), 'error')
+    showBanner(failureText(error), 'error')
   }
 }
 
@@ -2016,7 +2017,7 @@ async function openInHost(entry, ask = false, intent = 'navigate') {
     const viewState = { root: state.root, folder: state.folder, filter: state.filter, kind: state.kind, sort: state.sort, filters: state.filters, picked: [...state.picked], selecting: state.selecting, pickFrom: state.pickFrom, scrollTop: $('file-list').scrollTop }
     await gugu.files.openWith(entry, { intent, viewState, ...(ask ? { ask: true } : {}) })
   } catch (error) {
-    showBanner(fmt(state.t.failed, { e: error.message }), 'error')
+    showBanner(failureText(error), 'error')
   }
 }
 
@@ -2041,7 +2042,7 @@ function startRename(li, entry) {
       try {
         await gugu.files.rename(entry, name)
       } catch (error) {
-        showBanner(error.code === 'name-taken' ? fmt(state.t.nameTaken, { name }) : fmt(state.t.failed, { e: error.message }), 'error')
+        showBanner(error.code === 'name-taken' ? fmt(state.t.nameTaken, { name }) : failureText(error), 'error')
       }
       if (inWorkspace()) readAgain(entry)
     }
@@ -2071,7 +2072,7 @@ async function createDoc() {
     await openInHost(entry)
     await refreshList()
   } catch (error) {
-    showBanner(fmt(state.t.failed, { e: error.message }), 'error')
+    showBanner(failureText(error), 'error')
   }
 }
 
@@ -2086,7 +2087,7 @@ async function createFolder() {
     const li = $('file-list').querySelector(`[data-id="${CSS.escape(entry.id)}"]`)
     if (li) startRename(li, state.entries.find((e) => e.id === entry.id) ?? entry)
   } catch (error) {
-    showBanner(fmt(state.t.failed, { e: error.message }), 'error')
+    showBanner(failureText(error), 'error')
   }
 }
 
@@ -2126,7 +2127,7 @@ function startCreate(kind) {
       busy = false
       input.setAttribute('aria-invalid', 'true')
       input.focus()
-      showBanner(error.code === 'name-taken' ? fmt(state.t.nameTaken, { name }) : fmt(state.t.failed, { e: error.message }), 'error')
+      showBanner(error.code === 'name-taken' ? fmt(state.t.nameTaken, { name }) : failureText(error), 'error')
     }
   }
   input.onkeydown = (event) => {
@@ -2164,7 +2165,7 @@ function uploadDropped(transfer, folder) {
     try {
       for (const root of roots) await walk(root, '', files, folders)
     } catch (error) {
-      return showBanner(fmt(state.t.failed, { e: error.message }), 'error')
+      return showBanner(failureText(error), 'error')
     }
     await uploadToCopy(files, folder, folders)
   })()
@@ -2204,7 +2205,7 @@ async function uploadToCopy(files, folder, folders = []) {
     }
     if (!row.signal.aborted) showBanner(fmt(t.uploaded, { name: files.length === 1 ? files[0].path : String(files.length) }), 'info')
   } catch (error) {
-    if (!row.signal.aborted) showBanner(fmt(t.failed, { e: error.message }), 'error')
+    if (!row.signal.aborted) showBanner(failureText(error), 'error')
   } finally {
     row.done()
     $('upload').disabled = false
@@ -2246,7 +2247,7 @@ async function uploadFiles(place = { chat: state.ctx.chat.id, ...(state.folder ?
   } catch (error) {
     // A partial failure rejects too, after the rest are stored: the list shows what arrived.
     await refreshList()
-    showBanner(fmt(error.code === 'too-large' ? state.t.uploadTooLarge : state.t.failed, { e: error.message }), 'error')
+    showBanner(error.code === 'too-large' ? fmt(state.t.uploadTooLarge, { e: error.message }) : failureText(error), 'error')
   } finally {
     $('upload').disabled = false
   }
@@ -2289,7 +2290,7 @@ function askAboutNames(arrived, before) {
           li.remove()
           if (!$('conflict-list').children.length) finish()
         } catch (error) {
-          showBanner(fmt(t.failed, { e: error.message }), 'error')
+          showBanner(failureText(error), 'error')
         }
         await refreshList()
         for (const b of $('conflicts').querySelectorAll('button')) b.disabled = false
@@ -2323,7 +2324,7 @@ async function removeFile(entry) {
     await gugu.files.remove(entry)
     if (inWorkspace()) readAgain(entry)
   } catch (error) {
-    showBanner(fmt(state.t.failed, { e: error.message }), 'error')
+    showBanner(failureText(error), 'error')
   }
   await refreshList()
 }
@@ -2412,7 +2413,7 @@ async function openHanded(maxBytes) {
     else mountJson(current)
   } catch (error) {
     if (state.opening !== token) return
-    showDocMessage(error.code === 'denied' ? state.t.denied : fmt(state.t.failed, { e: error.message }))
+    showDocMessage(error.code === 'denied' ? state.t.denied : failureText(error))
     if (error.code !== 'denied') offerRetry(handed, maxBytes)
   } finally {
     if (state.opening === token) state.opening = null
@@ -2566,10 +2567,8 @@ async function openWhole(entry, token, maxBytes, first = null) {
     onDocument: () => { if (state.current === current) void openHanded() },
     onError: (error) => {
       current.saveFailedShown = true
-      const { machine } = error.detail ?? {}
-      // Too old a machine: the host offers to upgrade it. Trying again would not help, and this page does not.
-      const says = error.code === 'machine-outdated' ? state.t.saveFailedOutdated : machine ? state.t.saveFailedOn : null
-      showBanner(says ? fmt(says, { name: current.entry.name, machine }) : fmt(state.t.saveFailed, { name: current.entry.name, e: error.message }), 'error')
+      current.saveOwed = !!machineSays(error)
+      showBanner(error.code === 'content-changed' ? fmt(state.t.saveHeld, { name: current.entry.name }) : fmt(state.t.saveFailed, { name: current.entry.name, e: machineSays(error) ?? error.message }), 'error')
     },
   })
   const loaded = await source.load(maxBytes, first)
@@ -2584,7 +2583,9 @@ async function openWhole(entry, token, maxBytes, first = null) {
   current.jsonDiscard = () => source.discard()
   const stopWatching = gugu.files.onChanged(entry.workspace ? { workspace: entry.workspace, id: entry.id } : { chat: entry.chat }, (change) => {
     const here = change.kind === 'resync' || change.gone?.includes(entry.id) || (change.changes ?? change.entries ?? []).some((c) => (c.id ?? c.path) === entry.id)
-    if (here) void source.refresh()
+    if (!here) return
+    // Its machine is back: the save it could not take is taken now, so "cannot be reached" does not outlive the outage.
+    void (change.kind === 'resync' && current.saveOwed && state.current === current ? source.retrySave() : source.refresh())
   })
   current.stopWatching = stopWatching
   await showWhole(current)
@@ -2858,7 +2859,7 @@ async function cite(current = state.current, picks = state.picks, held = state.h
     state.held = []
     renderHeld()
   } catch (error) {
-    showBanner(fmt(state.t.failed, { e: error.message }), 'error')
+    showBanner(failureText(error), 'error')
   }
 }
 
@@ -2996,7 +2997,7 @@ async function copySelection() {
     await gugu.clipboard.writeText(text)
     button.textContent = state.t.copied
   } catch (error) {
-    showBanner(fmt(state.t.failed, { e: error.message }), 'error')
+    showBanner(failureText(error), 'error')
   }
   setTimeout(() => {
     button.textContent = state.t.copy
@@ -3106,7 +3107,7 @@ function showBlockHandle(event) {
   if (handleFrame === null) handleFrame = requestAnimationFrame(() => {
     try { placeBlockHandle() } catch (error) {
       hideBlockHandle(true)
-      showBanner(fmt(state.t.failed, { e: error.message }), 'error')
+      showBanner(failureText(error), 'error')
     }
   })
 }
@@ -3172,7 +3173,7 @@ function resolvedRange(current, range) {
 
 function blockAction(run) {
   return async () => {
-    try { return await run() } catch (error) { showBanner(fmt(state.t.failed, { e: error.message }), 'error') }
+    try { return await run() } catch (error) { showBanner(failureText(error), 'error') }
   }
 }
 
@@ -3217,7 +3218,7 @@ function changeBlock(current, range, change, userEvent = 'input.complete') {
     view.focus()
     hideBlockHandle(true)
   } catch (error) {
-    showBanner(fmt(state.t.failed, { e: error.message }), 'error')
+    showBanner(failureText(error), 'error')
   }
 }
 
@@ -3555,7 +3556,7 @@ async function showDocPath(entry) {
     const folder = root && (here === root || here.startsWith(root + separator)) ? here.slice(root.length + 1).split(separator).join('/') : null
     const segment = folder === null
       ? Object.assign(document.createElement('span'), { textContent: part })
-      : Object.assign(document.createElement('button'), { type: 'button', textContent: part, onclick: () => void gugu.files.openWith({ workspace: entry.workspace, folder }).catch((error) => showBanner(fmt(state.t.failed, { e: error.message }), 'error', true)) })
+      : Object.assign(document.createElement('button'), { type: 'button', textContent: part, onclick: () => void gugu.files.openWith({ workspace: entry.workspace, folder }).catch((error) => showBanner(failureText(error), 'error', true)) })
     nav.append(segment, Object.assign(document.createElement('span'), { textContent: separator }))
   })
   nav.hidden = false
@@ -3601,7 +3602,7 @@ function renderDocInfo(entry) {
       link.dataset.messageId = id
       link.textContent = fmt(t.source, { n: i + 1 })
       link.onclick = () =>
-        gugu.showMessage(id).catch((error) => showBanner(error.code === 'not-found' ? t.sourceGone : fmt(t.failed, { e: error.message }), 'error'))
+        gugu.showMessage(id).catch((error) => showBanner(error.code === 'not-found' ? t.sourceGone : failureText(error), 'error'))
       box.append(link)
     })
     parts.push(box)
@@ -3613,6 +3614,15 @@ function renderDocInfo(entry) {
 
 // Said on the page the person is on (F32: one page at a time) — the file's line on the file, the list's own line on the
 // list: the list page does not draw the file's pane, its line included.
+// A machine's trouble, by its name: what it said (its device id too) stays in the logs. Null for any other failure.
+function machineSays(error) {
+  const { machine } = error.detail ?? {}
+  if (error.code === 'machine-outdated') return fmt(state.t.machineOutdated, { machine })
+  return error.code === 'unavailable' && machine ? fmt(state.t.machineUnreachable, { machine }) : null
+}
+
+const failureText = (error) => machineSays(error) ?? fmt(state.t.failed, { e: error.message })
+
 function showBanner(message, tone, sticky = false) {
   const banner = document.body.classList.contains('show-doc') || document.body.classList.contains('no-list') ? $('banner') : $('list-banner')
   banner.hidden = false
@@ -3869,7 +3879,7 @@ async function downloadPicked() {
     const saved = await gugu.files.download(entries)
     if (typeof saved === 'number' && saved > 0) showBanner(fmt(state.t.savedFiles, { n: saved }), 'info')
   } catch (error) {
-    showBanner(fmt(state.t.failed, { e: error.message }), 'error')
+    showBanner(failureText(error), 'error')
   }
 }
 
@@ -3883,7 +3893,7 @@ async function keepPicked(how) {
   try {
     if (mine.length) said.push(fmt(t.keptFiles, { n: (await gugu.files.keep(mine, how))?.changed ?? mine.length }))
   } catch (error) {
-    return void showBanner(error.code === 'denied' ? t.keepNotMine : fmt(t.failed, { e: error.message }), 'error')
+    return void showBanner(error.code === 'denied' ? t.keepNotMine : failureText(error), 'error')
   }
   if (notMine.length) said.push(fmt(t.skippedNotMine, { n: notMine.length }))
   if (noCopy.length) said.push(fmt(t.skippedNoCopy, { n: noCopy.length }))
@@ -4148,7 +4158,7 @@ function start() {
   }
   $('empty-draft').onclick = () => {
     const current = state.current
-    if (current) gugu.dispatch(state.t.emptyAsk, { draft: true, refs: [{ file: current.entry }] }).catch((error) => showBanner(fmt(state.t.failed, { e: error.message }), 'error'))
+    if (current) gugu.dispatch(state.t.emptyAsk, { draft: true, refs: [{ file: current.entry }] }).catch((error) => showBanner(failureText(error), 'error'))
   }
   $('held-cite').onclick = () => cite()
   $('held-clear').onclick = () => {
@@ -4168,7 +4178,7 @@ function start() {
   window.addEventListener('pagehide', () => { for (const one of [state.current, ...state.parked.values()]) one?.source?.flush() })
   gugu.onLink(goTo)
   setMode(state.mode)
-  const contextFailed = (error) => showDocMessage(fmt(state.t.failed, { e: error.message }))
+  const contextFailed = (error) => showDocMessage(failureText(error))
   gugu.onContextChanged((ctx) => applyContext(ctx).catch(contextFailed))
   gugu.getContext().then(applyContext).catch(contextFailed)
 }
