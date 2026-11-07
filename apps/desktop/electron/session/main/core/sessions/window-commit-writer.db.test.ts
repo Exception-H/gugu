@@ -11,6 +11,9 @@ import { createWindowCommitReceipts, type WindowCommitReceipt } from '../session
 import * as writeHelpers from '../session-timeline/window-commit-write';
 import { readWindowCommitSourceChunk } from '../session-timeline/window-commit-source';
 import { createWindowBudget } from '@gugu/session-core/session-record/window-cache/read-budget';
+import { EventStreamSource } from '@gugu/session-wire';
+import { createWindowCommitRuntime } from '../session-timeline/window-commit-runtime';
+import type { WindowCommittedEvent } from '../session-timeline/window-commit-tap';
 
 const state = vi.hoisted(() => ({ db: undefined as AppDb | undefined, sqlite: undefined as Database.Database | undefined }));
 vi.mock('@main/db/client', () => ({
@@ -133,5 +136,27 @@ describe('actual canonical writer capture', () => {
     expect(settled()).toEqual(['persisted']); expect(completed).not.toHaveBeenCalled();
     expect(createWindowCommitReceipts(fixture.sqlite).byReference('c', 'source:real')!.latestRevisionCursor).toEqual(cursor(10));
     expect(JSON.parse((fixture.sqlite.prepare('SELECT data FROM session_turns').get() as { data: string }).data).items[0].text).toBe('after');
+  });
+
+  it('keeps a cold reservation through actual canonical persistence and withholds its reference until projection completion', async () => {
+    const source = new EventStreamSource<WindowCommittedEvent>({ generation: 1 }), failed = vi.fn();
+    const projection = Promise.withResolvers<{ projectionId: string }>(), durable = Promise.withResolvers<void>();
+    let written: Promise<void> | undefined;
+    const runtime = createWindowCommitRuntime({
+      persist(event, windowCapture) { return written = persistCommittedTurn({ ...event, windowCapture }); },
+      capture(_event, at, committed) { return { directory: root, scope: 'a'.repeat(64), cursor: at, committed }; },
+      async project(receipt) {
+        expect(createWindowCommitReceipts(fixture.sqlite).byRow(receipt.rowId)?.sourceId).toBe(receipt.sourceId);
+        expect(settled()).toEqual(['persisted']); durable.resolve(); return projection.promise;
+      }, report(error) { throw error; },
+    });
+    const owner = runtime.reserve('cold-view', 'c', failed), after = await owner.prepare(); owner.authorize();
+    await runtime.attach({ snapshot: async () => source.snapshot(), attach: async push => source.subscribe(push) });
+    const received = vi.fn(), reading = owner.read(after).then(received);
+    source.emit({ sessionId: 'c', source: 'live', turn: turn('whole gap turn') }); await durable.promise;
+    expect(received).not.toHaveBeenCalled(); projection.resolve({ projectionId: 'durable-test-projection' }); await written; await reading;
+    const page = received.mock.calls[0][0];
+    expect(page.entries[0]).toMatchObject({ rowId: 'c:0', storedSeq: 0, referenceId: 'source:real' });
+    owner.ack(page.next); expect(failed).not.toHaveBeenCalled(); runtime.close();
   });
 });

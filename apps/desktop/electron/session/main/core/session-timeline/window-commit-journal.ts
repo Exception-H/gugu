@@ -1,9 +1,10 @@
 export type WindowLiveCursor = { workerEpoch: string; storeEpoch: string; sequence: number };
 export type WindowCommitReference = {
-  kind: 'insert' | 'update'; referenceId: string; projectionId: string;
+  referenceId: string; projectionId: string;
   rowId: string; storedSeq: number;
-  firstCommitCursor: WindowLiveCursor; latestRevisionCursor: WindowLiveCursor;
-};
+  latestRevisionCursor: WindowLiveCursor;
+} & ({ kind: 'insert'; firstCommitCursor: WindowLiveCursor }
+  | { kind: 'update'; firstCommitCursor: WindowLiveCursor | null });
 export type WindowCommitPage = {
   entries: readonly Readonly<WindowCommitReference>[]; next: Readonly<WindowLiveCursor>; hasMore: boolean;
 };
@@ -59,17 +60,19 @@ export function createWindowCommitJournal(options: {
     const waiting = pending; pending = undefined; waiting.resolve(delivered);
   }
   function reference(input: WindowCommitReference): Readonly<WindowCommitReference> {
-    validate(input.firstCommitCursor); validate(input.latestRevisionCursor);
+    if (input.firstCommitCursor !== null) validate(input.firstCommitCursor);
+    validate(input.latestRevisionCursor);
     if (!id(input.referenceId) || !id(input.projectionId) || !id(input.rowId) || !sequence(input.storedSeq)
       || !['insert', 'update'].includes(input.kind)
-      || input.firstCommitCursor.sequence > input.latestRevisionCursor.sequence
-      || (input.kind === 'insert' && input.firstCommitCursor.sequence !== input.latestRevisionCursor.sequence))
+      || (input.firstCommitCursor !== null && input.firstCommitCursor.sequence > input.latestRevisionCursor.sequence)
+      || (input.kind === 'insert' && (!input.firstCommitCursor || input.firstCommitCursor.sequence !== input.latestRevisionCursor.sequence)))
       throw fault('live_invalid_reference', 'Invalid durable commit reference');
     // Explicitly copy only small scalar fields: an accidental `turn` property
     // must never reach JSON sizing, the retained queue or the RPC result.
-    return Object.freeze({ kind: input.kind, referenceId: input.referenceId, projectionId: input.projectionId,
-      rowId: input.rowId, storedSeq: input.storedSeq,
-      firstCommitCursor: cursor(input.firstCommitCursor), latestRevisionCursor: cursor(input.latestRevisionCursor) });
+    const values = { referenceId: input.referenceId, projectionId: input.projectionId,
+      rowId: input.rowId, storedSeq: input.storedSeq, latestRevisionCursor: cursor(input.latestRevisionCursor) };
+    return input.kind === 'insert' ? Object.freeze({ ...values, kind: 'insert', firstCommitCursor: cursor(input.firstCommitCursor) })
+      : Object.freeze({ ...values, kind: 'update', firstCommitCursor: input.firstCommitCursor === null ? null : cursor(input.firstCommitCursor) });
   }
 
   return {

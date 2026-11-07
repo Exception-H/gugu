@@ -121,4 +121,12 @@ describe('a window owner’s durable commit reference journal', () => {
     const bytes = fixture({ pageBytes: 10 }); bytes.ready(); bytes.journal.publish(item(1));
     expect(bytes.failed).toHaveBeenCalledWith(expect.objectContaining({ code: 'live_buffer_overflow' }));
   });
+
+  it('preserves an unproven historical first cursor as an update while still advancing its real revision ACK', async () => {
+    const { journal, failed, ready } = fixture(); ready();
+    journal.publish({ ...item(3, 10), kind: 'update', firstCommitCursor: null });
+    const page = await journal.read(at(0));
+    expect(page.entries[0]).toMatchObject({ kind: 'update', firstCommitCursor: null, latestRevisionCursor: at(10) });
+    journal.ack(page.next); expect(journal.inspect().queued).toBe(0); expect(failed).not.toHaveBeenCalled();
+  });
 });
