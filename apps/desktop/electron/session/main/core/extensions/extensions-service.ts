@@ -165,7 +165,7 @@ export class ExtensionsService {
   private readonly originsFile: JsonFile<Record<string, ExtensionOrigin>>;
   private readonly publishersFile: JsonFile<Record<string, ExtensionPublisher>>;
   private readonly openWithFile: JsonFile<Record<string, string>>;
-  private readonly readings = new Map<string, { stamps: { file: string; stamp: string | null }[]; installed: InstalledExtension }>();
+  private readonly readings = new Map<string, { stamps: { file: string; stamp: FileStamp | null }[]; installed: InstalledExtension }>();
 
   constructor(private readonly rootDir: string) {
     this.variantsFile = jsonFile(rootDir, '.variants.json', '{}', (value) => Object.assign(Object.create(null) as Record<string, AppVariants>, z.record(z.string(), appVariantsSchema).parse(value)));
@@ -820,7 +820,7 @@ export class ExtensionsService {
     // moves mtime or size, so nothing has to remember to invalidate it, and a bundle gone bad is still reported at once.
     // Only while the files have settled: see SETTLED_MS.
     const known = this.readings.get(dirName);
-    if (known && known.stamps.every(({ file, stamp }) => fileStamp(file) === stamp)) return known.installed;
+    if (known && known.stamps.every(({ file, stamp }) => fileStamp(file)?.id === stamp?.id)) return known.installed;
     this.readings.delete(dirName);
     const readAt = Date.now();
     const bundleDir = path.join(this.rootDir, dirName);
@@ -849,7 +849,7 @@ export class ExtensionsService {
     const manifestDigest = createHash('sha256').update(text).digest('hex');
     const installed = { manifest: parsed.manifest, rootDir: bundleDir, manifestDigest };
     // A link is read anew every time: what it points at can change without the link changing.
-    if (stamps.every(({ file, stamp }) => stamp !== null && settledBefore(file, readAt))) this.readings.set(dirName, { stamps, installed });
+    if (stamps.every(({ stamp }) => stamp !== null && readAt - stamp.mtimeMs > SETTLED_MS)) this.readings.set(dirName, { stamps, installed });
     return installed;
   }
 }
@@ -861,15 +861,12 @@ export class ExtensionsService {
  * Such a reading is not kept (git's "racily clean" rule); the next call reads again.
  */
 const SETTLED_MS = 2_000;
-function settledBefore(file: string, readAt: number): boolean {
-  const stat = fs.lstatSync(file, { throwIfNoEntry: false });
-  return !!stat && readAt - stat.mtimeMs > SETTLED_MS;
-}
 
-/** Identifies one regular file's contents as a reading saw them; null for anything else. */
-function fileStamp(file: string): string | null {
+/** Identifies one regular file's contents as a reading saw them (`id`), with the mtime it was taken at; null for anything else. */
+type FileStamp = { id: string; mtimeMs: number };
+function fileStamp(file: string): FileStamp | null {
   const stat = fs.lstatSync(file, { throwIfNoEntry: false });
-  return stat?.isFile() ? `${stat.ino}:${stat.size}:${stat.mtimeMs}` : null;
+  return stat?.isFile() ? { id: `${stat.ino}:${stat.size}:${stat.mtimeMs}`, mtimeMs: stat.mtimeMs } : null;
 }
 
 /**
