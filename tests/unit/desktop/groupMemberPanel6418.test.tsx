@@ -13,7 +13,6 @@ import type { GroupChatSettings, GroupAgentItem, GroupCollabSnapshot, GroupMembe
 import type { DisplayIdentity } from '../../../apps/desktop/src/lib/displayIdentity'
 import { createNode, createReactHarness, device, displayIdentity, renderWithAppProviders, typeInto, waitForCondition } from '../../support/testHarness'
 import { closeInfoTab, infoTabOf, openInfoTab } from '../../../apps/desktop/src/session/renderer/features/chats/chat-tabs/chat-layouts'
-import { UI_EVENTS } from '../../../apps/desktop/src/lib/uiEvents'
 import { publishProjectGroupChats } from '../../../apps/desktop/src/session/renderer/features/projects/stores/project-group-chats-bridge'
 import type { MemberProfileChatTarget } from '../../../apps/desktop/src/components/MemberProfileCard'
 import { DevicesContext } from '../../../apps/desktop/src/store/devicesContext'
@@ -194,23 +193,10 @@ describe('#969 leaving the group info page', () => {
     expect(infoTabOf('other-group-navigation')).not.toBeNull()
   })
 
-  it('New Agent closes only the source info before asking the shell to open the group-bound creation page', async () => {
+  it('the phone members page has no New Agent of its own: the group composer New task is the one entry', async () => {
     shell.mobile = true
     await renderMembers()
-    const sourceAtNavigation: Array<ReturnType<typeof infoTabOf>> = []
-    const create = vi.fn((event: Event) => {
-      sourceAtNavigation.push(infoTabOf('group-navigation'))
-      expect((event as CustomEvent).detail).toEqual({ chatId: 'group-navigation' })
-    })
-    window.addEventListener(UI_EVENTS.createAgentInGroup, create)
-    try {
-      await click(q('[data-testid="member-list-create-agent"]'))
-      expect(create).toHaveBeenCalledOnce()
-      expect(sourceAtNavigation).toEqual([null])
-      expect(infoTabOf('other-group-navigation')).not.toBeNull()
-    } finally {
-      window.removeEventListener(UI_EVENTS.createAgentInGroup, create)
-    }
+    expect(document.querySelector('[data-testid="member-list-create-agent"]')).toBeNull()
   })
 })
 
