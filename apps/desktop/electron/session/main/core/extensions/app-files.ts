@@ -307,6 +307,17 @@ function checkAbsolute(page: DesktopFilePage, ref: WorkspaceFileRef): void {
   }
 }
 
+/**
+ * A file of this computer named by its absolute path, handed to a program here or opened in another tab: outside the
+ * working copy, only the file a person opened in this page (`@@@outside-file`), as its bytes are (`fileRootOf`).
+ */
+async function outsideOnlyAsOpened(page: DesktopFilePage, ref: WorkspaceFileRef): Promise<void> {
+  const named = 'id' in ref ? ref.id : ref.name;
+  if (!path.isAbsolute(named)) return;
+  const { fileRootOf } = await import('./working-copy-files');
+  await fileRootOf(ref, named, handedOf(page));
+}
+
 export async function openAppFile(page: DesktopFilePage, args: { ref?: unknown; readOnly?: boolean; deferDetails?: boolean; expectedVersion?: number }): Promise<AppFileOpened> {
   const ref = fileRefOf(args.ref);
   const readOnly = args.readOnly === true ? { readOnly: true } : {};
@@ -687,6 +698,7 @@ export async function revealAppFile(page: DesktopFilePage, args: { ref?: unknown
 async function localPathOf(page: DesktopFilePage, ref: WorkspaceFileRef, what: string, follow = false): Promise<string> {
   if (await sessionElsewhere(ref)) throw new AppFileError('invalid', 'This file is on another computer');
   await mayRead(page, ref, what);
+  await outsideOnlyAsOpened(page, ref);
   return local.localPath(await localFolder(page, ref), { ref, follow });
 }
 
@@ -850,6 +862,7 @@ export async function openWithTarget(
     mayTouch(page, ref, ['files:read', 'files:write'], 'opening');
     return { kind: 'session', target: { sessionId: elsewhere.sessionId, projectId: elsewhere.projectId, deviceId: elsewhere.deviceId, path: name, ask } };
   }
+  await outsideOnlyAsOpened(page, ref);
   const copy = await localFolder(page, ref);
   const found = await local.openTarget(copy, { ref: ref as WorkspaceFileRef });
   const session = workspaceSession(found.place);

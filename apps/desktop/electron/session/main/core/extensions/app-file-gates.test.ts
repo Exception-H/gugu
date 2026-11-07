@@ -53,7 +53,7 @@ vi.mock('@main/core/workspaces/workspace-runtime', () => ({
   },
 }));
 
-const { removeAppFile, forwardTargets, downloadAppFile, entryPath, revealAppFile, listAppFiles, writeAppFileChunk, readAppFileText, openAppFileIn, watchAppFile, watchAppFolder, FORWARD_MAX_BYTES } = await import('./app-files');
+const { removeAppFile, forwardTargets, downloadAppFile, entryPath, revealAppFile, listAppFiles, writeAppFileChunk, readAppFileText, openAppFileIn, openWithTarget, watchAppFile, watchAppFolder, FORWARD_MAX_BYTES } = await import('./app-files');
 const { events } = await import('@main/lib/events');
 const { appFileWatchElsewhereChannel, workingCopyMovedChannel } = await import('@shared/events/appEvents');
 const { releaseWorkingCopies } = await import('./working-copy-files');
@@ -421,6 +421,23 @@ describe('reveal and Open in, to a program of this computer', () => {
     expect(f.openIn).not.toHaveBeenCalled();
     await openAppFileIn(handedPage(file), { ref: { workspace, id: file }, app: 'vscode' });
     expect(f.openIn).toHaveBeenCalledWith({ app: 'vscode', path: file });
+  });
+
+  it('a file outside opened for an agent or an App, not by the person: not revealed, not opened in a program or another tab', async () => {
+    f.capabilities.add('files:read');
+    const file = path.join(outside, 'mine.txt');
+    fs.writeFileSync(file, 'x');
+    // The tab names the file (`handed`), but the host opened it for an agent (`byHost`): no `personOpened`.
+    const agentOpened = { pageId: 7, extensionId: 'reader', handed: { workspace, id: file } } as never;
+    const ref = { workspace, id: file };
+    await expect(revealAppFile(agentOpened, { ref })).rejects.toThrow(/only as the file a person opened/);
+    await expect(openAppFileIn(agentOpened, { ref, app: 'vscode' })).rejects.toThrow(/only as the file a person opened/);
+    await expect(openWithTarget(agentOpened, { ref })).rejects.toThrow(/only as the file a person opened/);
+    expect(f.shown).toEqual([]);
+    expect(f.openIn).not.toHaveBeenCalled();
+    // The same file, opened by the person: revealed.
+    await revealAppFile(handedPage(file), { ref });
+    expect(f.shown).toEqual([file]);
   });
 
   it('Open in does not pass through a link out of the working copy, or to protected storage', async () => {
