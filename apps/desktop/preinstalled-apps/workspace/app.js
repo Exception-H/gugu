@@ -217,6 +217,7 @@ const STRINGS = {
     col_size: '大小',
     d_size: '大小',
     d_by: '上传',
+    d_created: '创建',
     d_edited: '改动',
     d_where: '位置',
     d_stored: '存放',
@@ -443,6 +444,7 @@ const STRINGS = {
     col_size: 'Size',
     d_size: 'Size',
     d_by: 'Uploaded',
+    d_created: 'Created',
     d_edited: 'Changed',
     d_where: 'Location',
     d_stored: 'Kept on',
@@ -3964,7 +3966,7 @@ function showDetails(entry) {
   }
   const dated = (iso) => (iso ? new Intl.DateTimeFormat(state.ctx?.locale || 'en', { dateStyle: 'medium', timeStyle: 'short' }).format(new Date(iso)) : '')
   fact(t.d_size, [sizeOf(entry.size), entry.suffix ? entry.suffix.slice(1).toUpperCase() : ''].filter(Boolean).join(' · '))
-  fact(t.d_by, [entry.createdBy && entry.createdBy.kind !== 'system' ? who(entry.createdBy) : '', dated(entry.createdAt)].filter(Boolean).join(' · '))
+  fact(entry.workspace ? t.d_created : t.d_by, [entry.createdBy && entry.createdBy.kind !== 'system' ? who(entry.createdBy) : '', dated(entry.createdAt)].filter(Boolean).join(' · '))
   if (entry.updatedAt && (!entry.createdAt || Date.parse(entry.updatedAt) - Date.parse(entry.createdAt) > 60_000)) {
     fact(t.d_edited, [entry.updatedBy ? who(entry.updatedBy) : '', dated(entry.updatedAt), entry.version ? fmt(t.d_version, { n: entry.version }) : ''].filter(Boolean).join(' · '))
   }
