@@ -6,6 +6,7 @@ import type { AccountImRepository } from '../lib/imRepository'
 import { rendererLogger } from '../lib/log'
 
 const revisionLog = rendererLogger('chat/account-revision')
+const storeLog = rendererLogger('chat/store')
 
 /** @@@revision-registrations - consumers outlive a failed account start: each waits here until a coordinator exists. */
 export type RevisionRegistration = {
@@ -46,7 +47,7 @@ export function useAccountStartBeat(userId: string | null | undefined, ports: {
           await loadChats()
         })
         .catch((err) => {
-          console.error('[ChatStore] open IM repository failed', err)
+          storeLog.error({ error: err }, 'open IM repository failed')
           if (!cancelled) setChatsLoad('failed') // an empty list here is a failure, not "no conversations"
         })
     }
