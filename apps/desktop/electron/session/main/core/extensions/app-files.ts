@@ -937,8 +937,8 @@ async function wholeWorkingCopyFile(page: DesktopFilePage, ref: WorkspaceFileRef
 }
 
 /** A working copy's file on the disk, each piece as it comes: half of one, or pieces of two versions, are not left behind. */
-async function savePieces(page: DesktopFilePage, ref: WorkspaceFileRef, filePath: string, saving: Saving = {}): Promise<void> {
-  const out = await fs.open(filePath, 'w');
+async function savePieces(page: DesktopFilePage, ref: WorkspaceFileRef, filePath: string, flag: 'w' | 'wx', saving: Saving = {}): Promise<void> {
+  const out = await fs.open(filePath, flag);
   try {
     let told = 0;
     await readOneVersion(page, ref, {
@@ -993,7 +993,7 @@ async function saveFolder(page: DesktopFilePage, place: WorkspacePlace, folder: 
     let done = 0;
     for (const file of found) {
       try {
-        await savePieces(page, { workspace: place.workspace, id: file.id }, file.to, { signal, saved: (bytes) => report(done += bytes, total) });
+        await savePieces(page, { workspace: place.workspace, id: file.id }, file.to, 'wx', { signal, saved: (bytes) => report(done += bytes, total) });
       } catch (error) {
         if (!file.link || signal.aborted) throw error;
         skipped.push(file.id);
@@ -1014,30 +1014,46 @@ export function stopAppFileDownload(page: DesktopFilePage, args: { transferId?: 
   downloads.get(downloadKey(page, args.transferId))?.abort();
 }
 
-async function saveTo(source: SaveSource, filePath: string, saving?: Saving): Promise<void> {
-  if (source.kind === 'text') return fs.writeFile(filePath, source.text, 'utf8');
-  if (source.kind === 'pieces') return savePieces(source.page, source.ref, filePath, saving);
-  await writeFileHandle(source.file, filePath);
+/** `wx`: written only where nothing is yet, not even a link to elsewhere; that one call is what finds the name free (`EEXIST`). */
+async function saveTo(source: SaveSource, filePath: string, flag: 'w' | 'wx', saving?: Saving): Promise<void> {
+  if (source.kind === 'text') return fs.writeFile(filePath, source.text, { encoding: 'utf8', flag });
+  if (source.kind === 'pieces') return savePieces(source.page, source.ref, filePath, flag, saving);
+  // A chat's file is written beside and renamed into place: the name is claimed first, and given back if that fails.
+  if (flag === 'wx') await (await fs.open(filePath, 'wx')).close();
+  try {
+    await writeFileHandle(source.file, filePath);
+  } catch (error) {
+    if (flag === 'wx') await fs.rm(filePath, { force: true });
+    throw error;
+  }
 }
 
 /**
  * `name` — a working copy's or a chat's, maybe from another machine — as one entry directly in `folder` on this one; `null`
- * when it is a path here instead: empty, `.`, `..`, a `/`, `\` or NUL in it, or anything else that resolves elsewhere (a
- * Windows drive, `C:x`).
+ * when it is a path here instead: empty, `.`, `..`, a `/`, `\` or NUL in it, a drive in front (`C:x`, on this drive or
+ * another), or anything else that resolves elsewhere.
  */
 export function entryPath(folder: string, name: string, paths: path.PlatformPath = path): string | null {
-  if (!name || name === '.' || name === '..' || /[\\/\u0000]/.test(name)) return null;
+  if (!name || name === '.' || name === '..' || /[\\/\u0000]/.test(name) || /^[A-Za-z]:/.test(name)) return null;
   const to = paths.resolve(folder, name);
   return paths.dirname(to) === paths.resolve(folder) ? to : null;
 }
 
-/** A name not yet in `folder`: the file's own, else with 「 (2)」, 「 (3)」… before its suffix (as the folder names a clash). */
-async function freePath(folder: string, name: string): Promise<string> {
+/**
+ * `make` at `name` in `folder`, else at 「 (2)」, 「 (3)」… before its suffix (as the folder names a clash). `make` creates only
+ * where nothing is yet, and is itself what finds a name taken (`EEXIST`), so a link left there is taken too, never followed.
+ */
+async function atFreeName(folder: string, name: string, make: (at: string) => Promise<unknown>): Promise<string> {
   const { name: stem, ext } = path.parse(name);
   for (let n = 1; ; n++) {
-    const candidate = entryPath(folder, n === 1 ? name : `${stem} (${n})${ext}`);
-    if (!candidate) throw new AppFileError('invalid', `"${name}" can't be saved here: it is a path, not a file name`);
-    try { await fs.access(candidate); } catch { return candidate; }
+    const at = entryPath(folder, n === 1 ? name : `${stem} (${n})${ext}`);
+    if (!at) throw new AppFileError('invalid', `"${name}" can't be saved here: it is a path, not a file name`);
+    try {
+      await make(at);
+      return at;
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== 'EEXIST') throw error;
+    }
   }
 }
 
@@ -1068,7 +1084,7 @@ export async function downloadAppFile(page: DesktopFilePage, args: { ref?: unkno
     const picked = window ? await dialog.showOpenDialog(window, options) : await dialog.showOpenDialog(options);
     const into = picked.canceled ? null : picked.filePaths[0];
     if (!into) return false;
-    const target = await freePath(into, path.posix.basename(pathOfRef(ref)));
+    const target = await atFreeName(into, path.posix.basename(pathOfRef(ref)), (at) => fs.mkdir(at));
     const skipped = await following(() => saveFolder(page, ref as WorkspacePlace, pathOfRef(ref), target, told, stop.signal));
     return skipped.length > 0 ? { skipped } : true;
   }
@@ -1081,7 +1097,7 @@ export async function downloadAppFile(page: DesktopFilePage, args: { ref?: unkno
     let saved = 0;
     for (const ref of args.refs) {
       const source = await downloadSourceOf(page, ref);
-      await saveTo(source, await freePath(folder, source.name));
+      await atFreeName(folder, source.name, (at) => saveTo(source, at, 'wx'));
       saved++;
     }
     return saved;
@@ -1091,7 +1107,7 @@ export async function downloadAppFile(page: DesktopFilePage, args: { ref?: unkno
   const target = window ? await dialog.showSaveDialog(window, options) : await dialog.showSaveDialog(options);
   if (target.canceled || !target.filePath) { if (source.kind === 'file') await source.file.dispose(); return false; }
   let done = 0;
-  await following(() => saveTo(source, target.filePath as string, { signal: stop.signal, saved: (bytes, size) => told(done += bytes, size) }));
+  await following(() => saveTo(source, target.filePath as string, 'w', { signal: stop.signal, saved: (bytes, size) => told(done += bytes, size) }));
   savedAt?.(target.filePath);
   return true;
 }

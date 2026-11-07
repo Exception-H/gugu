@@ -235,15 +235,30 @@ describe('downloading a folder', () => {
 describe('a name from elsewhere saved here', () => {
   it('on Windows, a POSIX name that is a path there resolves nowhere', () => {
     const root = 'D:\\Downloads\\sub';
-    for (const name of ['..\\evil', '..\\..\\evil', 'a\\b', 'C:', 'C:evil', 'C:\\evil', '\\\\host\\share', '../evil', '..', '.', '', 'a\u0000b']) {
+    for (const name of ['..\\evil', '..\\..\\evil', 'a\\b', 'C:', 'C:evil', 'C:\\evil', 'D:evil', 'd:evil', 'D:', '\\\\host\\share', '../evil', '..', '.', '', 'a\u0000b']) {
       expect(entryPath(root, name, path.win32), name).toBeNull();
     }
     expect(entryPath(root, 'report (2).pdf', path.win32)).toBe('D:\\Downloads\\sub\\report (2).pdf');
   });
 
-  it('on POSIX, only the separators and dot names are refused', () => {
-    for (const name of ['../evil', 'a/b', '..', '.', '', 'a\\b', '..\\evil']) expect(entryPath('/dl/sub', name, path.posix), name).toBeNull();
-    expect(entryPath('/dl/sub', 'C:evil', path.posix)).toBe('/dl/sub/C:evil');
+  it('on Windows, a name on the drive the folder is on (`D:evil` under `D:\\`) is not the file `evil` beside it', () => {
+    expect(entryPath('D:\\Downloads\\sub', 'D:evil', path.win32)).toBeNull();
+  });
+
+  it('on POSIX, the same names are refused, so a working copy saves alike everywhere', () => {
+    for (const name of ['../evil', 'a/b', '..', '.', '', 'a\\b', '..\\evil', 'C:evil']) expect(entryPath('/dl/sub', name, path.posix), name).toBeNull();
+    expect(entryPath('/dl/sub', 'notes 10:30.txt', path.posix)).toBe('/dl/sub/notes 10:30.txt');
+  });
+
+  it('a link left where a file would be saved is a taken name: the file goes beside it, nothing through it', async () => {
+    f.capabilities.add('files:read');
+    fs.writeFileSync(path.join(f.root, 'note.txt'), 'hello');
+    const through = path.join(outside, 'written-through.txt');
+    fs.symlinkSync(through, path.join(f.dialogDir, 'note.txt'));
+    await expect(downloadAppFile(page(), { refs: [{ workspace, id: 'note.txt' }] }, null)).resolves.toBe(1);
+    expect(fs.existsSync(through)).toBe(false);
+    expect(fs.readlinkSync(path.join(f.dialogDir, 'note.txt'))).toBe(through);
+    expect(fs.readFileSync(path.join(f.dialogDir, 'note (2).txt'), 'utf8')).toBe('hello');
   });
 
   it('a folder holding such names saves the rest under the folder chosen and says which were left out', async () => {
