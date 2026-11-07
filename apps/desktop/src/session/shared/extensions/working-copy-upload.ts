@@ -43,6 +43,8 @@ export async function readOneVersion(
     let started = Date.now();
     if (reader.signal?.aborted) throw reader.stopped();
     let next = await readPiece(0, part);
+    // A stop while a piece was on its way wins over that piece, the last one too: nothing read after it is handed on.
+    if (reader.signal?.aborted) throw reader.stopped();
     const { size, etag } = next;
     if (await reader.begin(size) === false) return null;
     for (;;) {
@@ -52,6 +54,7 @@ export async function readOneVersion(
       part = nextPartBytes(part, Date.now() - started);
       started = Date.now();
       next = await readPiece(at, part);
+      if (reader.signal?.aborted) throw reader.stopped();
       if (next.etag !== etag) break;
     }
     if (attempt > 0) throw reader.changing();
