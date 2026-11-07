@@ -101,7 +101,6 @@ export function isDeliveredFromAgent(item: ChatItem): boolean {
 /** The viewer's authenticated human delivery is their own input, including on another client. */
 export function isViewerInput(item: ChatItem, viewerId?: string): boolean {
   if (!itemIsUser(item)) return false;
-  if ((item as ChatMessage)._meta?.guguOwnerInput === false) return false;
   if (!isDeliveredFromAgent(item)) return true;
   const self = viewerId?.replace(/^user:/, '');
   const message = item as ChatMessage;

@@ -101,10 +101,18 @@ describe('#4981 投递进来的不是人打的字', () => {
 describe('viewer-owned cross-client delivery pins', () => {
   const viewerId = '11111111-1111-4111-8111-111111111111';
   const envelope = (fromId: string, type: string) => `<gugu_delivery route="chat" from_id="user:${fromId}" from_type="${type}" msg="msg:own"><![CDATA[Own request]]></gugu_delivery>`;
-  for (const normalized of [false, true]) it(`explicit non-owner provenance overrides same-viewer human envelope (normalized=${normalized})`, () => {
-    const input = { ...message('non-owner', 'user', envelope(viewerId, 'human')), _meta: { guguOwnerInput: false } };
+  for (const normalized of [false, true]) it(`retains authenticated viewer human input with non-manual metadata (normalized=${normalized})`, () => {
+    // This flag records the runtime prompt origin, not the authenticated sender.
+    const input = { ...message('own-steer', 'user', envelope(viewerId, 'human')), _meta: { guguOwnerInput: false } };
     const item = normalized ? normalizeMessage(input) : input;
-    expect(collectUserTurnUnits([turnOf([item])], unitsOf([item]), { viewerId })).toEqual([]);
+    expect(collectUserTurnUnits([turnOf([item])], unitsOf([item]), { viewerId })).toEqual([0]);
+    const scheduled = '<gugu_delivery route="scheduled" from_id="system:gugu"><![CDATA[Review results]]></gugu_delivery>';
+    for (const text of ['No authenticated owner source', envelope(viewerId, 'agent'),
+      envelope('22222222-2222-4222-8222-222222222222', 'human'), scheduled]) {
+      const other = { ...message('non-owner', 'user', text), _meta: { guguOwnerInput: false } };
+      const control = normalized ? normalizeMessage(other) : other;
+      expect(collectUserTurnUnits([turnOf([control])], unitsOf([control]), { viewerId })).toEqual([]);
+    }
   });
   for (const normalized of [false, true]) it(`recognizes only the authenticated viewer human delivery (normalized=${normalized})`, () => {
     const own = envelope(viewerId, 'human');
