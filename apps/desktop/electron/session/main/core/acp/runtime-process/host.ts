@@ -273,7 +273,7 @@ const acpWorker = lazyWorker(
       const committed = await connectWindowCommitHost(handle.client.turnCommitted.handle(undefined), event => {
         // #6264 Keep authentication authority independent of bounded history publication.
         void applyTurnToAuthExpiry(event, authExpiryWriter);
-      });
+      }, handle.connection);
       handle.scope.add(() => committed.close());
       const conversationPreviews = openNativeConversationPreviews(sessionId => withStoredTurns(sessionId, async () => undefined));
       handle.scope.add(() => conversationPreviews.dispose());

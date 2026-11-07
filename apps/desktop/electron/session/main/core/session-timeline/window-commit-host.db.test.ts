@@ -6,6 +6,10 @@ import { tmpdir } from 'node:os';
 import type Database from 'better-sqlite3';
 import type { AppDb } from '@main/db/client';
 import { EventStreamSource } from '@gugu/session-wire';
+import { connect, memoryTransportPair, defineContract, type Connection } from '@gugu/session-wire/api';
+import { createEventStreamHost } from '@gugu/session-wire';
+import { createTestWire } from '@gugu/session-wire/testing';
+import { acpRuntimeApiContract } from '@gugu/session-core/acp';
 import { bindWindowCommitProjection, connectWindowCommitHost, reserveWindowCommitHost } from './window-commit-host';
 import { createWindowCommitReceipts } from './window-commit-receipt';
 import { readWindowCommitSourceChunk } from './window-commit-source';
@@ -21,9 +25,11 @@ vi.mock('electron', () => ({ app: { getPath: () => state.root } }));
 
 describe('the main-process commit host and actual canonical writer', () => {
   let fixture: Awaited<ReturnType<typeof openFixture>>, connected: Awaited<ReturnType<typeof connectWindowCommitHost>> | undefined;
+  let pair: ReturnType<typeof memoryTransportPair>, connection: Connection;
   const source = () => new EventStreamSource<WindowCommittedEvent>({ generation: 21 });
   const stream = (events: ReturnType<typeof source>) => ({ snapshot: async () => events.snapshot(), attach: async (push: Parameters<typeof events.subscribe>[0]) => events.subscribe(push) });
   beforeEach(async () => {
+    pair = memoryTransportPair(); connection = connect(pair.left);
     fixture = await openFixture('empty'); state.db = fixture.db; state.sqlite = fixture.sqlite;
     fixture.sqlite.pragma('synchronous=FULL');
     fixture.sqlite.exec("INSERT INTO projects(id,name,path) VALUES('p','P','/fixture'); INSERT INTO sessions(id,project_id) VALUES('c','p')");
@@ -31,7 +37,7 @@ describe('the main-process commit host and actual canonical writer', () => {
   });
   afterEach(async () => {
     // Close the test source even when a test only reserved a cold host.
-    connected ??= await connectWindowCommitHost(stream(source()), () => {}); connected.close(); connected = undefined;
+    connected ??= await connectWindowCommitHost(stream(source()), () => {}, connection); connected.close(); connected = undefined; pair.disconnect();
     fixture?.close(); state.db = undefined; state.sqlite = undefined; await rm(state.root, { recursive: true, force: true }); vi.clearAllMocks();
   });
 
@@ -45,7 +51,7 @@ describe('the main-process commit host and actual canonical writer', () => {
     });
     const owner = reserveWindowCommitHost('view', 'c', failed), after = await owner.prepare(); owner.authorize();
     expect(events.subscriberCount).toBe(0); expect(fixture.sqlite.prepare('SELECT id FROM session_turns').all()).toEqual([]);
-    connected = await connectWindowCommitHost(stream(events), observed);
+    connected = await connectWindowCommitHost(stream(events), observed, connection);
     const actual: WindowCommittedEvent = { sessionId: 'c', providerId: 'claude', platformCredentials: false, source: 'live', turn: {
       id: 'actual-turn', seq: 0, referenceId: 'actual-ref', initiator: 'user', outcome: { kind: 'done' },
       items: [{ kind: 'message', id: 'actual-item', seq: 0, role: 'assistant', text: 'whole cold turn' }],
@@ -67,7 +73,7 @@ describe('the main-process commit host and actual canonical writer', () => {
     bindWindowCommitProjection(async () => ({ projectionId: 'unused' }));
     const failed = vi.fn(), owner = reserveWindowCommitHost('view', 'c', failed); await owner.prepare();
     const attachment = Promise.withResolvers<() => void>(), entered = Promise.withResolvers<void>(), returned = vi.fn();
-    const connecting = connectWindowCommitHost({ snapshot: async () => source().snapshot(), attach: () => { entered.resolve(); return attachment.promise; } }, () => {}).then(returned);
+    const connecting = connectWindowCommitHost({ snapshot: async () => source().snapshot(), attach: () => { entered.resolve(); return attachment.promise; } }, () => {}, connection).then(returned);
     await entered.promise; expect(returned).not.toHaveBeenCalled();
     attachment.reject(new Error('private attach failed')); await expect(connecting).rejects.toThrow('private attach failed');
     expect(failed).toHaveBeenCalledTimes(1); owner.close();
@@ -78,7 +84,7 @@ describe('the main-process commit host and actual canonical writer', () => {
     bindWindowCommitProjection(async () => ({ projectionId: 'unused' }));
     const failed = vi.fn(), owner = reserveWindowCommitHost('view', 'c', failed), after = await owner.prepare(); owner.authorize();
     const rejected = expect(owner.read(after)).rejects.toMatchObject({ code: 'live_store_changed' });
-    const actual = source(); connected = await connectWindowCommitHost(stream(actual), () => {}); await rejected;
+    const actual = source(); connected = await connectWindowCommitHost(stream(actual), () => {}, connection); await rejected;
     expect(failed).toHaveBeenCalledTimes(1);
     expect(() => reserveWindowCommitHost('next', 'c', vi.fn())).toThrow(expect.objectContaining({ code: 'live_projection_unavailable' }));
     const settled = Promise.withResolvers<void>();
@@ -93,9 +99,40 @@ describe('the main-process commit host and actual canonical writer', () => {
     bindWindowCommitProjection(async () => ({ projectionId: 'unused' }));
     const failed = vi.fn(), cancelled = vi.fn(), a = reserveWindowCommitHost('one', 'c', failed), b = reserveWindowCommitHost('two', 'c', cancelled);
     const after = await a.prepare(); await b.prepare(); a.authorize(); b.close();
-    connected = await connectWindowCommitHost(stream(source()), () => {});
+    connected = await connectWindowCommitHost(stream(source()), () => {}, connection);
     const rejected = expect(a.read(after)).rejects.toMatchObject({ code: 'live_source_gap' });
     connected.close(); await rejected;
     expect(failed).toHaveBeenCalledTimes(1); expect(cancelled).not.toHaveBeenCalled();
+  });
+
+  it('settles a waiting owner on real wire disconnection without manual close or a restart', async () => {
+    const contract = defineContract({ turnCommitted: acpRuntimeApiContract.turnCommitted }), events = createEventStreamHost(contract.turnCommitted);
+    const wire = createTestWire(contract, { turnCommitted: events });
+    try {
+      bindWindowCommitProjection(async () => ({ projectionId: 'unused' }));
+      const failed = vi.fn(), owner = reserveWindowCommitHost('view', 'c', failed), after = await owner.prepare(); owner.authorize();
+      connected = await connectWindowCommitHost(wire.client.turnCommitted.handle(undefined), () => {}, wire.connection);
+      const rejected = expect(owner.read(after)).rejects.toMatchObject({ code: 'live_source_gap' }); wire.pair.disconnect(); await rejected;
+      expect(failed).toHaveBeenCalledTimes(1);
+    } finally { wire.dispose(); }
+  });
+
+  it('allows producer rebinding without retargeting an in-flight commit or letting an old disposer stop the new owner', async () => {
+    const projectA = vi.fn(async () => ({ projectionId: 'producer-A' })), projectB = vi.fn(async () => ({ projectionId: 'producer-B' }));
+    const releaseA = bindWindowCommitProjection(projectA), failedA = vi.fn(), failedB = vi.fn();
+    const a = reserveWindowCommitHost('one', 'c', failedA), cut = await a.prepare(); a.authorize();
+    const actual = source(); connected = await connectWindowCommitHost(stream(actual), () => {}, connection);
+    const oldRead = expect(a.read(cut)).rejects.toMatchObject({ code: 'live_store_changed' });
+    const emit = (referenceId: string) => actual.emit({ sessionId: 'c', source: 'live', turn: {
+      id: referenceId, seq: 0, referenceId, initiator: 'user', items: [], outcome: { kind: 'done' },
+    } });
+    emit('reference-A'); releaseA(); await oldRead;
+    bindWindowCommitProjection(projectB);
+    const b = reserveWindowCommitHost('two', 'c', failedB), after = await b.prepare(); b.authorize();
+    releaseA(); emit('reference-B');
+    const page = await b.read(after);
+    expect(page.entries.map(item => [item.referenceId, item.projectionId])).toEqual([['reference-B', 'producer-B']]);
+    expect(projectA).toHaveBeenCalledTimes(1); expect(projectB).toHaveBeenCalledTimes(1);
+    expect(failedA).toHaveBeenCalledTimes(1); expect(failedB).not.toHaveBeenCalled();
   });
 });

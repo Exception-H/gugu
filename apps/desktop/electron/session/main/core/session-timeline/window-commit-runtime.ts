@@ -14,7 +14,9 @@ const equal = (a: WindowLiveCursor, b: WindowLiveCursor) => a.workerEpoch === b.
  * inside lazyWorker.onSpawned; this module never calls get/start or retains turns. */
 export function createWindowCommitRuntime(ports: {
   persist(event: WindowCommittedEvent, capture?: WindowCommitCapture): Promise<void>;
-  capture(event: WindowCommittedEvent, cursor: WindowLiveCursor, committed: WindowCommitCapture['committed']): WindowCommitCapture;
+  capture(event: WindowCommittedEvent, cursor: WindowLiveCursor, committed: WindowCommitCapture['committed']): WindowCommitCapture & {
+    project?(receipt: WindowCommitReceipt): Promise<{ projectionId: string }>;
+  };
   project(receipt: WindowCommitReceipt): Promise<{ projectionId: string }>;
   report(error: unknown): void;
 }) {
@@ -35,18 +37,19 @@ export function createWindowCommitRuntime(ports: {
   function coordinate(sequence: number): WindowLiveCursor { return { workerEpoch, storeEpoch, sequence }; }
   function dispatch(event: WindowCommittedEvent, raw: { sequence: number } | null) {
     const selected = [...owners.values()].filter(owner => owner.conversationId === event.sessionId);
-    let capture: WindowCommitCapture | undefined;
+    let capture: ReturnType<typeof ports.capture> | undefined;
     if (raw && event.source !== 'replay' && selected.length) {
       const at = Object.freeze(coordinate(raw.sequence));
       for (const owner of selected) if (!owner.journal) fail(owner, fault('scope_changed', 'The session started before its history boundary was prepared'));
       const recipients = selected.filter(owner => !owner.closed);
       if (recipients.length) {
         try {
+          let project = ports.project;
           capture = ports.capture(event, at, async receipt => {
             if (!receipt) return;
             if (receipt.sessionId !== event.sessionId || receipt.referenceId !== event.turn.referenceId || !equal(receipt.latestRevisionCursor, at))
               throw fault('live_identity_mismatch', 'The persisted commit does not match its runtime source');
-            const { projectionId } = await ports.project(receipt);
+            const { projectionId } = await project(receipt);
             const values = { referenceId: receipt.referenceId, rowId: receipt.rowId, storedSeq: receipt.storedSeq,
               projectionId, latestRevisionCursor: receipt.latestRevisionCursor };
             const entry: WindowCommitReference = event.source === 'live' && receipt.firstCommitCursor && equal(receipt.firstCommitCursor, at)
@@ -54,6 +57,7 @@ export function createWindowCommitRuntime(ports: {
               : { ...values, kind: 'update', firstCommitCursor: receipt.firstCommitCursor };
             for (const owner of recipients) if (!owner.closed) owner.journal!.publish(entry);
           });
+          project = capture.project ?? project;
         } catch (error) {
           for (const owner of recipients) fail(owner, fault('live_capture_failed', String(error)));
           report(error);
