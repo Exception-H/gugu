@@ -82,4 +82,18 @@ describe('the authoritative private committed-event tap', () => {
     f.source.emit(event()); expect(f.commit.mock.calls[0][1]).toBeNull();
     expect(f.stream.snapshot).toHaveBeenCalledTimes(1); f.tap.close();
   });
+
+  it('forwards the actual canonical event when a gap failure observer and its diagnostic reporter both throw', async () => {
+    const source = new EventStreamSource<ReturnType<typeof event>>({ generation: 9 });
+    const commit = vi.fn(), diagnostic = vi.fn(() => { throw new Error('logging failed'); });
+    const tap = createWindowCommitTap({ onCommit: commit,
+      onInvalidated() { throw new Error('notification failed'); }, onObservationError: diagnostic });
+    await tap.attach({ snapshot: async () => source.snapshot(), attach: async push => source.subscribe(update => {
+      if (update.sequence !== 1) push(update);
+    }) });
+    source.emit(event()); const actual = event(); expect(() => source.emit(actual)).not.toThrow();
+    expect(commit).toHaveBeenCalledExactlyOnceWith(actual, null);
+    expect(diagnostic).toHaveBeenCalledExactlyOnceWith(expect.objectContaining({ message: 'notification failed' }));
+    expect(tap.current()).toBeNull(); tap.close();
+  });
 });

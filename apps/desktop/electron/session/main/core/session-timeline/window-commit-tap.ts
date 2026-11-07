@@ -17,6 +17,7 @@ const valid = (value: RawCommitCursor) => Number.isSafeInteger(value.generation)
 export function createWindowCommitTap(options: {
   onCommit(event: WindowCommittedEvent, cursor: Readonly<RawCommitCursor> | null): void;
   onInvalidated(error: Error & { code: string }): void;
+  onObservationError?(error: unknown): void;
 }) {
   let closed = false, ready = false, invalidated = false, version = 0;
   let current: Readonly<RawCommitCursor> | null = null, last: Readonly<RawCommitCursor> | null = null;
@@ -25,7 +26,11 @@ export function createWindowCommitTap(options: {
   let sampling: Promise<Readonly<RawCommitCursor> | null> | undefined;
   function invalidate(message: string) {
     ready = false; current = null; version++;
-    if (!invalidated && !closed) { invalidated = true; options.onInvalidated(Object.assign(new Error(message), { code: 'live_source_gap' })); }
+    if (!invalidated && !closed) {
+      invalidated = true;
+      try { options.onInvalidated(Object.assign(new Error(message), { code: 'live_source_gap' })); }
+      catch (error) { try { options.onObservationError?.(error); } catch { /* Diagnostics cannot interrupt canonical event delivery. */ } }
+    }
   }
   function update(value: LiveUpdate) {
     if (closed) return;
