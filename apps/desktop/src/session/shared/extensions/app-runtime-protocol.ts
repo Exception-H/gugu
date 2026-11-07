@@ -402,7 +402,8 @@ export interface AppFileEntry {
   parentId: string | null;
   /** A working copy's: its absolute path on the machine it is on. */
   absolutePath?: string;
-  /** A working copy's: the workspace id a host's own drags of it name. */
+  /** A working copy's: the project and workspace a host's own drags of it name. */
+  projectId?: string;
   workspaceId?: string;
   /** A working copy's: what git says of it, when it has changed. */
   gitStatus?: string;
