@@ -111,10 +111,11 @@ describe('a session\'s tab: one folder, two roots', () => {
     await until('src read again', () => !names().includes('new.md'))
   })
 
-  test('the conversation\'s folder is the other root: listed by its chat, whole, as in a group', async () => {
+  test('the conversation\'s folder is the other root: listed by its chat, one folder at a time, as in a group', async () => {
+    const calls = listed().length
     switchRoot('chat')
     await until('the chat listed', () => names().includes('plan.md'))
-    expect(listed().at(-1)).toEqual({ chat: 'dm-1' })
+    expect(listed().slice(calls)).toEqual([{ chat: 'dm-1', folder: '' }, { chat: 'dm-1', folder: '附件' }])
     expect(crumbs()).toBeNull()
   })
 

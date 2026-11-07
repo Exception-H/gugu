@@ -62,6 +62,7 @@ const STRINGS = {
     cancel: '取消',
     items: '{n} 项',
     confirmRemoveFolder: '删除它和里面的 {n} 项',
+    confirmRemoveFolderAll: '删除它和里面的全部内容',
     nameTaken: '这个文件夹里已经有「{name}」了',
     alreadyThere: '「{name}」已经有了，新传的这份叫「{new}」。',
     keepBoth: '两个都留',
@@ -291,6 +292,7 @@ const STRINGS = {
     cancel: 'Cancel',
     items: '{n} items',
     confirmRemoveFolder: 'Delete it and its {n} items',
+    confirmRemoveFolderAll: 'Delete it and everything in it',
     nameTaken: '“{name}” is already in this folder',
     alreadyThere: '“{name}” was already here: the new one is “{new}”.',
     keepBoth: 'Keep both',
@@ -507,7 +509,8 @@ const state = {
   backWanted: false, // a folder is open: the host's Back should be a folder up (holdBack)
   releaseBack: null, // the held claim's release, once it has succeeded
   folder: null, // the folder the list shows (子文件夹): a folder entry's id, null for the top
-  listed: new Set(), // a working copy's folders listed so far ('' the top): it is read one folder at a time
+  listed: new Set(), // the folders whose contents are known ('' the top): both roots are read one folder at a time
+  whole: null, // the chat's whole tree, read when a search, 「移动到…」 or a folder far down needs it: its read, then true
   rootOf: null, // a working copy's root once known, for the path of the file open here: { workspace, root }
   folderWatches: new Map(), // the listed folders below the top that are heard, each by its own watch
   dragging: null, // the entry being dragged onto a folder (desktop)
@@ -668,8 +671,7 @@ async function applyContext(ctx) {
     const stays = !!previous && state.root === shown && shown !== null && shownPlace(previous) === shownPlace(ctx) && !!previous.file === !!ctx.file
     if (!stays) {
       if (!restored) state.folder = null
-      state.listed = new Set()
-      state.entries = []
+      forgetListed()
     }
     if (stays) renderList()
     if (!stays && inGroup && canRead() && !ctx.file) {
@@ -760,30 +762,123 @@ function renderChrome() {
 
 // The newest list asked is the one shown (an older one back later — another chat's — is dropped); what the chat says
 // while it is on its way goes over it again when it is back: the list may be from before (#7257).
+// A chat's folder is read one folder at a time too (a 7,800-file chat was read whole, eight pages one after another, for
+// the 36 at its top): the folder on screen — the top with 「附件」, at once — and each folder again as it is entered.
 async function refreshList(readPreferences = false) {
   if (!state.root || !canRead()) return showList()
   if (inWorkspace()) return listFolder(state.folder ?? '', true)
   const asked = (state.listing = { heard: [] })
-  let entries
+  // A folder this page was left in (its view state) that no read has named: the whole tree, for the way up to it.
+  const far = state.folder && !state.entries.some((e) => e.id === state.folder)
+  // The whole tree read before is from before now: the next search reads it again (what it holds is shown meanwhile).
+  if (state.whole === true) state.whole = null
   let listError = null
   try {
     const place = rootPlace()
-    const [listed, preferences] = await Promise.all([
-      gugu.files.list(place),
+    const [, preferences] = await Promise.all([
+      far ? readWhole(asked) : readFolders([state.folder ?? ''], asked),
       readPreferences ? gugu.files.viewPreferences(place) : null,
     ])
-    entries = listed
     if (state.listing === asked && preferences) state.showAppData = preferences.showAppData
   } catch (error) {
-    entries = []
+    // The folder on screen is gone (deleted or moved away elsewhere): the top, read instead.
+    if (error.code === 'not-found' && state.folder && state.listing === asked) {
+      state.listing = null
+      state.folder = null
+      return refreshList(readPreferences)
+    }
+    if (state.listing === asked) forgetListed()
     listError = error.code === 'denied' ? state.t.denied : fmt(state.t.failed, { e: error.message })
   }
   if (state.listing !== asked) return
   state.listing = null
-  state.entries = entries
   state.listError = listError
   for (const change of asked.heard) take(change)
   showList()
+}
+
+// 「附件」 by its path: the database finds it by its role, whatever it is called on screen.
+const ATTACHMENTS = '附件'
+
+function forgetListed() {
+  state.entries = []
+  state.listed = new Set()
+  state.whole = null
+}
+
+/**
+ * Chat folders ('' the top, else a folder's id), all read at once: what is directly in each goes into the list in place of
+ * what was there, drawn as it arrives. The top brings 「附件」 with it (the top shows what was sent in the chat), unless
+ * `withAttachments` is false (a file's own folder read again for its keep).
+ */
+async function readFolders(folders, asked, withAttachments = true) {
+  const chat = state.ctx.chat.id
+  const named = [...new Set(withAttachments && folders.includes('') ? [...folders, ATTACHMENTS] : folders)]
+  await Promise.all(named.map(async (folder) => {
+    let listed
+    try {
+      listed = await gugu.files.list({ chat, folder })
+    } catch (error) {
+      if (folder === ATTACHMENTS && error.code === 'not-found') return // a chat nothing was sent in has none
+      throw error
+    }
+    // Another chat by now, or a newer refresh: this one's answer is dropped.
+    if (state.ctx?.chat?.id !== chat || inWorkspace() || (asked && state.listing !== asked)) return
+    const parent = folder === ATTACHMENTS ? listed[0]?.parentId ?? state.entries.find((e) => e.systemRole === 'attachments')?.id : folder || null
+    if (parent === undefined) return
+    const key = parent ?? ''
+    state.entries = [...state.entries.filter((entry) => (entry.parentId ?? null) !== parent), ...listed]
+    state.listed.add(key)
+    showList()
+  }))
+  // 「附件」 with nothing in it yet: known empty, once the top has named it.
+  const attachments = state.entries.find((e) => e.systemRole === 'attachments' && e.parentId === null)
+  if (attachments && named.includes(ATTACHMENTS)) state.listed.add(attachments.id)
+}
+
+/**
+ * The chat's whole tree, read once (every page at once, the host's), for what needs every folder: a search by name,
+ * 「移动到…」, a folder far down. Changes heard meanwhile go over it again.
+ */
+function readWhole(asked = null) {
+  if (state.whole === true) return Promise.resolve()
+  if (state.whole) return state.whole
+  const chat = state.ctx.chat.id
+  const heard = []
+  const reading = (state.whole = gugu.files.list({ chat }).then((entries) => {
+    if (state.ctx?.chat?.id !== chat || state.whole !== reading) return
+    if (asked && state.listing !== asked) return void (state.whole = null)
+    state.entries = entries
+    state.whole = true
+    state.listed = new Set(['', ...entries.filter(isFolder).map((e) => e.id)])
+    for (const change of heard) take(change)
+  }, (error) => {
+    if (state.whole === reading) state.whole = null
+    throw error
+  }))
+  reading.heard = heard
+  return reading
+}
+
+/** The whole tree read, then `next` (true when it was): what went wrong is said on the list. */
+function wholeThen(next = () => {}) {
+  const chat = state.ctx.chat.id
+  return readWhole().then(() => state.ctx?.chat?.id === chat && state.whole === true && (next(), true), (error) => {
+    showBanner(error.code === 'denied' ? state.t.denied : fmt(state.t.failed, { e: error.message }), 'error')
+    return false
+  })
+}
+
+/**
+ * A chat folder pressed open: drawn with what is known of it, and read (one folder: what it holds now). Back at the top
+ * it is not read again: the top was read with 「附件」, which can be long, and the chat's changes keep it.
+ */
+function readChatFolder(folderId) {
+  if (folderId === '' && state.listed.has('')) return
+  void readFolders([folderId], null).catch((error) => {
+    state.listError = error.code === 'denied' ? state.t.denied : fmt(state.t.failed, { e: error.message })
+    showList()
+  })
 }
 
 /**
@@ -827,23 +922,35 @@ const heardIn = (root) => (change) => {
 function heard(change) {
   if (change.kind !== 'entries') return
   state.listing?.heard.push(change)
-  if (take(change)) keepLater()
+  if (state.whole && state.whole !== true) state.whole.heard.push(change)
+  keepLater(take(change))
   showList()
 }
 
-// A change is read one file at a time, which does not say how long a cloud copy is kept (`keep`, the list's): the list's
-// answer stays until the list is read again. A file new to the list has none to keep — true when the list says it
-// (the host's list carries `keep`), so the list is read again for it.
+// A change is read one file at a time, with how long its cloud copy is kept (`keep`, the list's: the host reads it with
+// the file). One it came without keeps the list's answer; a file new to the list with none is read again with its
+// own folder — never the whole tree. Says those folders ('' the top).
 function take(change) {
   const before = new Map(state.entries.map((entry) => [entry.id, entry]))
   const listsKeep = state.entries.some((entry) => 'keep' in entry)
   const fresh = new Map(change.entries.map((entry) => [entry.id, 'keep' in entry || !before.has(entry.id) || !('keep' in before.get(entry.id)) ? entry : { ...entry, keep: before.get(entry.id).keep }]))
   state.entries = [...state.entries.filter((entry) => !fresh.has(entry.id) && !change.gone.includes(entry.id)), ...fresh.values()]
-  return listsKeep && [...fresh.values()].some((entry) => !('keep' in entry) && entry.type !== 'folder')
+  if (!listsKeep) return []
+  return [...fresh.values()].filter((entry) => !('keep' in entry) && entry.type !== 'folder').map((entry) => entry.parentId ?? '')
 }
 
-// Several files arriving together (an upload of ten) are one read of the list, a moment after the last.
-const keepLater = debounce(() => void refreshList(), 800)
+// Several files arriving together (an upload of ten) are one read of each folder they are in, a moment after the last.
+const keepAsked = new Set()
+const keepRead = debounce(() => {
+  const folders = [...keepAsked].filter((folder) => state.listed.has(folder))
+  keepAsked.clear()
+  if (state.root === 'chat' && folders.length) void readFolders(folders, null, false).catch(() => {})
+}, 800)
+function keepLater(folders) {
+  if (!folders.length) return
+  for (const folder of folders) keepAsked.add(folder)
+  keepRead()
+}
 
 function showList() {
   renderList()
@@ -912,6 +1019,9 @@ function pathOf(entry) {
   return names.join('/')
 }
 
+// Whether everything under a folder has been read: a folder not read yet is not empty for all the list knows.
+const knownBelow = (folderId) => state.listed.has(folderId) && under(folderId).every((e) => !isFolder(e) || state.listed.has(e.id))
+
 // Everything under a folder, however deep: what its delete takes with it, and where it cannot be moved into.
 function under(folderId) {
   const found = []
@@ -943,7 +1053,7 @@ function renderList() {
   const list = $('file-list')
   const empty = $('files-empty')
   // The folder on screen is gone (deleted, or no longer seen): back to the top.
-  if (state.folder && !state.entries.some((e) => e.id === state.folder)) state.folder = null
+  if (state.folder && !state.listing && !state.entries.some((e) => e.id === state.folder)) state.folder = null
   renderCrumbs()
   if (!state.root) return
   const needle = state.filter.trim().toLocaleLowerCase()
@@ -1301,8 +1411,9 @@ function enterFolder(folderId) {
   showSearch(false)
   renderList()
   $('file-list').scrollTop = 0
-  // A working copy's folder is read when it is entered, once.
+  // A folder is read when it is entered, once (a chat's again on a refresh).
   if (inWorkspace()) void listFolder(folderId ?? '')
+  else if (state.root === 'chat') readChatFolder(folderId ?? '')
 }
 
 // One of the two roots picked (the place switch).
@@ -1315,8 +1426,7 @@ function enterRoot(root) {
   state.filter = ''
   $('filter').value = ''
   state.filters = { who: null, where: null, keep: null }
-  state.entries = []
-  state.listed = new Set()
+  forgetListed()
   state.listError = null
   hideBanner()
   clearPicks()
@@ -1382,6 +1492,8 @@ async function showMoveDialog(entry) {
       return
     }
   }
+  // Every folder of the chat is a place to move to: the whole tree, read once.
+  if (!state.ctx.file && state.root === 'chat' && state.whole !== true && !(await wholeThen())) return
   const t = state.t
   const off = new Set(isFolder(entry) ? [entry.id, ...under(entry.id).map((e) => e.id)] : [])
   const rows = []
@@ -1627,8 +1739,8 @@ function metaOf(entry, now) {
   const t = state.t
   const cells = []
   if (isFolder(entry)) {
-    // A working copy is read one folder at a time: one not entered yet has no count to say (never a 0).
-    if (!inWorkspace() || state.listed.has(entry.id)) cells.push(['size', fmt(t.items, { n: inside(entry.id).filter(visibleEntry).length })])
+    // Both roots are read one folder at a time: one not entered yet has no count to say (never a 0).
+    if (state.listed.has(entry.id)) cells.push(['size', fmt(t.items, { n: inside(entry.id).filter(visibleEntry).length })])
   } else {
     const when = whenOf(changedAt(entry), now)
     if (when) cells.push(['when', when])
@@ -1879,7 +1991,8 @@ function rowMenu(li, entry, canDelete = false) {
   const change = canWriteHere(entry) && !entry.systemRole
     ? [{ text: t.rename, run: () => startRename(li, entry) }, ...(copy ? [] : [{ text: t.move, run: () => showMoveDialog(entry) }])] : []
   const remove = canWriteHere(entry) && !entry.systemRole && canDelete
-    ? [{ text: t.remove, run: () => removeFile(entry), ask: copy ? fmt(t.confirmRemoveCopy, { name: entry.name }) : folder && under(entry.id).length ? fmt(t.confirmRemoveFolder, { n: under(entry.id).length }) : t.confirmRemove }] : []
+    ? [{ text: t.remove, run: () => removeFile(entry), ask: copy ? fmt(t.confirmRemoveCopy, { name: entry.name }) : folder && !knownBelow(entry.id) ? t.confirmRemoveFolderAll
+      : folder && under(entry.id).length ? fmt(t.confirmRemoveFolder, { n: under(entry.id).length }) : t.confirmRemove }] : []
   const groups = []
   if (folder && copy) groups.push([open], canWriteHere() ? makeHereItems(() => enterFolder(entry.id)) : [], [{ text: t.download, run: () => downloadEntry(entry) }, ...copyActions(entry)], change, remove)
   else if (folder) groups.push([open], change, remove)
@@ -4091,7 +4204,11 @@ function start() {
     void folderContextMenu(rect.left + 8, rect.top + 8)
   })
   lasso()
-  $('filter').oninput = (event) => setFilterText(event.target.value)
+  $('filter').oninput = (event) => {
+    setFilterText(event.target.value)
+    // A search names files in every folder: the whole tree is read for it, once (what is read so far is searched meanwhile).
+    if (state.filter.trim() && state.root === 'chat' && state.whole !== true) wholeThen(renderList)
+  }
   $('filter').onkeydown = (event) => { if (event.key === 'Escape') closeSearch() }
   $('filter-clear').onclick = () => { setFilterText(''); $('filter').focus() }
   $('search-cancel').onclick = () => closeSearch()
