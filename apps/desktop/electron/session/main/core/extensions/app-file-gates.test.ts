@@ -245,6 +245,12 @@ describe('a name from elsewhere saved here', () => {
     expect(entryPath('D:\\Downloads\\sub', 'D:evil', path.win32)).toBeNull();
   });
 
+  it('on Windows, a `:` inside a name is saved as `_`, never as an NTFS stream; a drive in front is still refused', () => {
+    expect(entryPath('D:\\Downloads\\sub', 'notes 10:30.txt', path.win32)).toBe('D:\\Downloads\\sub\\notes 10_30.txt');
+    expect(entryPath('D:\\Downloads\\sub', 'log 1:2:3.txt', path.win32)).toBe('D:\\Downloads\\sub\\log 1_2_3.txt');
+    for (const name of ['C:foo', 'D:foo', 'c:', 'C:foo:bar', 'a:b:c']) expect(entryPath('D:\\Downloads\\sub', name, path.win32), name).toBeNull();
+  });
+
   it('on POSIX, the same names are refused, so a working copy saves alike everywhere', () => {
     for (const name of ['../evil', 'a/b', '..', '.', '', 'a\\b', '..\\evil', 'C:evil']) expect(entryPath('/dl/sub', name, path.posix), name).toBeNull();
     expect(entryPath('/dl/sub', 'notes 10:30.txt', path.posix)).toBe('/dl/sub/notes 10:30.txt');

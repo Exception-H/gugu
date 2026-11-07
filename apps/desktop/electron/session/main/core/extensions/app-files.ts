@@ -1031,11 +1031,13 @@ async function saveTo(source: SaveSource, filePath: string, flag: 'w' | 'wx', sa
 /**
  * `name` — a working copy's or a chat's, maybe from another machine — as one entry directly in `folder` on this one; `null`
  * when it is a path here instead: empty, `.`, `..`, a `/`, `\` or NUL in it, a drive in front (`C:x`, on this drive or
- * another), or anything else that resolves elsewhere.
+ * another), or anything else that resolves elsewhere. On Windows a `:` inside it becomes `_`.
  */
 export function entryPath(folder: string, name: string, paths: path.PlatformPath = path): string | null {
   if (!name || name === '.' || name === '..' || /[\\/\u0000]/.test(name) || /^[A-Za-z]:/.test(name)) return null;
-  const to = paths.resolve(folder, name);
+  // On Windows a `:` inside a name opens an NTFS stream of the file before it, never a file of that name: saved as `_`
+  // (as a browser saves it). Only after the drive check above, so `C:x` cannot pass as `C_x`.
+  const to = paths.resolve(folder, paths.sep === '\\' ? name.replaceAll(':', '_') : name);
   return paths.dirname(to) === paths.resolve(folder) ? to : null;
 }
 
