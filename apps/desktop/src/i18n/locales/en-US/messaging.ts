@@ -521,7 +521,7 @@ export default {
       "setActive": "Switch to active",
       "setPassive": "Switch to passive",
       "loadFailed": "Could not load the member list. Close and reopen 👥 to try again.",
-      "notParticipant": "No members of this topic are visible to you right now. Say something in it to join.",
+      "notParticipant": "No members of this topic are visible right now",
       "sectionAgents": "Agents",
       "sectionPeople": "People",
       "myAgents": "My agents · {{count}}",
