@@ -1074,7 +1074,7 @@ export interface ExtensionBridgeHost {
   };
   /**
    * The signed-in account's own 咕咕号, for a person's page (`operator.guguNumber`): `undefined` while it is still being
-   * looked up, `null` when the lookup failed. A change is announced as a presentation change.
+   * looked up, `null` when the account has none or the lookup failed. A change is announced as a presentation change.
    */
   selfGuguNumber(): number | null | undefined;
 }

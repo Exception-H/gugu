@@ -170,7 +170,8 @@ export interface ExtensionWorkspace {
 export type ExtensionOperator = { kind: 'person' } | { kind: 'agent'; id: string };
 /**
  * API 32: a person's page also says who that person is by 咕咕号 — the signed-in account's own, the number people add and
- * @ them by. Absent until the host has looked it up (a context update follows); `null` when it could not be (say so).
+ * @ them by. Absent until the host has looked it up (a context update follows); `null` when the account has none or it
+ * could not be read (say so).
  */
 export type ExtensionContextOperator = { kind: 'person'; guguNumber?: number | null } | { kind: 'agent'; id: string };
 
