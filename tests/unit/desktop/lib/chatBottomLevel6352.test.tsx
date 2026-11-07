@@ -13,6 +13,16 @@ import { message } from '../../../support/testHarness'
 import { MAX_WINDOW } from '../../../../apps/desktop/src/store/chatMessageWindow'
 import type { FlowListHandle } from '../../../../apps/desktop/src/lib/flowList'
 
+function setMountedRange(scroller: HTMLElement, first = 1, last = 120) {
+  const content = document.createElement('div')
+  for (const position of [first, last]) {
+    const row = document.createElement('div')
+    row.setAttribute('aria-posinset', String(position)); row.setAttribute('aria-setsize', '120')
+    content.appendChild(row)
+  }
+  scroller.replaceChildren(content)
+}
+
 let harness: ReturnType<typeof createReactHarness>
 beforeEach(() => { harness = createReactHarness() })
 afterEach(() => { harness.cleanup() })
@@ -88,6 +98,7 @@ describe('the newer page is requested from the at-bottom level, not only from sc
   }
   function scrollerAt(fromBottom: number): HTMLElement {
     const element = document.createElement('div')
+    setMountedRange(element)
     Object.defineProperty(element, 'scrollHeight', { value: 11_503 })
     Object.defineProperty(element, 'clientHeight', { value: 776 })
     element.scrollTop = 11_503 - 776 - fromBottom
@@ -131,6 +142,7 @@ describe('pagination does not measure layout when no page can be requested', () 
     const scrollHeight = vi.fn(() => 11_503)
     const clientHeight = vi.fn(() => 776)
     const scroller = document.createElement('div')
+    setMountedRange(scroller)
     Object.defineProperties(scroller, { scrollHeight: { get: scrollHeight }, clientHeight: { get: clientHeight } })
     scroller.scrollTop = scrollTop
     const loadOlder = vi.fn(async () => {})
@@ -188,6 +200,28 @@ describe('pagination does not measure layout when no page can be requested', () 
     expect(view.clientHeight).not.toHaveBeenCalled()
     expect(view.loadOlder).not.toHaveBeenCalled()
     expect(view.loadNewer).not.toHaveBeenCalled()
+  })
+
+  it('does not paginate a local mounted head; the same scroll resumes pagination after the real head mounts', async () => {
+    const view = await setup({ atBottom: false, scrollTop: 0 })
+    setMountedRange(view.scroller, 81, 120)
+    await act(async () => { view.scroller.dispatchEvent(new Event('scroll')); await new Promise(resolve => requestAnimationFrame(() => setTimeout(resolve))) })
+    expect(view.loadOlder).not.toHaveBeenCalled()
+    expect(view.scrollHeight).not.toHaveBeenCalled()
+    setMountedRange(view.scroller)
+    await act(async () => { view.scroller.dispatchEvent(new Event('scroll')); await new Promise(resolve => requestAnimationFrame(() => setTimeout(resolve))) })
+    expect(view.loadOlder).toHaveBeenCalledOnce()
+  })
+
+  it('does not fetch newer pages from a middle slice physical bottom', async () => {
+    const view = await setup({ atBottom: false, hasNewer: true, scrollTop: 10727 })
+    setMountedRange(view.scroller, 21, 40)
+    await act(async () => { view.scroller.dispatchEvent(new Event('scroll')); await new Promise(resolve => requestAnimationFrame(() => setTimeout(resolve))) })
+    expect(view.loadNewer).not.toHaveBeenCalled()
+    expect(view.scrollHeight).not.toHaveBeenCalled()
+    setMountedRange(view.scroller, 21, 120)
+    await act(async () => { view.scroller.dispatchEvent(new Event('scroll')); await new Promise(resolve => requestAnimationFrame(() => setTimeout(resolve))) })
+    expect(view.loadNewer).toHaveBeenCalledOnce()
   })
 
   it('still requests an older page at the physical top even when no newer page exists', async () => {
