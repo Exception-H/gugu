@@ -273,3 +273,33 @@ it('clamps a stale landing beyond rows arriving after an empty loading render', 
   expect(topOf('r2')).toBe(200)
   expect(events.atBottom.at(-1)).toBe(true)
 })
+
+it('fills the loaded window before native Select All without moving the reader or replacing mounted rows', async () => {
+  await harness.render(createElement(List, { rows: rowsOf(40), landing: { index: 30, align: 'start' } }))
+  const kept = harness.container.querySelector('[data-id="r30"]')
+  const before = topOf('r30')
+  expect(rendered().length).toBeLessThan(40)
+  const event = new KeyboardEvent('keydown', { key: 'a', metaKey: true, bubbles: true, cancelable: true })
+  await act(async () => { scroller().dispatchEvent(event) })
+  expect(rendered()).toEqual(rowsOf(40).map(row => row.id))
+  expect(topOf('r30')).toBe(before)
+  expect(harness.container.querySelector('[data-id="r30"]')).toBe(kept)
+  expect(event.defaultPrevented).toBe(false)
+})
+
+it('leaves editing shortcuts and keys from another input alone, and supports Control+A in the transcript', async () => {
+  await harness.render(createElement(List, { rows: rowsOf(40), landing: { index: 'LAST', align: 'end' } }))
+  const inside = document.createElement('input'), outside = document.createElement('input')
+  scroller().append(inside)
+  harness.container.append(outside)
+  await act(async () => {
+    inside.dispatchEvent(new KeyboardEvent('keydown', { key: 'a', ctrlKey: true, bubbles: true }))
+    outside.dispatchEvent(new KeyboardEvent('keydown', { key: 'a', metaKey: true, bubbles: true }))
+    scroller().dispatchEvent(new KeyboardEvent('keydown', { key: 'c', ctrlKey: true, bubbles: true }))
+  })
+  expect(rendered()).toHaveLength(6)
+  const before = topOf('r39')
+  await act(async () => { scroller().dispatchEvent(new KeyboardEvent('keydown', { key: 'a', ctrlKey: true, bubbles: true })) })
+  expect(rendered()).toHaveLength(40)
+  expect(topOf('r39')).toBe(before)
+})

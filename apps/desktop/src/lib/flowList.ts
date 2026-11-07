@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useImperativeHandle, useLayoutEffect, useRef, useState, type Ref, type RefObject } from 'react'
+import { flushSync } from 'react-dom'
 import { afterPaint } from './afterPaint'
 
 /**
@@ -205,6 +206,21 @@ export function useFlowList({ scrollerRef, contentRef, resetKey, rowIds, landing
     scroller.addEventListener('scroll', scrolled.schedule, { passive: true })
     return () => { observer.disconnect(); scroller.removeEventListener('scroll', scrolled.schedule); scrolled.cancel() }
   }, [resetKey, scrollerRef, contentRef, report, grow])
+
+  // 原生全选发生之前补齐同一数据窗口;不接管选区/复制,也不处理输入框或其它面板的快捷键。
+  useEffect(() => {
+    const scroller = scrollerRef.current
+    if (!scroller) return
+    const selectAll = (event: KeyboardEvent) => {
+      if (!(event.metaKey || event.ctrlKey) || event.altKey || event.shiftKey || event.key.toLowerCase() !== 'a') return
+      if (event.target instanceof Element && event.target.closest('input,textarea,[contenteditable]:not([contenteditable="false"]),[role="textbox"]')) return
+      const range = rangeRef.current
+      if (range.start === 0 && range.end === range.rowIds.length) return
+      flushSync(() => setSlice(s => ({ ...s, fromId: range.rowIds[0], toId: undefined })))
+    }
+    scroller.addEventListener('keydown', selectAll)
+    return () => scroller.removeEventListener('keydown', selectAll)
+  }, [resetKey, scrollerRef])
 
   useImperativeHandle(handleRef, () => ({
     scrollToIndex: ({ index, align = 'start', offset = 0, behavior }) => {

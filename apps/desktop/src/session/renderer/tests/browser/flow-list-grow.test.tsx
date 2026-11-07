@@ -91,3 +91,29 @@ it('follows the retained tail through a full data window head trim without mount
   expect(row('r4')).toBeNull()
   expect(count()).toBe(10)
 })
+
+it('fills before native Select All so the browser includes every loaded row without a viewport jump', async () => {
+  await render({ index: 100, align: 'start' })
+  const before = y('r100'), kept = row('r100')
+  view().focus()
+  await userEvent.keyboard('{Control>}a{/Control}')
+  expect(count()).toBe(120)
+  expect(ids(120).every(id => getSelection()!.containsNode(row(id)!, true))).toBe(true)
+  expect(row('r100')).toBe(kept)
+  expect(y('r100')).toBeCloseTo(before, 0)
+})
+
+it('keeps Select All local to an editor inside the transcript and an input outside it', async () => {
+  await render({ index: 'LAST', align: 'end' })
+  const inside = document.createElement('input'), outside = document.createElement('input')
+  inside.value = outside.value = 'local draft'
+  view().append(inside)
+  host.append(outside)
+  for (const input of [inside, outside]) {
+    input.focus()
+    await userEvent.keyboard('{Control>}a{/Control}')
+    expect(input.selectionStart).toBe(0)
+    expect(input.selectionEnd).toBe(input.value.length)
+    expect(count()).toBe(6)
+  }
+})
