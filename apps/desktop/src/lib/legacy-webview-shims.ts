@@ -7,6 +7,8 @@ function dataCloneError(value: unknown): DOMException {
   return new DOMException(`${String(value)} could not be cloned.`, 'DataCloneError')
 }
 
+const STANDARD_ERRORS: Record<string, ErrorConstructor | undefined> = { EvalError, RangeError, ReferenceError, SyntaxError, TypeError, URIError }
+
 function cloneInto(value: unknown, seen: Map<object, unknown>): unknown {
   if (typeof value === 'function' || typeof value === 'symbol') throw dataCloneError(value)
   if (value === null || typeof value !== 'object') return value
@@ -39,7 +41,9 @@ function cloneInto(value: unknown, seen: Map<object, unknown>): unknown {
     return copy
   }
   if (value instanceof Error) {
-    const copy = new (value.constructor as ErrorConstructor)(value.message)
+    // Like native structured clone: only the standard error types survive by name; anything else, a subclass
+    // included, comes back as a plain Error. No foreign constructor is ever called.
+    const copy = new (STANDARD_ERRORS[value.name] ?? Error)(value.message)
     seen.set(value, copy)
     if (value.stack !== undefined) copy.stack = value.stack
     return copy

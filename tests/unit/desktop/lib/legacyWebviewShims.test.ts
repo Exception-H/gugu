@@ -48,6 +48,18 @@ describe('legacy WebView shims (Android System WebView 91 has no structuredClone
     expect(copy.error.message).toBe('boom')
   })
 
+  it('never calls an Error subclass constructor; it comes back as a plain Error like native clone', () => {
+    let calls = 0
+    class Custom extends Error { constructor(message: string) { super(message); calls++ } }
+    const source = new Custom('x')
+    calls = 0
+    const copy = structuredCloneFallback({ e: source })
+    expect(calls).toBe(0)
+    expect(Object.getPrototypeOf(copy.e)).toBe(Error.prototype)
+    expect(Object.getPrototypeOf(copy.e)).toBe(Object.getPrototypeOf(structuredClone({ e: source }).e))
+    expect(copy.e.message).toBe('x')
+  })
+
   it('keeps cycles and drops prototypes like native clone', () => {
     class Box { v = 1; get twice() { return this.v * 2 } }
     const a: { self?: unknown; box: Box } = { box: new Box() }
