@@ -15,7 +15,7 @@ export interface DesktopWindowIo {
   readOlder(request: WindowReadRequest & { cursor: NonNullable<WindowPage['olderCursor']> }): Promise<WindowResult>;
   readBody(request: WindowReadRequest & SessionpageSessionBodyReadRequest): Promise<WindowBodyResult>;
   /** Observe a source revision; this must not acquire a legacy timeline. */
-  watch(conversationId: string, changed: () => void, request: WindowReadRequest): Promise<() => void>;
+  watch(conversationId: string, changed: () => void, request: WindowReadRequest, failed: (error: unknown) => void): Promise<() => void>;
 }
 
 function page(result: WindowResult): WindowPage {
@@ -76,6 +76,13 @@ export function createDesktopWindowReader(io: DesktopWindowIo) {
     let stopWatch: (() => void) | undefined;
     let initialRequest: WindowReadRequest | undefined;
     const stop = () => { if (!stopped) { stopped = true; abort.abort(); stopWatch?.(); signal?.removeEventListener('abort', stop); } };
+    const fail = (error: unknown) => {
+      if (stopped) return;
+      stop();
+      const failure = error as { code?: string; message?: string } | null;
+      failed({ conversationId: input.conversationId, subscriptionId: input.subscriptionId, state: 'failed',
+        error: { code: failure?.code ?? 'record_unreadable', message: failure?.message ?? String(error) } });
+    };
     signal?.addEventListener('abort', stop, { once: true });
     if (signal?.aborted) stop();
     const pump = async () => {
@@ -93,21 +100,14 @@ export function createDesktopWindowReader(io: DesktopWindowIo) {
           cursor = value.cursor;
           emit({ subscriptionId: input.subscriptionId, result });
         }
-      } catch (error) {
-        if (!stopped) {
-          stop();
-          const failure = error as { code?: string; message?: string } | null;
-          failed({ conversationId: input.conversationId, subscriptionId: input.subscriptionId, state: 'failed',
-            error: { code: failure?.code ?? 'record_unreadable', message: failure?.message ?? String(error) } });
-        }
-      }
+      } catch (error) { fail(error); }
       finally { running = false; }
     };
     try {
       abort.signal.throwIfAborted();
       const request = await io.request(input.conversationId, undefined, abort.signal);
       initialRequest = request;
-      stopWatch = await io.watch(input.conversationId, () => { void pump(); }, request);
+      stopWatch = await io.watch(input.conversationId, () => { void pump(); }, request, fail);
       if (stopped) { stopWatch(); io.finish?.(request); }
       else void pump();
       return stop;

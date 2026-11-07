@@ -1,5 +1,9 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
+vi.mock('../sessions/session-conversation-read', () => ({
+  markNativeConversationVisible: vi.fn(), nativeConversationUnread: () => [], nativeOwnerNotificationUnread: () => [],
+}));
+
 const state = vi.hoisted(() => ({
   emits: [] as Array<{ name: string; data: unknown; topic?: string }>,
   pushes: new Map<string, (event: unknown) => void>(),

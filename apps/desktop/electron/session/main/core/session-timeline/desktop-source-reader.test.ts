@@ -1,4 +1,4 @@
-import { mkdtemp, mkdir, rm, writeFile } from 'node:fs/promises';
+import { mkdtemp, mkdir, rm, writeFile, realpath } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
@@ -8,7 +8,8 @@ import type { DesktopSourceRequest } from './desktop-source-reader';
 import type { WindowIoCounters } from '@gugu/session-core/session-record/window-cache/types';
 import { supportsSourceWindow } from '@gugu/session-core/session-record/window-cache/formats';
 
-const reads = vi.hoisted(() => ({ source: 0, index: 0, maximum: 0, onDirectoryRead: null as (() => void | Promise<void>) | null }));
+const reads = vi.hoisted(() => ({ source: 0, index: 0, maximum: 0, onDirectoryRead: null as (() => void | Promise<void>) | null,
+  beforeSourceRead: null as ((path: string, position: number, close: () => Promise<void>) => void | Promise<void>) | null }));
 vi.mock('node:fs/promises', async original => {
   const fs = await original<typeof import('node:fs/promises')>();
   return { ...fs, readFile: () => { throw new Error('Whole-file reads are forbidden'); },
@@ -23,6 +24,7 @@ vi.mock('node:fs/promises', async original => {
     open: async (...args: Parameters<typeof fs.open>) => {
       const file = await fs.open(...args), read = file.read.bind(file);
       vi.spyOn(file, 'read').mockImplementation((async (...values: unknown[]) => {
+        if (String(args[0]).endsWith('.jsonl')) await reads.beforeSourceRead?.(String(args[0]), Number(values[3]), () => file.close());
         const result = await Reflect.apply(read, file, values);
         const kind = String(args[0]).endsWith('.jsonl') ? 'source' : 'index';
         reads[kind] += result.bytesRead;
@@ -61,11 +63,75 @@ async function fixture(multipleBatches = false) {
     backgroundRead: (jobId, io) => observed.push({ id: jobId, phase: 'reverse', io: { ...io } }),
   });
   cleanup.push(() => reader.dispose());
-  reads.source = 0; reads.index = 0; reads.maximum = 0; reads.onDirectoryRead = null;
-  return { reader, measured, observed, requests, path, row };
+  reads.source = 0; reads.index = 0; reads.maximum = 0; reads.onDirectoryRead = null; reads.beforeSourceRead = null;
+  return { reader, measured, observed, requests, path: await realpath(path), row };
 }
 
 describe('desktop default source reopening', () => {
+  it('reports a fatal reverse read to its own window once and leaves another window live', async () => {
+    const { reader, path, row, observed } = await fixture();
+    const otherEvents = vi.fn(), otherFailed = vi.fn();
+    const stopOther = await reader.subscribe({ conversationId: 'other', subscriptionId: 'healthy', cursor: null }, otherEvents, otherFailed);
+    cleanup.push(async () => stopOther());
+    await vi.waitFor(() => expect(otherEvents).toHaveBeenCalledOnce());
+    const raw = row('giant body'.repeat(30000)); await writeFile(path, raw);
+    const tail = Buffer.byteLength(raw) - 65536;
+    reads.beforeSourceRead = async (target, position, close) => {
+      if (target === path && position < tail) { reads.beforeSourceRead = null; await close(); }
+    };
+    const failed = vi.fn();
+    const stop = await reader.subscribe({ conversationId: 'conversation', subscriptionId: 'failed-job-owner', cursor: null }, vi.fn(), failed);
+    cleanup.push(async () => stop());
+    await vi.waitFor(() => expect(failed).toHaveBeenCalledOnce());
+    expect(failed).toHaveBeenCalledWith(expect.objectContaining({ conversationId: 'conversation', subscriptionId: 'failed-job-owner', state: 'failed',
+      error: expect.objectContaining({ code: 'EBADF' }) }));
+    await writeFile(path.replace('native-id', 'other-id'), row('healthy window still updates'));
+    await vi.waitFor(() => expect(otherEvents).toHaveBeenCalledTimes(2));
+    expect(otherFailed).not.toHaveBeenCalled(); expect(failed).toHaveBeenCalledOnce();
+    expect(observed.reduce((sum, item) => sum + item.io.sourceBytes, 0)).toBe(reads.source);
+    expect(observed.reduce((sum, item) => sum + item.io.indexBytes, 0)).toBe(reads.index);
+  });
+  it('does not turn a cancelled reverse read into a failed window', async () => {
+    const { reader, path, row, observed } = await fixture(), abort = new AbortController();
+    const raw = row('giant body'.repeat(30000)); await writeFile(path, raw);
+    let entered!: () => void, release!: () => void;
+    const gate = new Promise<void>(yes => { release = yes; }), started = new Promise<void>(yes => { entered = yes; });
+    reads.beforeSourceRead = async (target, position, close) => {
+      if (target === path && position < Buffer.byteLength(raw) - 65536) {
+        reads.beforeSourceRead = null; entered(); await gate; await close();
+      }
+    };
+    const failed = vi.fn();
+    const stop = await reader.subscribe({ conversationId: 'conversation', subscriptionId: 'cancelled-owner', cursor: null }, vi.fn(), failed, abort.signal);
+    cleanup.push(async () => stop());
+    try { await started; abort.abort(); } finally { release(); }
+    await vi.waitFor(() => expect(observed.some(item => item.phase === 'reverse')).toBe(true));
+    await reader.dispose(); expect(failed).not.toHaveBeenCalled();
+  });
+  it('resumes an owned locating job after an unrelated foreground read pauses it', async () => {
+    const { reader, path, row, requests } = await fixture();
+    const text = 'first actual body'.repeat(20000), raw = row(text); await writeFile(path, raw);
+    let entered!: () => void, release!: () => void;
+    const gate = new Promise<void>(yes => { release = yes; }), started = new Promise<void>(yes => { entered = yes; });
+    reads.beforeSourceRead = async (target, position) => {
+      if (target === path && position < Buffer.byteLength(raw) - 65536) {
+        reads.beforeSourceRead = null; entered(); await gate;
+      }
+    };
+    const events = vi.fn(), failed = vi.fn();
+    const stop = await reader.subscribe({ conversationId: 'conversation', subscriptionId: 'resume-owner', cursor: null }, events, failed);
+    cleanup.push(async () => stop());
+    await started;
+    const foreground = reader.snapshot({ conversationId: 'other' });
+    try { await vi.waitFor(() => expect(requests.some(request => request.conversationId === 'other')).toBe(true)); }
+    finally { release(); }
+    expect((await foreground).sourceFragments?.[0].text).toBe('other real body');
+    await vi.waitFor(() => expect(events.mock.calls.some(([event]) => {
+      const page = event.result.ok ? event.result.batch : event.result.snapshot;
+      return page.sourceFragments?.some((fragment: { text?: string }) => fragment.text && text.startsWith(fragment.text));
+    })).toBe(true));
+    expect(failed).not.toHaveBeenCalled();
+  });
   it('selects supported source formats before invoking any native reader', () => {
     expect(['claude', 'codex'].map(supportsSourceWindow)).toEqual([true, true]);
     expect(['opencode', 'hermes', 'copilot', 'qwen', 'pi', 'codebuddy', null].map(supportsSourceWindow)).toEqual(Array(7).fill(false));
@@ -106,7 +172,7 @@ describe('desktop default source reopening', () => {
     expect(after.snapshot.sourceFragments?.map(value => value.text)).toEqual(['replacement body']);
   });
   it('continues metadata discovery until a single subscription produces real text', async () => {
-    const { reader, measured, observed, requests } = await fixture(true);
+    const { reader, observed, requests } = await fixture(true);
     let resolve!: (value: unknown) => void, reject!: (error: unknown) => void;
     const event = new Promise((yes, no) => { resolve = yes; reject = no; });
     const stop = await reader.subscribe({ conversationId: 'conversation', subscriptionId: 'sub', cursor: null }, resolve, reject);
