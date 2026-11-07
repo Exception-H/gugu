@@ -1,6 +1,8 @@
 import type { OutboxWiring } from '../../store/chatOutboxWiring'
 import type { MessageItem } from '@gugu/core/shared/types/chat'
 import { formatAttachmentMetadata, inferAttachmentKind, resolveFileMimeType } from '@gugu/core/shared/ui/attachmentModels'
+import { keepSentAttachment } from '../../lib/attachmentBytes'
+import { rendererLogger } from '../../lib/log'
 import { type AttachmentsEndpoint } from '@gugu/core/cloud/attachmentsApi'
 import { attachmentsEndpoint, prepareChatAttachment, type PreparedChatAttachment } from '../../lib/attachmentsEndpoint'
 import { requireThreadCapableChat } from '../../lib/chatThreadGate'
@@ -54,6 +56,8 @@ export async function placeholderRow(file: File, caption: string | undefined, ar
     } catch { /* A local decoder need not support every uploadable image format. */ }
   }
   const previewUrl = URL.createObjectURL(file)
+  // Kept by content while it uploads, so the committed row draws these bytes instead of downloading them again.
+  if (inferAttachmentKind(file) === 'image') void keepSentAttachment(file).catch((error) => rendererLogger('chat/send').error({ error: String(error) }, 'sent image local copy not kept'))
   const message: MessageItem = {
     id: crypto.randomUUID(),
     chat_id: args.chatId,

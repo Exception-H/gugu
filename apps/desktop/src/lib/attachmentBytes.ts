@@ -40,6 +40,9 @@ export async function attachmentBytes(source: AttachmentSource, variant: Attachm
 
 async function readAttachmentBytes(source: AttachmentSource, variant: AttachmentVariant, onLink?: (link: FileRevision) => void, metadata?: FileMetadata, progress?: (done: number, total: number) => void): Promise<AttachmentBytes> {
   if (variant === 'thumb') {
+    // A full copy already on this device (sent from here, or opened before) is the thumbnail: no signing, no download.
+    const local = metadata?.status === 'ready' && metadata.revision.content_type.startsWith('image/') ? await cachedAttachmentCopy(metadata.revision.sha256) : null
+    if (local && metadata?.status === 'ready') return { status: 'ready', blob: local, link: metadata.revision }
     const preview = await attachmentPreview(source, metadata)
     if (preview.status !== 'ready') return preview
     try {
@@ -179,7 +182,17 @@ export async function cachedAttachmentCopy(sha256: string | null): Promise<Blob 
   if (!sha256 || !/^[0-9a-f]{64}$/.test(sha256)) return null
   const hit = await (await attachmentCache()).match(fullKey(fileReader().accountId, sha256))
   if (!hit) return null
-  const blob = await hit.blob(), hash = fileSha256.create(), reader = blob.stream().getReader()
+  const blob = await hit.blob()
+  return await blobSha256(blob) === sha256 ? blob : null
+}
+
+/** A file this device sends is a full local copy of what it commits: kept by its sha256, read back by cachedAttachmentCopy. */
+export async function keepSentAttachment(file: Blob): Promise<void> {
+  await (await attachmentCache()).put(fullKey(fileReader().accountId, await blobSha256(file)), new Response(file))
+}
+
+async function blobSha256(blob: Blob): Promise<string> {
+  const hash = fileSha256.create(), reader = blob.stream().getReader()
   for (;;) { const chunk = await reader.read(); if (chunk.done) break; hash.update(chunk.value) }
-  return Array.from(hash.digest(), byte => byte.toString(16).padStart(2, '0')).join('') === sha256 ? blob : null
+  return Array.from(hash.digest(), byte => byte.toString(16).padStart(2, '0')).join('')
 }
