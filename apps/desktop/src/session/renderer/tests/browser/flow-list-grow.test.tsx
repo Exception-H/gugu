@@ -4,6 +4,7 @@ import { afterEach, beforeEach, expect, it } from 'vitest'
 import { userEvent } from '@vitest/browser/context'
 import { useFlowList, type FlowListHandle, type ListLanding } from '@/lib/flowList'
 import { GroupAvatarSlot } from '@/components/chat/StickyGroupAvatar'
+import '@renderer/index.css'
 import { until } from '../../../../../../../tests/support/awaitCondition'
 
 let root: Root, host: HTMLDivElement
