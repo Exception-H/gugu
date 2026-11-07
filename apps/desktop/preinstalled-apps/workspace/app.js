@@ -2567,7 +2567,8 @@ async function openWhole(entry, token, maxBytes, first = null) {
     onDocument: () => { if (state.current === current) void openHanded() },
     onError: (error) => {
       current.saveFailedShown = true
-      current.saveOwed = !!machineSays(error)
+      // A machine too old stays too old when it reconnects: only one out of reach is worth trying again.
+      current.saveOwed = error.code === 'unavailable'
       showBanner(error.code === 'content-changed' ? fmt(state.t.saveHeld, { name: current.entry.name }) : fmt(state.t.saveFailed, { name: current.entry.name, e: machineSays(error) ?? error.message }), 'error')
     },
   })
