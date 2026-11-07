@@ -13,7 +13,16 @@ const f = vi.hoisted(() => ({
   dialogDir: '',
   dialogFile: '',
   openIn: vi.fn(async () => undefined),
+  windowsNames: false,
 }));
+// `windowsNames`: one case names saved files as Windows does (`:` saved as `_`) on this real disk. Only `entryPath`, the one
+// place a saved name is decided, reads the separator as Windows; the working copy's own path checks keep this machine's.
+vi.mock('node:path', async (original) => {
+  const real = await original<typeof import('node:path')>();
+  const named: Record<string, unknown> = { ...real, get sep() { return f.windowsNames && new Error().stack?.includes('entryPath') ? '\\' : real.sep; } };
+  named.default = named;
+  return named;
+});
 vi.mock('electron', () => ({
   BrowserWindow: { fromWebContents: () => null },
   dialog: { showOpenDialog: async () => ({ canceled: false, filePaths: [f.dialogDir] }), showSaveDialog: async () => ({ canceled: false, filePath: f.dialogFile }) },
@@ -254,6 +263,27 @@ describe('a name from elsewhere saved here', () => {
   it('on POSIX, the same names are refused, so a working copy saves alike everywhere', () => {
     for (const name of ['../evil', 'a/b', '..', '.', '', 'a\\b', '..\\evil', 'C:evil']) expect(entryPath('/dl/sub', name, path.posix), name).toBeNull();
     expect(entryPath('/dl/sub', 'notes 10:30.txt', path.posix)).toBe('/dl/sub/notes 10:30.txt');
+  });
+
+  it('a folder whose two names become one here keeps both: the later as 「 (2)」, each with its own bytes', async () => {
+    f.capabilities.add('files:read');
+    fs.mkdirSync(path.join(f.root, 'sub', 'logs:old'), { recursive: true });
+    fs.mkdirSync(path.join(f.root, 'sub', 'logs_old'));
+    fs.writeFileSync(path.join(f.root, 'sub', 'notes 10:30.txt'), 'colon');
+    fs.writeFileSync(path.join(f.root, 'sub', 'notes 10_30.txt'), 'underscore');
+    fs.writeFileSync(path.join(f.root, 'sub', 'logs:old', 'a.txt'), 'in colon folder');
+    fs.writeFileSync(path.join(f.root, 'sub', 'logs_old', 'a.txt'), 'in underscore folder');
+    f.windowsNames = true;
+    try {
+      await expect(downloadAppFile(page(), { ref: { workspace, id: 'sub' }, folder: true }, null)).resolves.toBe(true);
+    } finally {
+      f.windowsNames = false;
+    }
+    const saved = path.join(f.dialogDir, 'sub');
+    expect(fs.readdirSync(saved).toSorted()).toEqual(['logs_old', 'logs_old (2)', 'notes 10_30 (2).txt', 'notes 10_30.txt']);
+    const bytes = (name: string) => fs.readFileSync(path.join(saved, name), 'utf8');
+    expect([bytes('notes 10_30.txt'), bytes('notes 10_30 (2).txt')].toSorted()).toEqual(['colon', 'underscore']);
+    expect([bytes('logs_old/a.txt'), bytes('logs_old (2)/a.txt')].toSorted()).toEqual(['in colon folder', 'in underscore folder']);
   });
 
   it('a link left where a file would be saved is a taken name: the file goes beside it, nothing through it', async () => {

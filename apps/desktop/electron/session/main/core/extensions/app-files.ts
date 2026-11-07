@@ -967,23 +967,23 @@ const FOLDER_DOWNLOAD_MAX_FILES = 10_000;
 
 /** A working copy's folder saved under `target`, wherever the working copy is: listed first (how much there is), then one piece at a time. */
 async function saveFolder(page: DesktopFilePage, place: WorkspacePlace, folder: string, target: string, report: (done: number, total: number) => void, signal: AbortSignal): Promise<string[]> {
-  const found: { id: string; to: string; size: number; link: boolean }[] = [];
+  const found: { id: string; in: string; name: string; size: number; link: boolean }[] = [];
   // What a link points at may be nowhere, or outside: it is not the folder's. Those are left out and said, never the reason the rest is lost.
   const skipped: string[] = [];
   const walk = async (from: string, to: string): Promise<void> => {
     if (signal.aborted) throw stopped();
-    await fs.mkdir(to, { recursive: true });
     for (const entry of await listAppFiles(page, { place, folder: from })) {
       // A name that is a path here (another machine's `..\x`, `a\b`, `C:x`) is left out and said, never followed.
-      const into = entryPath(to, entry.name);
-      if (!into) { skipped.push(entry.id); continue; }
+      if (!entryPath(to, entry.name)) { skipped.push(entry.id); continue; }
+      // Each name is claimed as it is made, as everywhere a download names a file: two that become one name here (Windows:
+      // `a:b` and `a_b`) are both kept, the later as 「 (2)」.
       if (entry.type === 'folder') {
         // Followed, a link to a folder above it never ends.
         if (entry.symlink) skipped.push(entry.id);
-        else await walk(entry.id, into);
+        else await walk(entry.id, await atFreeName(to, entry.name, (at) => fs.mkdir(at)));
         continue;
       }
-      found.push({ id: entry.id, to: into, size: entry.size ?? 0, link: !!entry.symlink });
+      found.push({ id: entry.id, in: to, name: entry.name, size: entry.size ?? 0, link: !!entry.symlink });
       if (found.length > FOLDER_DOWNLOAD_MAX_FILES) throw new AppFileError('too-large', `More than ${FOLDER_DOWNLOAD_MAX_FILES} files in this folder`);
     }
   };
@@ -993,7 +993,7 @@ async function saveFolder(page: DesktopFilePage, place: WorkspacePlace, folder: 
     let done = 0;
     for (const file of found) {
       try {
-        await savePieces(page, { workspace: place.workspace, id: file.id }, file.to, 'wx', { signal, saved: (bytes) => report(done += bytes, total) });
+        await atFreeName(file.in, file.name, (at) => savePieces(page, { workspace: place.workspace, id: file.id }, at, 'wx', { signal, saved: (bytes) => report(done += bytes, total) }));
       } catch (error) {
         if (!file.link || signal.aborted) throw error;
         skipped.push(file.id);
