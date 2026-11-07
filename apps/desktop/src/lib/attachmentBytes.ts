@@ -10,9 +10,10 @@ import { rendererLogger } from './log'
 
 const log = rendererLogger('attachment-bytes')
 
-export async function resolveAttachment(source: AttachmentSource, showFirst?: true) {
+/** `showFirst`: the bytes before the read acknowledgement, for a reader that can take them down. `progress`: how far they have come. */
+export async function resolveAttachment(source: AttachmentSource, options: { showFirst?: true; progress?: (done: number, total: number) => void } = {}) {
   const ref = attachmentFileRef(source)
-  return ref ? resolveFile(ref, fileReader(), { signal: fileReadSignal(), showFirst }) : { status: 'gone' as const, sha256: null }
+  return ref ? resolveFile(ref, fileReader(), { signal: fileReadSignal(), ...options }) : { status: 'gone' as const, sha256: null }
 }
 export async function attachmentMetadata(source: AttachmentSource): Promise<FileMetadata> {
   const file = await resolveAttachment(source)
@@ -36,12 +37,13 @@ export function sourceKeyOf(source: AttachmentSource): string {
 export type AttachmentBytes = { status: 'ready'; blob: Blob; link: FileRevision; acknowledged?: Promise<void> } | { status: 'gone' | 'expired' | 'missing' }
 
 /** Thumbnails only display; original blobs are created exclusively from a fully verified file handle. */
-export async function attachmentBytes(source: AttachmentSource, variant: AttachmentVariant | 'shown' = 'full', onLink?: (link: FileRevision) => void, metadata?: FileMetadata): Promise<AttachmentBytes> {
-  try { return await readAttachmentBytes(source, variant, onLink, metadata) }
+/** `progress`: how far the original's bytes have come, while they are read (the file preview's bar). */
+export async function attachmentBytes(source: AttachmentSource, variant: AttachmentVariant | 'shown' = 'full', onLink?: (link: FileRevision) => void, metadata?: FileMetadata, progress?: (done: number, total: number) => void): Promise<AttachmentBytes> {
+  try { return await readAttachmentBytes(source, variant, onLink, metadata, progress) }
   catch (error) { if (error instanceof MissingFileObjectError) return { status: 'missing' }; throw error }
 }
 
-async function readAttachmentBytes(source: AttachmentSource, variant: AttachmentVariant | 'shown', onLink?: (link: FileRevision) => void, metadata?: FileMetadata): Promise<AttachmentBytes> {
+async function readAttachmentBytes(source: AttachmentSource, variant: AttachmentVariant | 'shown', onLink?: (link: FileRevision) => void, metadata?: FileMetadata, progress?: (done: number, total: number) => void): Promise<AttachmentBytes> {
   if (variant === 'thumb') {
     const preview = await attachmentPreview(source, metadata)
     if (preview.status !== 'ready') return preview
@@ -52,7 +54,7 @@ async function readAttachmentBytes(source: AttachmentSource, variant: Attachment
       return { status: 'ready', blob, link: preview.revision }
     } finally { await preview.dispose() }
   }
-  const file = await resolveAttachment(source, variant === 'shown' || undefined)
+  const file = await resolveAttachment(source, { ...(variant === 'shown' ? { showFirst: true as const } : {}), ...(progress ? { progress } : {}) })
   if (file.status !== 'ready') return file
   onLink?.(file.revision)
   const key = file.revision.sha256 === null ? null : fullKey(file.reader.accountId, file.revision.sha256)
