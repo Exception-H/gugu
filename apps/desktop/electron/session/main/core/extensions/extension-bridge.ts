@@ -30,6 +30,7 @@ import {
   type ExtensionMember,
   type ExtensionHostContext,
   type ExtensionHostEvent,
+  type ExtensionContextOperator,
   type ExtensionOperator,
   type ExtensionPageFrom,
   type ExtensionWorkspace,
@@ -1071,6 +1072,11 @@ export interface ExtensionBridgeHost {
      */
     windowFocused: boolean;
   };
+  /**
+   * The signed-in account's own 咕咕号, for a person's page (`operator.guguNumber`): `undefined` while it is still being
+   * looked up, `null` when the lookup failed. A change is announced as a presentation change.
+   */
+  selfGuguNumber(): number | null | undefined;
 }
 
 let host: ExtensionBridgeHost | null = null;
@@ -1276,6 +1282,11 @@ async function pageFrom(binding: SurfaceBinding): Promise<ExtensionPageFrom> {
   return { tabId: binding.tabId, ...(workspace ? { workspace } : {}), ...(chat ? { chat } : {}), ...(file ? { file } : {}), operator: binding.operator };
 }
 
+function personOperator(): ExtensionContextOperator {
+  const guguNumber = requireHost().selfGuguNumber();
+  return guguNumber === undefined ? { kind: 'person' } : { kind: 'person', guguNumber };
+}
+
 function contextFor(binding: SurfaceBinding, workspace: ExtensionWorkspace | undefined): ExtensionHostContext {
   const capabilities = extensionsService().grantedCapabilities(binding.extensionId);
   const { locale, themeMode, fullscreen } = requireHost().presentation();
@@ -1292,7 +1303,7 @@ function contextFor(binding: SurfaceBinding, workspace: ExtensionWorkspace | und
     // Absent stays absent: a tab opened from the entry rail has no file.
     ...(file ? { file } : {}),
     ...(binding.widget ? { widget: { messageId: binding.widget.messageId, data: binding.widget.data, sender: binding.widget.senderId } } : {}),
-    operator: binding.operator,
+    operator: binding.operator.kind === 'person' ? personOperator() : binding.operator,
     locale,
     themeMode: binding.themeMode ?? themeMode,
     capabilities,

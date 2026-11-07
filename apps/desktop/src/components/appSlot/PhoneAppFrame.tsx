@@ -16,6 +16,7 @@ import { listedSession, liveDeviceSessions } from '../../session/shared/remote-s
 import { useChatStore } from '../../store/chatContext'
 import { useDevicesStore } from '../../store/devicesContext'
 import { useTheme } from '../../store/theme'
+import { useAuth } from '../../store/auth'
 import { hostAppFrame, type PhoneAppBinding } from './phoneAppHost'
 import { phoneApps } from './phoneApps'
 import type { SessionpageOpenedFileChunk, SessionpageOpenedFileReadRequest } from '@gugu/session-core/session-record/contract'
@@ -92,6 +93,8 @@ export function PhoneAppFrame({
   const [app, setApp] = useState<FramedPage | null>(null)
   const [missing, setMissing] = useState(false)
   const { theme } = useTheme()
+  const { user } = useAuth()
+  const guguNumber = user ? user.gugu_number ?? null : undefined
   const { i18n } = useTranslation()
   const { t } = useTranslation('messaging')
   const { subscribeAccountRevision } = useChatStore('subscribeAccountRevision')
@@ -138,6 +141,7 @@ export function PhoneAppFrame({
     ...(widget ? { widget } : {}),
     locale: i18n.language,
     themeMode: theme === 'dark' ? 'dark' : 'light',
+    ...(guguNumber !== undefined ? { guguNumber } : {}),
   }
   const deviceId = session?.deviceId
 
@@ -197,7 +201,7 @@ export function PhoneAppFrame({
 
   useEffect(() => {
     if (app) hostRef.current?.update({ ...bindingRef.current, capabilities: app.capabilities })
-  }, [app, chatId, itemId, theme, i18n.language, session?.online])
+  }, [app, chatId, itemId, theme, i18n.language, session?.online, guguNumber])
 
   // Chats' files changed (the account revision bus names them, #7257): the App hears about the ones it asked about
   // (files.onChanged) — the host reads them; not awaited here, as on the desktop (useExtensionWorkspaceRevisions).
