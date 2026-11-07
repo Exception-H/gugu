@@ -2374,7 +2374,8 @@ async function openHanded(maxBytes) {
       await showWhole(parked)
       return
     }
-    if (handed.workspace && !isLiveName(handed.id)) {
+    // What an editor left unsaved is in its draft, which a live document never reads: such a file opens whole until it is saved or discarded.
+    if (handed.workspace && (!isLiveName(handed.id) || (await gugu.files.draft(handed).catch(() => null)) !== null)) {
       await openWhole(handed, token, maxBytes)
       return
     }
