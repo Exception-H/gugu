@@ -60,6 +60,35 @@ describe('desktop bounded window bridge', () => {
     await Promise.resolve(); await Promise.resolve();
     expect(emit).not.toHaveBeenCalled(); expect(failed).not.toHaveBeenCalled(); expect(stopped).toHaveBeenCalledOnce();
   });
+  it('reports one terminal typed failure after a readable page without retrying', async () => {
+    const { reader, io, changed, stopped } = setup(), emit = vi.fn(), failed = vi.fn();
+    await reader.subscribe({ conversationId: 'session', subscriptionId: 'current-generation', cursor: null }, emit, failed);
+    await vi.waitFor(() => expect(emit).toHaveBeenCalledOnce());
+    vi.mocked(io.openRecent).mockRejectedValueOnce(Object.assign(new Error('Current source cannot be read'), { code: 'source_changed' }));
+    changed();
+    await vi.waitFor(() => expect(failed).toHaveBeenCalledOnce());
+    expect(failed).toHaveBeenCalledWith({ conversationId: 'session', subscriptionId: 'current-generation', state: 'failed',
+      error: { code: 'source_changed', message: 'Current source cannot be read' } });
+    changed(); await Promise.resolve();
+    expect(io.openRecent).toHaveBeenCalledTimes(2); expect(stopped).toHaveBeenCalledOnce();
+  });
+  it('rejects setup failures for the typed RPC response without issuing a second failure event', async () => {
+    const { reader, io } = setup(), emit = vi.fn(), failed = vi.fn();
+    vi.mocked(io.watch).mockRejectedValueOnce(Object.assign(new Error('Source not found'), { code: 'record_not_found' }));
+    await expect(reader.subscribe({ conversationId: 'session', subscriptionId: 'setup', cursor: null }, emit, failed))
+      .rejects.toMatchObject({ code: 'record_not_found' });
+    expect(failed).not.toHaveBeenCalled(); expect(emit).not.toHaveBeenCalled(); expect(io.openRecent).not.toHaveBeenCalled();
+  });
+  it('does not report a late rejected read after its subscription is cancelled', async () => {
+    const { reader, io } = setup(), emit = vi.fn(), failed = vi.fn();
+    let reject!: (error: Error) => void;
+    vi.mocked(io.openRecent).mockImplementationOnce(() => new Promise((_yes, no) => { reject = no; }));
+    const stop = await reader.subscribe({ conversationId: 'session', subscriptionId: 'old-generation', cursor: null }, emit, failed);
+    await vi.waitFor(() => expect(io.openRecent).toHaveBeenCalledOnce());
+    stop(); reject(new Error('Late read failure'));
+    await Promise.resolve(); await Promise.resolve(); await Promise.resolve();
+    expect(failed).not.toHaveBeenCalled(); expect(emit).not.toHaveBeenCalled();
+  });
   it('replaces the actual shared consumer window after a same-size source rewrite', async () => {
     const { reader, value } = setup();
     value.pendingLongRecords = []; value.coveredRanges = [{ start: 0, end: 100 }];

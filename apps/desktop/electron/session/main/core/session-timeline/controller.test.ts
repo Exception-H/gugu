@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 const state = vi.hoisted(() => ({
   emits: [] as Array<{ name: string; data: unknown; topic?: string }>,
   pushes: new Map<string, (event: unknown) => void>(),
+  failures: new Map<string, (event: unknown) => void>(),
   unsubscribe: vi.fn(),
   unsubscribeSessions: vi.fn(),
   unwatch: vi.fn(),
@@ -26,6 +27,10 @@ vi.mock('./service', () => ({
   snapshot: async () => ({ ok: true, value: { cursor: { epoch: 'e', seq: 1 }, turns: [turnWith(HUGE)], settlements: [], hasOlder: false } }),
   subscribe: async (input: { subscriptionId: string }, emit: (event: unknown) => void) => {
     state.pushes.set(input.subscriptionId, emit);
+    return { ok: true, value: { subscriptionId: input.subscriptionId } };
+  },
+  windowSubscribe: async (input: { subscriptionId: string }, emit: (event: unknown) => void, failed: (event: unknown) => void) => {
+    state.pushes.set(input.subscriptionId, emit); state.failures.set(input.subscriptionId, failed);
     return { ok: true, value: { subscriptionId: input.subscriptionId } };
   },
   unsubscribe: (...args: unknown[]) => state.unsubscribe(...args),
@@ -59,6 +64,7 @@ const outputOf = (value: unknown) => (value as { turns: Array<{ items: Array<{ o
 beforeEach(() => {
   state.emits = [];
   state.pushes.clear();
+  state.failures.clear();
   state.unsubscribe = vi.fn();
   state.unsubscribeSessions = vi.fn();
   state.unwatch = vi.fn();
@@ -66,6 +72,15 @@ beforeEach(() => {
 });
 
 describe('会话时间线路由(本机窗口、别的电脑、手机同一张)', () => {
+  it('routes window failures only through the typed status channel and subscription topic', async () => {
+    await call(799, 'sessionWindowSubscribe', { conversationId: 'window-session', subscriptionId: 'window-generation', cursor: null });
+    const status = { conversationId: 'window-session', subscriptionId: 'window-generation', state: 'failed',
+      error: { code: 'source_changed', message: 'Source changed' } };
+    state.failures.get('window-generation')!(status);
+    expect(state.emits).toEqual([{ name: 'session-window:status', topic: 'window-generation', data: status }]);
+    releaseSubscriptionsOf(799);
+    expect(state.unsubscribe).toHaveBeenCalledWith('window-generation');
+  });
   it('task exchange subscriptions are scoped to the requesting connection and released with it', async () => {
     await call(700, 'taskExchangesSubscribe', { conversationId: 'task', fromSessionId: 'assistant', subscriptionId: 'exchange-a' });
     await call(701, 'taskExchangesUnsubscribe', { subscriptionId: 'exchange-a' });

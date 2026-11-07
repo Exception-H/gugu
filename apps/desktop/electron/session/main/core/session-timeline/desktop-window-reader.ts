@@ -2,6 +2,7 @@ import type {
   RecordCursor, SessionpageSessionBodyReadRequest, SessionpageSessionEvent,
   SessionpageSessionOlderRequest, SessionpageSessionSubscribeRequest,
   TimelineAfterResult, TimelineOlderResult, TimelineSnapshot,
+  SessionpageSessionWindowStatusEvent,
 } from '@gugu/session-core/session-record/contract';
 import type {
   WindowBodyResult, WindowPage, WindowReadRequest, WindowResult,
@@ -69,7 +70,7 @@ export function createDesktopWindowReader(io: DesktopWindowIo) {
     return value;
   }
   async function subscribe(input: SessionpageSessionSubscribeRequest, emit: (event: SessionpageSessionEvent) => void,
-    failed: (error: unknown) => void, signal?: AbortSignal): Promise<() => void> {
+    failed: (status: SessionpageSessionWindowStatusEvent) => void, signal?: AbortSignal): Promise<() => void> {
     const abort = new AbortController();
     let cursor = input.cursor, running = false, dirty = false, stopped = false;
     let stopWatch: (() => void) | undefined;
@@ -92,7 +93,14 @@ export function createDesktopWindowReader(io: DesktopWindowIo) {
           cursor = value.cursor;
           emit({ subscriptionId: input.subscriptionId, result });
         }
-      } catch (error) { if (!stopped) { stop(); failed(error); } }
+      } catch (error) {
+        if (!stopped) {
+          stop();
+          const failure = error as { code?: string; message?: string } | null;
+          failed({ conversationId: input.conversationId, subscriptionId: input.subscriptionId, state: 'failed',
+            error: { code: failure?.code ?? 'record_unreadable', message: failure?.message ?? String(error) } });
+        }
+      }
       finally { running = false; }
     };
     try {

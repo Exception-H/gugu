@@ -25,6 +25,7 @@ import { events } from '@main/lib/events';
 import {
   sessionpageSessionListChannel,
   sessionpageSessionTimelineChannel,
+  sessionpageSessionWindowStatusChannel,
 } from '@shared/core/session-timeline/sessionTimelineEvents';
 import { createRPCController, withSender } from '@shared/lib/ipc/rpc';
 import * as create from './create-session';
@@ -110,7 +111,8 @@ export const sessionTimelineController = createRPCController({
   sessionBody: (input: SessionpageSessionBodyReadRequest) => service.body(input),
   sessionWindowSubscribe: withSender(async (sender: number, input: SessionpageSessionSubscribeRequest) =>
     owning(sender, 'timeline', input.subscriptionId, () => service.windowSubscribe(input, event =>
-      events.emit(sessionpageSessionTimelineChannel, event, input.subscriptionId)))),
+      events.emit(sessionpageSessionTimelineChannel, event, input.subscriptionId), status =>
+      events.emit(sessionpageSessionWindowStatusChannel, status, input.subscriptionId)))),
   sessionSnapshot: async (input: SessionpageSessionSnapshotRequest) =>
     trimmed(await service.snapshot(input), input.trim, trimSnapshotForTransport),
   sessionAfter: async (input: SessionpageSessionAfterRequest) =>

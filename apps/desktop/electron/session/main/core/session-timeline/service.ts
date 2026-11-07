@@ -28,6 +28,7 @@ import {
   type Settlement,
   type SessionpageProjectSummary,
   type SessionpageSessionEvent,
+  type SessionpageSessionWindowStatusEvent,
   type SessionpageSessionRespondRequest,
   type SessionpageSessionRespondResult,
   type SessionpageSessionCancelResult,
@@ -845,21 +846,28 @@ export const windowOlder = (input: SessionpageSessionOlderRequest) => withSource
 export const body = (input: SessionpageSessionBodyReadRequest): Promise<SessionTimelineResult<WindowBodyResult>> => withSourceWindow(reader => reader.body(input));
 
 export async function windowSubscribe(input: SessionpageSessionSubscribeRequest,
-  emit: (event: SessionpageSessionEvent) => void): Promise<SessionTimelineResult<{ subscriptionId: string }>> {
+  emit: (event: SessionpageSessionEvent) => void,
+  failed: (event: SessionpageSessionWindowStatusEvent) => void): Promise<SessionTimelineResult<{ subscriptionId: string }>> {
   const subscriptionId = input.subscriptionId?.trim();
   if (!subscriptionId) return fail('invalid_subscription', 'subscriptionId is required');
   unsubscribe(subscriptionId);
-  let stopped = false, teardown: (() => void) | undefined;
+  let stopped = false, readFailed = false, teardown: (() => void) | undefined;
   const abort = new AbortController();
   const mine = { conversationId: input.conversationId, stop: () => { stopped = true; abort.abort(); teardown?.(); } };
   subscriptions.set(subscriptionId, mine);
   const forget = () => { if (subscriptions.get(subscriptionId) === mine) subscriptions.delete(subscriptionId); };
   const result = await withSourceWindow(async reader => {
-    teardown = await reader.subscribe(input, event => { if (!stopped) emit(event); }, error => {
+    teardown = await reader.subscribe(input, event => { if (!stopped) emit(event); }, status => {
+      if (stopped) return;
+      readFailed = true;
       mine.stop(); forget();
-      log.warn('sessionWindow: subscription stopped', { subscriptionId, error: String(error) });
+      failed(status);
+      log.warn('sessionWindow: subscription stopped', { subscriptionId, error: status.error });
     }, abort.signal);
-    if (stopped) { teardown(); throw Object.assign(new Error('Subscription was released before opening'), { code: 'unsubscribed' }); }
+    if (stopped) {
+      teardown();
+      if (!readFailed) throw Object.assign(new Error('Subscription was released before opening'), { code: 'unsubscribed' });
+    }
     return { subscriptionId };
   });
   if (!result.ok) { mine.stop(); forget(); }
