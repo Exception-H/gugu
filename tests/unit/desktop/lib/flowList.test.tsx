@@ -252,3 +252,13 @@ it('does not inherit a near-head slice expansion when switching to a different l
   expect(rendered()).toHaveLength(6)
   expect(topOf('other119')).toBe(200)
 })
+
+
+it('starts the same filled slice when rows arrive after an initially empty loading render', async () => {
+  await harness.render(createElement(List, { rows: [], landing: { index: 'LAST', align: 'end' } }))
+  await nextFrames()
+  await harness.render(createElement(List, { rows: rowsOf(120), landing: { index: 'LAST', align: 'end' } }))
+  await nextFrames()
+  expect(rendered()).toHaveLength(6)
+  expect(topOf('r119')).toBe(200)
+})

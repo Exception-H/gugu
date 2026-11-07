@@ -101,7 +101,7 @@ export function useFlowList({ scrollerRef, contentRef, resetKey, rowIds, landing
   const landingRef = useRef({ key: resetKey, landing })
   if (landingRef.current.key !== resetKey) { landingRef.current = { key: resetKey, landing }; reportedRef.current = null }
   const [slice, setSlice] = useState<Slice>(() => firstSlice(resetKey, landing ?? { index: 'LAST', align: 'end' }, rowIds))
-  if (slice.key !== resetKey) setSlice(firstSlice(resetKey, landingRef.current.landing ?? { index: 'LAST', align: 'end' }, rowIds))
+  if (slice.key !== resetKey || (rowIds.length > 0 && slice.fromId === undefined)) setSlice(firstSlice(resetKey, landingRef.current.landing ?? { index: 'LAST', align: 'end' }, rowIds))
   const from = rowIds.indexOf(slice.fromId ?? '')
   const to = slice.toId === undefined ? -1 : rowIds.indexOf(slice.toId)
   const start = Math.max(0, from)
@@ -156,7 +156,7 @@ export function useFlowList({ scrollerRef, contentRef, resetKey, rowIds, landing
   // 初次落点和未挂载目标都先补到真实行,在这次绘制前定位;没有请求时不再重放落点。
   useLayoutEffect(() => {
     const scroller = scrollerRef.current, content = contentRef.current
-    if (!scroller || !content) return
+    if (!scroller || !content || !rowIds.length) return
     const request = pending.current?.key === resetKey ? pending.current : null
     if (paintedRef.current !== resetKey) {
       placeAtLanding(scroller, content, landingRef.current.landing ?? { index: 'LAST', align: 'end' })
