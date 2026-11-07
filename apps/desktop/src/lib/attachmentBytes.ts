@@ -61,7 +61,7 @@ async function readAttachmentBytes(source: AttachmentSource, variant: Attachment
   if (file.status !== 'ready') return file
   onLink?.(file.revision)
   const key = file.revision.sha256 === null ? null : fullKey(file.reader.accountId, file.revision.sha256)
-  const keep = async (blob: Blob) => { if (key) await putAttachment(key, new Response(blob)) }
+  const keep = async (blob: Blob) => { if (key) await putAttachment(key, blob) }
   if (variant !== 'shown') { const blob = await fileBlob(file); await keep(blob); return { status: 'ready', blob, link: file.revision } }
   // A preview that can take itself down shows the bytes before the server's read acknowledgement. The plaintext is kept
   // only once acknowledged; a revoked read also removes the copy an earlier open kept.
@@ -224,7 +224,7 @@ export async function cachedAttachmentCopy(sha256: string | null): Promise<Blob 
 
 /** A file this device sends is a full local copy of what it commits: kept by its sha256, read back by cachedAttachmentCopy. */
 export async function keepSentAttachment(file: Blob): Promise<void> {
-  await putAttachment(fullKey(fileReader().accountId, await blobSha256(file)), new Response(file))
+  await putAttachment(fullKey(fileReader().accountId, await blobSha256(file)), file)
 }
 
 async function blobSha256(blob: Blob): Promise<string> {
