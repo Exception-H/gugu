@@ -11,6 +11,8 @@ import { EXTENSION_API_VERSION, parseExtensionManifest } from '../../../../apps/
 import { installedExtensionsStore } from '../../../../apps/desktop/src/session/renderer/features/extensions/installed-extensions-store'
 import { runInAction } from 'mobx'
 ;(globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true
+// A chat link also gets a card (resourceCards.ts) that reads only near the viewport; these cases are about the link, so cards stay unread.
+globalThis.IntersectionObserver ??= class { observe() {} disconnect() {} } as unknown as typeof IntersectionObserver
 
 /**
  * The files this person can read, and the chat each is in (F112): answered where the chat client's read of

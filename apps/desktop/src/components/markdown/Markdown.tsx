@@ -1,5 +1,7 @@
 import {
   createContext,
+  lazy,
+  Suspense,
   memo,
   useContext,
   useEffect,
@@ -31,6 +33,9 @@ import { PlatformCopyButton } from './PlatformCopyButton'
 import { PlatformTable } from './PlatformTable'
 import { useMobileShell } from '@/hooks/useMobileShell'
 import { FILE_PILL_CLASS, hookFilePillCopy, rehypeGroupFilePills } from './filePills'
+import { RESOURCE_CARD_CLASS, rehypeResourceCards } from './resourceCards'
+// Lazy: a card reads through the chat's readers (file metadata, messages, devices); Markdown itself stays free of them.
+const ResourceCard = lazy(() => import('./ResourceCard').then(module => ({ default: module.ResourceCard })))
 import { GroupFileName } from './GroupFileName'
 import { revealMarkdownAnchor } from './revealAnchor'
 import { followLink } from '../../lib/guguLinks'
@@ -114,7 +119,8 @@ function pluginsFor(options: MarkdownDialectOptions) {
   const key = `${options.trust}|${options.hardBreaks ? 1 : 0}|${options.frontmatter ? 1 : 0}`
   let entry = pluginCache.get(key)
   if (!entry) {
-    entry = { remark: markdownRemarkPlugins(options), rehype: markdownRehypePlugins(options, [rehypeGroupFilePills]) }
+    // Link cards are a chat bubble's: documents and previews keep their links as written.
+    entry = { remark: markdownRemarkPlugins(options), rehype: markdownRehypePlugins(options, options.trust === 'chat' ? [rehypeGroupFilePills, rehypeResourceCards] : [rehypeGroupFilePills]) }
     pluginCache.set(key, entry)
   }
   return entry
@@ -142,6 +148,8 @@ export const Markdown = memo(function Markdown({
   const openLinkRef = useRef(onOpenLink)
   openLinkRef.current = onOpenLink
   const renderImageRef = useRef(renderImage)
+  const onAccentRef = useRef(onAccent)
+  onAccentRef.current = onAccent
   renderImageRef.current = renderImage
   const hasImageRenderer = !!renderImage
   // A pill's hover says which version it was picked on, in the person's language (read through a ref, as the callbacks are).
@@ -181,6 +189,9 @@ export const Markdown = memo(function Markdown({
         const onClick = (event: { preventDefault(): void }) => {
           // A link the host did not claim goes to the system browser only if it is a web, mail or phone link.
           if ((href && (followLink(href) || openLinkRef.current?.(href))) || !EXTERNAL_LINK.test(href ?? '')) event.preventDefault()
+        }
+        if (href && typeof rest.className === 'string' && rest.className.split(/\s+/).includes(RESOURCE_CARD_CLASS)) {
+          return <Suspense fallback={null}><ResourceCard href={href} mine={onAccentRef.current} onOpen={() => { if (!followLink(href)) openLinkRef.current?.(href) }} /></Suspense>
         }
         // App 引用 pill: `@` + a group file's link (rehypeGroupFilePills) is the transcript's file pill; its click is the
         // link's, so it opens where that link opens — at the place it points at.

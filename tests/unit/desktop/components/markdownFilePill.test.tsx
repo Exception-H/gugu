@@ -11,6 +11,8 @@ const { openResource } = vi.hoisted(() => ({ openResource: vi.fn(async (target: 
 vi.mock('@/platform', () => ({ platform: { kind: 'web' } }))
 vi.mock('@/components/appSlot/phoneAppHost', () => ({ openPhoneLink: openResource }))
 ;(globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true
+// A chat link also gets a card (resourceCards.ts) that reads only near the viewport; these cases are about the link, so cards stay unread.
+globalThis.IntersectionObserver ??= class { observe() {} disconnect() {} } as unknown as typeof IntersectionObserver
 
 /**
  * App 引用 pill in a chat bubble (owner 10-14): `@[label](gugu-file://<id>?v=…#<at>)` is drawn as the transcript's file
