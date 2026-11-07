@@ -32,6 +32,7 @@ import { PhoneMeButton } from '@/mobile/PhoneMeButton'
 import { PhonePartnersPage } from '@/mobile/partners/PhonePartnersPage'
 import { useReportChatOnScreen } from '@/lib/onScreenChat'
 import { useLinkNavigation } from '../hooks/useLinkNavigation'
+import { quoteOfMessage } from '../hooks/useMessageQuote'
 import { readAssistantShellBridge } from '../lib/assistantShellBridge'
 import { ChatListPanel } from '../components/ChatListPanel'
 import { ChatAreaPanel } from '../components/ChatAreaPanel'
@@ -675,9 +676,8 @@ function InnerLayout({
         files: detail.images?.map(image => new File([image.bytes], image.name, { type: image.type })), append: true,
       })) { setDraftQuote(detail.chatId, null); return }
       const placed = (chatId: string) => {
-        if (detail.quote) setDraftQuote(chatId, { messageId: detail.quote.id, source: detail.quote,
-          senderName: identitiesById[detail.quote.sender_user_id ?? '']?.display_name ?? '',
-          content: detail.quote.content_type === 'attachment' ? t('chatArea.attachment', { ns: 'messaging' }) : detail.quote.content ?? '' })
+        if (detail.quote) setDraftQuote(chatId, quoteOfMessage(detail.quote, identitiesById[detail.quote.sender_user_id ?? '']?.display_name ?? '',
+          t('chatArea.attachment', { ns: 'messaging' })))
         const text = [detail.text, ...(detail.refs ?? []).map(filePillText)].filter(Boolean).join('\n')
         if (text) writeDraft(chatId, { at: 'end', text })
         if (detail.images?.length) {
