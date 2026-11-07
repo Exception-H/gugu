@@ -243,3 +243,12 @@ describe('grow-only mounted window', () => {
     expect(events.atBottom.at(-1)).toBe(true)
   })
 })
+
+
+it('does not inherit a near-head slice expansion when switching to a different list', async () => {
+  await harness.render(createElement(List, { rows: rowsOf(120), landing: { index: 0, align: 'start' } }))
+  await scrollTo(0)
+  await harness.render(createElement(List, { rows: rowsOf(120, 100, 'other'), resetKey: 'other', landing: { index: 'LAST', align: 'end' } }))
+  expect(rendered()).toHaveLength(6)
+  expect(topOf('other119')).toBe(200)
+})

@@ -129,12 +129,13 @@ export function useFlowList({ scrollerRef, contentRef, resetKey, rowIds, landing
   // @@@anchor-at-head-change - The anchor only matters when the window's head changes. This render is the last moment the old
   // rows are still on screen, so measure it here — once per head change — instead of on every scroll event.
   const dataHead = rowIds[0]
-  const measuredHeadRef = useRef({ headKey, dataHead })
+  const measuredHeadRef = useRef({ headKey, dataHead, key: resetKey })
   if (measuredHeadRef.current.headKey !== headKey || measuredHeadRef.current.dataHead !== dataHead) {
-    const prepended = measuredHeadRef.current.dataHead !== dataHead
-    measuredHeadRef.current = { headKey, dataHead }
+    const sameList = measuredHeadRef.current.key === resetKey
+    const prepended = sameList && measuredHeadRef.current.dataHead !== dataHead
+    measuredHeadRef.current = { headKey, dataHead, key: resetKey }
     const scroller = scrollerRef.current
-    if (scroller) {
+    if (scroller && sameList) {
       capture(scroller)
       // 旧首行接上历史后会丢掉日期头;近顶时让新头和它在同次提交出现,避免负向补偿先被0夹住。
       if (prepended && start > 0 && scroller.scrollTop < scroller.clientHeight) {
