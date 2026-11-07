@@ -12,8 +12,9 @@ import { promptLibraryService } from '@main/core/prompt-library/service';
  */
 const fail = (message: string) => Object.assign(new Error(message), { code: 'invalid' });
 
-function text(value: unknown, field: string): string {
-  if (typeof value !== 'string' || !value.trim()) throw fail(`${field} is a non-empty string`);
+/** The same bounds as an App's own prompts (manifest.ts: title 48, text 2000). */
+function text(value: unknown, field: string, max = 2000): string {
+  if (typeof value !== 'string' || !value.trim() || value.trim().length > max) throw fail(`${field} is a non-empty string of at most ${max} characters`);
   return value.trim();
 }
 
@@ -42,7 +43,7 @@ export async function promptsForApp(method: 'promptsList' | 'promptsSave' | 'pro
   }
   if (method === 'promptsSave') {
     const id = args.id === undefined ? undefined : text(args.id, 'id');
-    const saved: PromptLibraryPrompt = { id: id ?? globalThis.crypto.randomUUID(), title: text(args.title, 'title'), prompt: text(args.prompt, 'prompt') };
+    const saved: PromptLibraryPrompt = { id: id ?? globalThis.crypto.randomUUID(), title: text(args.title, 'title', 48), prompt: text(args.prompt, 'prompt') };
     await promptLibraryService.editPrompts((all) => {
       if (!id) return [...all, saved];
       if (!all.some((prompt) => prompt.id === id)) throw fail(`No prompt ${id}: list gives the ids`);

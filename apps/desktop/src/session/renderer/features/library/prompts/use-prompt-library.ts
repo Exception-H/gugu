@@ -20,12 +20,17 @@ const set = (patch: Partial<State>) => {
   for (const listener of listeners) listener();
 };
 
+/** Only the latest request's answer is kept: a focus re-read that returns after a delete or undo must not undo it. */
+let latest = 0;
+const isLatest = (request: number, account: string | null) => request === latest && state.account === account;
+
 async function load(account: string): Promise<void> {
+  const request = ++latest;
   try {
     const all = await rpc.promptLibrary.get();
-    if (state.account === account) set({ all, error: null, readAt: Date.now() });
+    if (isLatest(request, account)) set({ all, error: null, readAt: Date.now() });
   } catch (error) {
-    if (state.account === account) set({ error, readAt: Date.now() });
+    if (isLatest(request, account)) set({ error, readAt: Date.now() });
   }
 }
 
@@ -49,10 +54,11 @@ export function reloadPrompts(): void {
 /** Saved by main, which answers the saved list; the entries are greyed while it is out (`isSaving`). */
 async function change(save: () => Promise<PromptLibraryPrompt[]>): Promise<void> {
   const { account } = state;
+  const request = ++latest;
   set({ saving: state.saving + 1 });
   try {
     const all = await save();
-    if (state.account === account) set({ all, readAt: Date.now() });
+    if (isLatest(request, account)) set({ all, readAt: Date.now() });
   } finally {
     set({ saving: state.saving - 1 });
   }

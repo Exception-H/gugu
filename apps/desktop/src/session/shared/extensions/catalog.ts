@@ -46,7 +46,7 @@ export const CAPABILITY_RISK = {
   'agents:control:all-machines': 'high',
   // Runs a program of the extension's choosing on this machine, with the person's rights.
   'agents:tools': 'high',
-  // Reads and rewrites the person's own prompts; a delete is kept 30 days and can be undone.
+  // Reads and rewrites the person's own prompts; a delete can be undone.
   'prompts': 'medium',
   // A banner under the extension's own name: noise at worst, bounded per minute.
   'notifications': 'medium',
