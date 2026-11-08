@@ -14,6 +14,7 @@ import { codexForkHandoffItems } from './codex-fork-handoff.mjs'
 import { memoizeSuccess, writeCodexModelCatalog } from './codex-model-catalog.mjs'
 // esbuild 把它打进 dist-electron/runtime;单测里 node 直接跑这份源码,所以写 `.ts` 全路径。
 import { spawnOwnedChild } from '../../../../packages/session-core/src/exec/owned-child.ts'
+import { planDirectSpawn } from '../../../../packages/session-core/src/exec/windows-launcher.ts'
 import { codexReasoningText } from '../../../../packages/core/src/shared/reasoningText.mjs'
 import { isRenderableImage, mimeTypeFromName } from '../../../../packages/core/src/shared/imageMime.mjs'
 import { codexFilePatches } from '../../../../packages/session-core/src/acp/transport/codex-file-patches.ts'
@@ -781,10 +782,13 @@ process.on('exit', () => appModelCatalog?.dispose())
  * any, surfaces where it is awaited.
  */
 const bundledCatalog = memoizeSuccess(() => new Promise((resolve, reject) => {
-  execFile(codexBin, ['debug', 'models', '--bundled'], {
-    env: process.env,
+  // Windows 的 `.cmd` 启动器与起 app-server 走同一份 planDirectSpawn:能换成 exe 就直接起,换不了才经 cmd 并自己转义。
+  // ❌ `shell: true`:Node 把路径不加引号拼进命令行,`D:\测试 目录\…\codex.cmd` 在空格处被切开。
+  const launch = planDirectSpawn(codexBin, ['debug', 'models', '--bundled'], { env: process.env })
+  execFile(launch.command, launch.args, {
+    env: launch.env ?? process.env,
     maxBuffer: 64 * 1024 * 1024,
-    shell: process.platform === 'win32' && /\.(cmd|bat)$/i.test(codexBin),
+    ...launch.spawnOverrides,
   }, (error, stdout, stderr) => {
     if (error) reject(new Error(`${error.message}${stderr ? `: ${String(stderr).trim()}` : ''}`))
     else resolve(stdout)
