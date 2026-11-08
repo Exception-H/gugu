@@ -7,7 +7,7 @@ import { CloudComputerError } from '@gugu/core/cloud/cloudComputer';
 import { readDisplayIdentities } from '@/lib/identityReadAdapter';
 import { assistantResumeStore } from '@/lib/assistantSetup';
 import { ASSISTANT_HOME_CHANNELS, type PrepareLocalHomeResult } from '@/lib/assistantHomeIpc';
-import { completedSingleProvisionSession, provisionSingleAgent } from '@/lib/agentProvision';
+import { cancelProvisionOperation, completedSingleProvisionSession, completeProvision, findOpenAdoption, provisionSingleAgent, resumeSingleAgent } from '@/lib/agentProvision';
 import { readAgentModelSelection, setAgentModelSelection, platformProtocolForAgentType } from '@/lib/agentModelSelection';
 import type { AgentModelSelection } from '@gugu/core/shared/agentModelSelection';
 import { cloudMoveModel, moveModelSelection, sameMoveModel } from './assistant-move-model';
@@ -304,6 +304,15 @@ export function pendingMove(ownerUserId: string, assistantId?: string): MoveJour
 }
 
 /** 这一次搬的旧家:接着搬以日志为准;新开一次搬 = 此刻它住的地方。 */
+/** A `ready` adoption already switched homes and only missed its last step, so it must not block the next move. Returns the order still open. */
+async function openAdoption(env: MoveEnv) {
+  const open = await findOpenAdoption(env.assistantId);
+  if (open?.phase !== 'ready') return open;
+  await completeProvision(open.id);
+  assistantResumeStore.forget(env.ownerUserId, open.operation_id);
+  return null;
+}
+
 function sourceHomeFor(env: MoveEnv, direction: MoveDirection): MoveHomeRef {
   const saved = pendingMove(env.ownerUserId, env.assistantId);
   if (saved && saved.direction === direction && saved.source) return saved.source;
@@ -357,6 +366,7 @@ export function buildMoveDeps(
         return !!cloud && (await homeDeviceOf(env.assistantId)) === cloud;
       },
       async adopt() {
+        await openAdoption(env);
         try {
           await provisionCloudComputer({ assistant: { existingAgentUserId: env.assistantId } });
         } catch (error) {
@@ -410,19 +420,33 @@ export function buildMoveDeps(
     },
     async adopt() {
       const workdir = localWorkdir ?? (await prepareLocalHome()).workdir;
-      const result = await provisionSingleAgent(
-        env.localDeviceId,
-        {
-          memberKey: 'assistant',
-          displayName: env.assistantName,
-          agentType: 'claude-code',
-          projectPath: workdir,
-          inheritMemory: false,
-          historyImportRequired: false,
-          existingAgentUserId: env.assistantId,
-        },
-        { resumeStore: assistantResumeStore, ...(model && model.source !== 'default' ? { model: model.source === 'platform' ? `platform:${model.modelId}` : model.modelId } : {}) }
-      );
+      // @@@one-open-adoption - The database allows one open adoption per agent, and its agent.create may still be running.
+      // A retry drives that same order on; a second order is refused and a second create would race the first.
+      const open = await openAdoption(env);
+      const record = open?.device_id === env.localDeviceId
+        ? assistantResumeStore.list(env.ownerUserId).find((item) => item.operationId === open.operation_id)
+        : undefined;
+      if (open && !record) {
+        // Aimed at another home, or this client lost its record. The database refuses while that create is running.
+        await cancelProvisionOperation(open.operation_id);
+        assistantResumeStore.forget(env.ownerUserId, open.operation_id);
+      }
+      const shared = { resumeStore: assistantResumeStore, commandTimeoutMs: ADOPT_TIMEOUT_MS };
+      const result = record
+        ? await resumeSingleAgent(record, shared)
+        : await provisionSingleAgent(
+            env.localDeviceId,
+            {
+              memberKey: 'assistant',
+              displayName: env.assistantName,
+              agentType: 'claude-code',
+              projectPath: workdir,
+              inheritMemory: false,
+              historyImportRequired: false,
+              existingAgentUserId: env.assistantId,
+            },
+            { ...shared, ...(model && model.source !== 'default' ? { model: model.source === 'platform' ? `platform:${model.modelId}` : model.modelId } : {}) }
+          );
       const phase = result.outcome.member.phase;
       if (phase === 'awaiting_terminal') throw new Error('the assistant is still starting on this computer');
       if (phase === 'failed') throw new Error(result.outcome.member.error ?? 'adopt failed');
