@@ -1,11 +1,10 @@
-import { join } from 'node:path';
 import { log } from '@main/lib/logger';
 import { runtimeFork } from '../sessions/session-life-forks';
 import { attachmentMimeTypeSchema, type PromptAttachment } from '@gugu/session-core/acp/client';
 import type { TurnFileRef } from '@gugu/session-core/session-record/contract';
 import { turnAttachmentText } from '@gugu/core/shared/attachmentFolderLine';
 import { attachmentFailureReason } from '@gugu/core/local/files/attachmentDiagnostics';
-import { saveFileHandle } from '@gugu/core/local/files/fileSnapshots';
+import { fileStoreDirectory, saveFileHandle } from '@gugu/core/local/files/fileSnapshots';
 import { resolveGuguHome } from '@gugu/core/local/state/paths';
 import { resolveAccountFile } from '@main/core/extensions/account-token';
 import { guguAgentUserIdForSession } from '@main/core/sessionpage/sessionpage-session-agent';
@@ -91,7 +90,7 @@ async function localPathOf(file: TurnFileRef, agent: string, sessionId: string):
     await resolved.dispose();
     return file.path;
   }
-  const path = (await saveFileHandle(resolved, join(resolveGuguHome(process.env), 'attachments', sessionId), file.name)).file_path;
+  const path = (await saveFileHandle(resolved, fileStoreDirectory(resolveGuguHome(process.env)), file.name)).file_path;
   prefetched.set(key, path);
   return path;
 }

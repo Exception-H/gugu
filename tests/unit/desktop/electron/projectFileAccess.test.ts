@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto'
-import { mkdtemp, mkdir, readFile, readdir, rm, stat, symlink, writeFile } from 'node:fs/promises'
+import { chmod, mkdtemp, mkdir, readFile, readdir, rm, stat, symlink, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
@@ -34,6 +34,29 @@ describe('downloads consume one file without the random-read cache', () => {
     })
     return { resolve: createNodeFileResolver(tempRoot, async () => ({ supabaseUrl: 'https://files.invalid', anonKey: 'public', token: 'test', fetch: fetcher as typeof fetch })), fetcher }
   }
+  it('stores one sha once: read-only, a second name is the same bytes, and a changed file is fetched again', async () => {
+    const { resolve, fetcher } = remote()
+    const store = join(home, 'file-store')
+    const saveAs = async (name: string) => {
+      const file = await resolve(ref, actor)
+      if (file.status !== 'ready') throw new Error(file.status)
+      return saveFileHandle(file, store, name)
+    }
+    const first = await saveAs('report.bin')
+    const second = await saveAs('renamed.bin')
+    expect(fetcher.mock.calls.filter(([url]) => String(url) === 'https://objects.invalid/file')).toHaveLength(1)
+    const [a, b] = await Promise.all([stat(first.file_path), stat(second.file_path)])
+    expect(a.ino).toBe(b.ino)
+    expect(a.mode & 0o777).toBe(0o444)
+    expect(await readdir(join(store, revision.sha256!))).toEqual(['renamed.bin', 'report.bin'])
+    // An agent that forced a write: the store does not hand it out as this version.
+    await rm(second.file_path)
+    await chmod(first.file_path, 0o644)
+    await writeFile(first.file_path, Buffer.alloc(bytes.length, 1))
+    const healed = await saveAs('report.bin')
+    expect(digest(await readFile(healed.file_path))).toBe(revision.sha256)
+    expect((await stat(healed.file_path)).mode & 0o777).toBe(0o444)
+  })
   it('writes one authenticated destination, reuses its verified digest, and leaves no remote-files chunks or snapshot', async () => {
     const { resolve, fetcher } = remote()
     const save = async () => {
