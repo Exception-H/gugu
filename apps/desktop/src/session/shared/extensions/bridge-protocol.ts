@@ -1061,6 +1061,8 @@ export function callRefusal(
 export const BRIDGE_ERROR_CODES = [
   'denied', 'invalid', 'failed', 'not-found', 'ambiguous', 'too-large', 'rate-limited', 'content-changed', 'unavailable',
   'name-taken', 'not-installed', 'version-mismatch', 'stale-version', 'machine-outdated',
+  // This computer cannot open that file: it is on another machine, with nothing here to open it through.
+  'elsewhere',
 ] as const;
 export type BridgeErrorCode = (typeof BRIDGE_ERROR_CODES)[number];
 

@@ -1488,6 +1488,7 @@ function setFilterText(text) {
 // One folder up (上一级, and the host's Back on the phone while in a folder).
 // One of a project's folders picked, or (null) back to picking.
 function pickFolder(workspace) {
+  hideBanner()
   clearPicks()
   state.pickedFolder = workspace
   state.folder = null

@@ -54,6 +54,7 @@ vi.mock('@main/core/workspaces/workspace-runtime', () => ({
   },
 }));
 
+const { BRIDGE_ERROR_CODES } = await import('@shared/extensions/bridge-protocol');
 const { removeAppFile, forwardTargets, downloadAppFile, entryPath, revealAppFile, listAppFiles, writeAppFileChunk, readAppFileText, openAppFileIn, openWithTarget, watchAppFile, watchAppFolder, FORWARD_MAX_BYTES } = await import('./app-files');
 const { events } = await import('@main/lib/events');
 const { appFileWatchElsewhereChannel, workingCopyMovedChannel } = await import('@shared/events/appEvents');
@@ -379,6 +380,11 @@ describe('a project folder on another machine', () => {
     f.remote.mockClear();
     await expect(writeAppFileChunk(page(), { place, path: 'a.txt', offset: 0, data: '', done: true } as never)).rejects.toThrow(/read-only/);
     expect(f.remote).not.toHaveBeenCalled();
+  });
+  it('opening one of its files says it is elsewhere, in a code the bridge keeps', async () => {
+    f.capabilities.add('files:read').add('files:read:all-machines');
+    await expect(openWithTarget(page(), { ref: { workspace: place.workspace, id: 'x.txt' } })).rejects.toMatchObject({ code: 'elsewhere' });
+    expect(BRIDGE_ERROR_CODES).toContain('elsewhere');
   });
   it('watching one of its files hears nothing, and fails nothing', async () => {
     f.capabilities.add('files:read').add('files:read:all-machines');

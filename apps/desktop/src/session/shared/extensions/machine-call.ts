@@ -1,4 +1,5 @@
 import { APP_CALL_MAX_BYTES, type AppCallAction } from '@gugu/session-core/session-record/contract'
+import { workspaceFolder } from './app-runtime-protocol'
 import { verbFacts } from './bridge-protocol'
 import type { ExtensionManifest } from './manifest'
 import { HOSTED_PROGRAM_ELSEWHERE, hostsProgram } from './program-place'
@@ -48,6 +49,8 @@ export function folderElsewhereRefusal(method: string, has: (capability: 'files:
 /** Why the answering machine does not do this call for a page elsewhere, or null when it does. */
 export function notOnSessionMachine(manifest: Pick<ExtensionManifest, 'contributes'>, method: string, args: Record<string, unknown>): Error | null {
   if (followsSessionMachine(manifest, method, args)) return null
+  // A project folder names its own machine: no session to follow, and a place verb is that machine's.
+  if (verbFacts(method)?.machine === 'place' && workspaceFolder((args.place ?? args.ref) as { workspace?: string } | null | undefined)) return null
   const message = verbFacts(method)?.machine ? HOSTED_PROGRAM_ELSEWHERE : `${method} is done where the page is, not on its session's machine`
   return Object.assign(new Error(message), { code: 'invalid' })
 }

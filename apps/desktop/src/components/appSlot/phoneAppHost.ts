@@ -512,6 +512,11 @@ export function hostAppFrame(
     layout: { visible: true, fullscreen: Boolean(hosted.binding.modal), width: frame.clientWidth, height: frame.clientHeight },
   })
 
+  /** A project folder's machine as the phone knows it: its name for what a refusal says, and whether it is there. */
+  const folderMachine = (deviceId: string) => {
+    const device = readCachedDevices().find((known) => known.device_id === deviceId)
+    return { deviceId, deviceLabel: device?.label || device?.hostname || null, online: device?.is_online }
+  }
   /** `gesture`: whether the person's input landed in this App (its gate's reading, or its command just tapped). */
   const answer = async (method: string, args: Record<string, unknown>, gesture: boolean): Promise<unknown> => {
     // Once, from the verb's row (BRIDGE_VERBS), in the words every host says it — a phone frame is a page.
@@ -541,7 +546,7 @@ export function hostAppFrame(
       if (refusal) throw refusal
       const manifest = installedExtensionsStore.manifestFor(hosted.binding.extensionId)
       if (!manifest) refused('not-installed', `${hosted.binding.extensionId} is not installed on this phone`)
-      return callOnComputer({ extensionId: manifest.id, extensionName: manifest.name, version: manifest.version }, { deviceId: folder.deviceId, deviceLabel: null }, method, args).then(computerReply)
+      return callOnComputer({ extensionId: manifest.id, extensionName: manifest.name, version: manifest.version }, folderMachine(folder.deviceId), method, args).then(computerReply)
     }
     switch (method) {
       case 'linkTo': {
@@ -725,7 +730,7 @@ export function hostAppFrame(
             if (refusal) throw refusal
             const manifest = installedExtensionsStore.manifestFor(hosted.binding.extensionId)
             if (!manifest) refused('not-installed', 'This App is not installed')
-            return openPhoneWorkingCopyFile({ extensionId: manifest.id, extensionName: manifest.name, version: manifest.version }, { deviceId: folder.deviceId, deviceLabel: null }, ref, hooks.openWorkingCopy)
+            return openPhoneWorkingCopyFile({ extensionId: manifest.id, extensionName: manifest.name, version: manifest.version }, folderMachine(folder.deviceId), ref, hooks.openWorkingCopy)
           }
           const id = workspaceSession(ref)
           const listed = id ? listedSession(readCachedDevices(), liveDeviceSessions(), id) : null
