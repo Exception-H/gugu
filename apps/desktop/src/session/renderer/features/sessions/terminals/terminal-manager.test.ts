@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { TerminalManagerStore } from './terminal-manager';
 
 const createTerminal = vi.hoisted(() => vi.fn());
@@ -63,6 +63,12 @@ vi.mock('@renderer/features/sessions/acp/acp-chat-panel', () => ({
 const newTerminal = (store: TerminalManagerStore) =>
   store.createTerminal({ id: 'terminal-1', projectId: 'project-1', sessionId: 'session-1', name: 'Terminal 1' });
 
+const startShell = async (store: TerminalManagerStore, dims?: { cols: number; rows: number }) => {
+  const session = store.sessions.get('terminal-1')!;
+  await session.connect();
+  (session.pty as unknown as { onGridMeasured(dims?: object): void }).onGridMeasured(dims);
+};
+
 describe('TerminalManagerStore session hydration', () => {
   beforeEach(() => {
     createTerminal.mockReset();
@@ -72,7 +78,6 @@ describe('TerminalManagerStore session hydration', () => {
     deleteTerminal.mockReset();
     frontendConnect.mockReset();
     frontendDispose.mockReset();
-    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
     getAppSettingValueSnapshot.mockReset();
 
     createTerminal.mockImplementation(async (terminal) => terminal);
@@ -82,10 +87,6 @@ describe('TerminalManagerStore session hydration', () => {
     deleteTerminal.mockResolvedValue(undefined);
     frontendConnect.mockResolvedValue(undefined);
     getAppSettingValueSnapshot.mockReturnValue(undefined);
-  });
-
-  afterEach(() => {
-    vi.useRealTimers();
   });
 
   it('creates terminal sessions from records without hydrating until the session connects', async () => {
@@ -147,7 +148,7 @@ describe('TerminalManagerStore session hydration', () => {
     const { created } = newTerminal(store);
 
     expect(store.terminals.get('terminal-1')?.data.shellId).toBe('fish');
-    vi.advanceTimersByTime(1500);
+    await startShell(store);
     await created;
     store.dispose();
   });
@@ -169,12 +170,37 @@ describe('TerminalManagerStore session hydration', () => {
     store.dispose();
   });
 
-  it('still starts the shell when no grid is ever measured', async () => {
+  it('starts at the default size when the xterm gives up measuring', async () => {
     const store = new TerminalManagerStore('project-1', 'session-1');
     const { created } = newTerminal(store);
-    vi.advanceTimersByTime(1500);
+    await startShell(store);
     await created;
     expect(createTerminal).toHaveBeenCalledExactlyOnceWith(expect.not.objectContaining({ initialSize: expect.anything() }));
+    store.dispose();
+  });
+
+  it('never starts a shell on its own: a tab never shown, then disposed, leaves nothing running', async () => {
+    const store = new TerminalManagerStore('project-1', 'session-1');
+    newTerminal(store);
+    await store.sessions.get('terminal-1')!.connect();
+    store.dispose();
+    await Promise.resolve();
+    expect(createTerminal).not.toHaveBeenCalled();
+  });
+
+  it('closed while the create request is out: ended after it returns, not before', async () => {
+    let finish!: (value: unknown) => void;
+    createTerminal.mockImplementation(() => new Promise((resolve) => { finish = resolve; }));
+    const store = new TerminalManagerStore('project-1', 'session-1');
+    newTerminal(store);
+    await startShell(store);
+    await vi.waitFor(() => expect(createTerminal).toHaveBeenCalledOnce());
+    const closing = store.deleteTerminal('terminal-1');
+    await Promise.resolve();
+    expect(deleteTerminal).not.toHaveBeenCalled();
+    finish({ id: 'terminal-1' });
+    await closing;
+    expect(deleteTerminal).toHaveBeenCalledOnce();
     store.dispose();
   });
 
@@ -192,7 +218,7 @@ describe('TerminalManagerStore session hydration', () => {
     createTerminal.mockRejectedValue(new Error('no shell'));
     const store = new TerminalManagerStore('project-1', 'session-1');
     const { created } = newTerminal(store);
-    vi.advanceTimersByTime(1500);
+    await startShell(store);
     await expect(created).rejects.toThrow('no shell');
     expect(store.terminals.has('terminal-1')).toBe(false);
     store.dispose();

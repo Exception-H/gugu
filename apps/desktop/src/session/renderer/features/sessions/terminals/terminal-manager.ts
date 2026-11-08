@@ -10,9 +10,6 @@ import type { TerminalShellId } from '@shared/core/terminals/terminal-settings';
 import { type CreateTerminalParams, type Terminal } from '@shared/core/terminals/terminals';
 import { nextTerminalName } from './terminal-tabs';
 
-/** No grid measured by then (the pane is not on screen, the font never came): the shell still has to start. */
-const SPAWN_WITHOUT_GRID_MS = 1500;
-
 export class TerminalManagerStore implements IDisposable {
   readonly projectId: string;
   readonly sessionId: string;
@@ -82,7 +79,8 @@ export class TerminalManagerStore implements IDisposable {
    * @@@spawn-at-measured-grid - the record exists at once, so the tab opens without waiting for a process. The shell starts when
    * the xterm in that tab has measured its grid: a shell started at a default size and resized while printing its first prompt
    * leaves that prompt cut off or zsh's stray `%`, and the half-width pane beside a conversation is always a resize away from it.
-   * `created` settles when the shell has started; undefined = the terminal was closed first.
+   * The xterm reports `undefined` if it cannot measure at all, and the shell then starts at the default size. A tab that is
+   * never on screen starts no shell. `created` settles when the shell has started; undefined = the terminal was closed first.
    */
   createTerminal(params: CreateTerminalParams): { id: string; created: Promise<Terminal | undefined> } {
     const defaultShell = getAppSettingValueSnapshot('terminal')?.defaultShell ?? 'system';
@@ -97,10 +95,8 @@ export class TerminalManagerStore implements IDisposable {
     const grid = new Promise<{ cols: number; rows: number } | undefined>((resolve) => {
       gridMeasured = resolve;
     });
-    const noGrid = setTimeout(() => gridMeasured(), SPAWN_WITHOUT_GRID_MS);
     const created = grid
       .then(async (initialSize) => {
-        clearTimeout(noGrid);
         if (!this.terminals.has(params.id)) return undefined;
         const terminal = await rpc.terminals.createTerminal(initialSize ? { ...params, initialSize } : params);
         runInAction(() => {

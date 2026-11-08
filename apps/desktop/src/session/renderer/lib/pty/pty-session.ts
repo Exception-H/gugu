@@ -7,7 +7,7 @@ export type PtySessionStatus = 'disconnected' | 'connecting' | 'ready';
 
 export type PtySessionOptions = {
   clearOnBackendStart?: boolean;
-  onGridMeasured?: (dims: { cols: number; rows: number }) => void;
+  onGridMeasured?: (dims?: { cols: number; rows: number }) => void;
 };
 
 type PtySessionPrepareResult = void | false;
@@ -26,7 +26,7 @@ export class PtySession {
   private hasSeenBackendStart = false;
   private offPtyStarted: (() => void) | null = null;
   private readonly clearOnBackendStart: boolean;
-  private readonly onGridMeasured?: (dims: { cols: number; rows: number }) => void;
+  private readonly onGridMeasured?: (dims?: { cols: number; rows: number }) => void;
 
   constructor(
     readonly ptySessionId: string,

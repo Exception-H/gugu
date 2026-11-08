@@ -22,6 +22,7 @@ import { useTerminalEnabled } from '@renderer/features/settings/use-terminal-ena
 import { remoteHostsStore } from '@renderer/features/remote-hosts/remote-hosts-store';
 import { directToolsUnavailableText } from '@renderer/features/remote-hosts/workspace/remote-workspace-routing';
 
+import { usePaneContext } from '@renderer/features/tabs/pane-context';
 import { STATE_LAYERS } from '@renderer/lib/ui/state-layers';
 
 /**
@@ -46,6 +47,7 @@ export function useSessionWorkspaceActions(
   const { translate } = useSessionMessages();
   const { projectId, sessionId } = useSessionViewContext();
   const sessionView = useWorkspaceViewModel();
+  const { paneId } = usePaneContext();
   // spec session-resume 临时会话:分不出来时这一项**渲染成 disabled 并说明原因**,
   // ❌ 不是点了没反应 —— 远程项目没有本地 ACP runtime，未声明 fork 的 provider 也不能冒充。
   const { data: agents } = useAgents();
@@ -66,13 +68,13 @@ export function useSessionWorkspaceActions(
       id: 'review',
       label: translate('workspace.review'),
       icon: <GitPullRequest className="size-3.5" />,
-      onClick: () => sessionView.paneLayout.openBeside('review', {})
+      onClick: () => sessionView.paneLayout.openBeside('review', {}, paneId)
     },
     terminal: {
       id: 'terminal',
       label: translate('workspace.terminal'),
       icon: <SquareTerminal className="size-3.5" />,
-      onClick: () => void sessionView.openTerminalAsTab()
+      onClick: () => void sessionView.openTerminalAsTab(undefined, paneId)
     },
     browser: {
       id: 'browser',
@@ -84,7 +86,7 @@ export function useSessionWorkspaceActions(
       id: 'ports',
       label: translate('remotePorts.tool'),
       icon: <Cable className="size-3.5" />,
-      onClick: () => sessionView.paneLayout.openBeside('remote-ports', {})
+      onClick: () => sessionView.paneLayout.openBeside('remote-ports', {}, paneId)
     }
   };
 

@@ -475,6 +475,27 @@ describe('a resource keeps a working handle when its tab moves', () => {
 });
 
 describe('the person asks for a page (「+」, an empty pane, a command): openBeside', () => {
+  it('asked from a window: stays in that window, with a way back, whatever was remembered', async () => {
+    const saved = new Map<string, 'separate' | 'beside'>();
+    const { layout, conversation } = setup({ read: (id) => saved.get(id), write: (id, value) => { saved.set(id, value); } });
+    const page = layout.openBeside('file', { path: 'start' })!;
+    const review = layout.openBeside('folder', { path: 'review' })!;
+    close(layout, review);
+    expect([...saved.values()]).toContain('beside');
+    const windowPane = layout.detachToWindow(page)!;
+    expect(layout.openBeside('folder', { path: 'review' }, windowPane)).toBe(page);
+    const inWindow = layout.windowPanes.get(windowPane)!.pane;
+    expect(inWindow.entries.get(page)?.state).toEqual({ path: 'review' });
+    expect(inWindow.canGo(page, -1)).toBe(true);
+    expect(layout.groups.flatMap(({ pane }) => pane.tabOrder)).toEqual([conversation]);
+  });
+
+  it('asked from the main pane: the id of that pane changes nothing', () => {
+    const { layout, conversation } = setup();
+    const folder = layout.openBeside('folder', { path: '/' }, layout.mainGroup.paneId)!;
+    expect(layout.pair).toEqual({ pinned: conversation, side: folder });
+  });
+
   it('beside the conversation, and in the same place when it is already open', () => {
     const { layout, conversation } = setup();
     const folder = layout.openBeside('folder', { path: '/' })!;

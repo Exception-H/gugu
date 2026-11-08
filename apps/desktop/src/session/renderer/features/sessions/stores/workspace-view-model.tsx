@@ -489,12 +489,12 @@ export class WorkspaceViewModel implements ILifecycle, WorkspaceSurface {
    * @@@sessionpage layout — create a terminal and open it as a
    * workspace-panel tab (spec 会话页: terminals are named tabs, not a drawer).
    */
-  openTerminalAsTab(shell?: TerminalShellId): Promise<void> {
+  openTerminalAsTab(shell?: TerminalShellId, askedIn?: string): Promise<void> {
     const terminals = terminalRegistry.get(this.sessionId);
     if (!terminals) return Promise.resolve();
     const { id, created } = terminals.createDefaultTerminal(shell);
     // This machine has no terminal cell: no tab to start a shell for.
-    if (!this.paneLayout.openBeside('terminal', { terminalId: id })) return terminals.deleteTerminal(id);
+    if (!this.paneLayout.openBeside('terminal', { terminalId: id }, askedIn)) return terminals.deleteTerminal(id);
     return created.then(
       () => undefined,
       (error: unknown) => {

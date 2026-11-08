@@ -595,11 +595,14 @@ export class PaneLayoutStore<R extends TabRegistry = TabRegistry> {
   /**
    * The person asks for a page (「+」, an empty pane, a command): beside the page in front, on the main side, so what they
    * are reading stays. Already open = shown. A page or session that says separate = a tab in the strip. Paired: it takes
-   * the side, and closing it brings back what it replaced (`@@@displaced`).
+   * the side, and closing it brings back what it replaced (`@@@displaced`). `askedIn`: the pane asking. A window holds one
+   * page and has no pair, so a page asked for there replaces it in that window, with a way back.
    */
-  openBeside<K extends KindOf<R>>(kind: K, args: OpenArgsOf<R, K>): string | undefined;
-  openBeside(kind: string, args: Record<string, unknown>): string | undefined;
-  openBeside(kind: string, args: Record<string, unknown>): string | undefined {
+  openBeside<K extends KindOf<R>>(kind: K, args: OpenArgsOf<R, K>, askedIn?: string): string | undefined;
+  openBeside(kind: string, args: Record<string, unknown>, askedIn?: string): string | undefined;
+  openBeside(kind: string, args: Record<string, unknown>, askedIn?: string): string | undefined {
+    const inWindow = askedIn === undefined ? undefined : this.windowPanes.get(askedIn)?.pane.resolvedActiveTabId;
+    if (inWindow) return this.open(kind, args, { from: inWindow, intent: 'navigate' });
     return this.open(kind, args, { from: this.mainGroup.pane.resolvedActiveTabId ?? null, intent: 'beside' });
   }
 
@@ -647,7 +650,8 @@ export class PaneLayoutStore<R extends TabRegistry = TabRegistry> {
     const own = from && source!.pane.navigationOf(from.tabId)!.pages.some((page) => page.kind === kind && this._registry.get(kind).resourceKey(page.state as never) === key);
     // A placement shared by the kind says where a new tab lands, not where this page was: a link inside a page still goes in place.
     const pageRemembered = this._registry.get(kind).placementKey ? undefined : remembered;
-    if (intent === 'navigate' && from && !conversation && (own || !pageRemembered) && (!open || open === from)) {
+    const inLayout = !source || this.groups.includes(source as Pane<R>);
+    if (intent === 'navigate' && from && !conversation && (own || !pageRemembered || !inLayout) && (!open || open === from)) {
       source!.pane.navigate(from.tabId, kind, state, config.viewState);
       if (activate) {
         if (this.groups.includes(source as Pane<R>)) this.activePaneId = source!.paneId;
@@ -660,7 +664,6 @@ export class PaneLayoutStore<R extends TabRegistry = TabRegistry> {
     }
 
     const separate = this.pairDeclined || remembered === 'separate';
-    const inLayout = !source || this.groups.includes(source as Pane<R>);
     // Pairing currently selects the pinned page. Until pair identity is independent of the active page, a background
     // request must leave another page the person is viewing alone (spec session-page「不切走正在看的」).
     const showPair = activate || from?.tabId === this.focusedPane.resolvedActiveTabId;
