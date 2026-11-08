@@ -1,5 +1,5 @@
 import { localizedManifestText, localizedPromptText } from '@shared/extensions/catalog';
-import { promptsChangedChannel, type PromptLibraryPrompt } from '@shared/prompt-library';
+import { promptsChangedChannel, withOverrides, type PromptLibraryPrompt } from '@shared/prompt-library';
 import { events } from '@main/lib/events';
 import { extensionsService } from '@main/core/extensions/extensions-root';
 import { sessionHostLocale } from '@main/core/host-locale';
@@ -34,11 +34,14 @@ export async function promptsForApp(method: 'promptsList' | 'promptsSave' | 'pro
     const query = typeof args.query === 'string' ? args.query.trim().toLowerCase() : '';
     const matches = (...fields: string[]) => !query || fields.some((field) => field.toLowerCase().includes(query));
     const locale = sessionHostLocale();
+    const { items, overrides } = await promptLibraryService.getPrompts();
+    const offered = enabledApps().flatMap((manifest) => (manifest.contributes.prompts ?? [])
+      .map((prompt) => ({ key: `${manifest.id}/${prompt.name}`, app: localizedManifestText(manifest, locale).name, ...localizedPromptText(manifest, prompt, locale) })));
     return {
-      prompts: (await promptLibraryService.getPrompts()).filter((prompt) => matches(prompt.title, prompt.prompt)),
-      app_prompts: enabledApps().flatMap((manifest) => (manifest.contributes.prompts ?? [])
-        .map((prompt) => ({ app: localizedManifestText(manifest, locale).name, ...localizedPromptText(manifest, prompt, locale) }))
-        .filter((prompt) => matches(prompt.title, prompt.prompt))),
+      prompts: items.filter((prompt) => matches(prompt.title, prompt.prompt)),
+      // What `/` shows: the person's edit of an App's prompt (`modified`), none they hid.
+      app_prompts: withOverrides(offered, overrides).filter((prompt) => prompt.state !== 'hidden' && matches(prompt.title, prompt.prompt))
+        .map(({ key: _, ...prompt }) => prompt),
     };
   }
   if (method === 'promptsSave') {

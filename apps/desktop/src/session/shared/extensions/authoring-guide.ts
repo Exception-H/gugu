@@ -979,7 +979,8 @@ standing behavior is a skill whose description says when to read it.
 menu under your App's name, edits and sends. Translate with \`localized.<tag>.prompts.<name>\` (\`title\`, \`prompt\`).
 It needs no capability. The person's own prompts are behind \`prompts\` (a program's, for its agent):
 \`gugu.prompts.list({ query? })\`, \`gugu.prompts.save({ id?, title, prompt })\` and \`gugu.prompts.delete(id)\` (the
-person gets an undo at once). App prompts are read-only.
+person gets an undo at once). App prompts are read-only here: \`list\` gives them as the person sees them, their own
+version marked \`state: "modified"\`, none they hid.
 
 ## Configuration
 

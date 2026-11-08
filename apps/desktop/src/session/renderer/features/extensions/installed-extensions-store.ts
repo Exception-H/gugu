@@ -125,13 +125,13 @@ export class InstalledExtensionsStore {
    * The prompts enabled Apps offer in the composer's `/` menu (`contributes.prompts`), in the reader's language, with the
    * App's name to group them under and the titles in its other languages for search.
    */
-  get appPrompts(): { extensionId: string; appName: string; name: string; title: string; prompt: string; otherTitles: string[] }[] {
+  get appPrompts(): { key: string; appName: string; title: string; prompt: string; otherTitles: string[] }[] {
     return this.manifests.filter((manifest) => this.isEnabled(manifest.id)).flatMap((manifest) => {
       const appName = localizedManifestText(manifest, this.locale).name;
       return (manifest.contributes.prompts ?? []).map((prompt) => {
         const text = localizedPromptText(manifest, prompt, this.locale);
         const titles = [prompt.title, ...Object.values(manifest.localized ?? {}).map((entry) => entry.prompts?.[prompt.name]?.title)];
-        return { extensionId: manifest.id, appName, name: prompt.name, ...text, otherTitles: [...new Set(titles)].filter((title): title is string => !!title && title !== text.title) };
+        return { key: `${manifest.id}/${prompt.name}`, appName, ...text, otherTitles: [...new Set(titles)].filter((title): title is string => !!title && title !== text.title) };
       });
     });
   }

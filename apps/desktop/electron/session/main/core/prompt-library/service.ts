@@ -12,14 +12,16 @@ import {
   editCloudPrompts,
   promptLibrarySchema,
   readCloudPrompts,
+  type PromptLibrary,
   type PromptLibraryPrompt,
+  type PromptOverride,
 } from '@shared/prompt-library';
 
 type PromptLibraryKV = {
   prompts: PromptLibraryPrompt[];
   seedVersion: number;
   /** The last list read for an account here: what `/` shows while the cloud can't be reached. */
-  lastRead: { userId: string; prompts: PromptLibraryPrompt[] };
+  lastRead: { userId: string; library: PromptLibrary };
 };
 
 type PromptEdit = (prompts: PromptLibraryPrompt[]) => PromptLibraryPrompt[];
@@ -123,42 +125,47 @@ export class PromptLibraryService implements IInitializable {
     await this.seedIfNeeded();
     const local = await this.readPrompts();
     if (local.length === 0) return;
-    await editCloudPrompts(client, userId, (cloud) => [...cloud, ...local.filter((prompt) => !cloud.some((other) => other.id === prompt.id))]);
+    await editCloudPrompts(client, userId, (cloud) => ({ ...cloud, items: [...cloud.items, ...local.filter((prompt) => !cloud.items.some((other) => other.id === prompt.id))] }));
     await promptLibraryKV.set('prompts', []);
   }
 
-  private async remember(userId: string, prompts: PromptLibraryPrompt[]): Promise<PromptLibraryPrompt[]> {
-    await promptLibraryKV.set('lastRead', { userId, prompts });
-    return prompts;
+  private async remember(userId: string, library: PromptLibrary): Promise<PromptLibrary> {
+    await promptLibraryKV.set('lastRead', { userId, library });
+    return library;
   }
 
-  /** The account's list; offline, the last one read here for that account. */
-  async getPrompts(): Promise<PromptLibraryPrompt[]> {
+  /** The account's prompts and App-prompt overrides; offline, the last ones read here for that account. */
+  async getPrompts(): Promise<PromptLibrary> {
     const { client, userId } = await account();
     try {
       await this.mergeLocal(client, userId);
       return await this.remember(userId, await readCloudPrompts(client, userId));
     } catch (error) {
       const last = await promptLibraryKV.get('lastRead');
-      if (last?.userId === userId) return last.prompts;
+      if (last?.userId === userId) return last.library;
       throw error;
     }
   }
 
-  /** Apply `edit` to the latest row (conditional on its version); returns the saved list. */
-  async editPrompts(edit: PromptEdit): Promise<PromptLibraryPrompt[]> {
+  /** Apply `edit` to the latest row's own prompts (conditional on its version); returns what was saved. */
+  async editPrompts(edit: PromptEdit, overrides = (current: PromptLibrary['overrides']) => current): Promise<PromptLibrary> {
     const { client, userId } = await account();
     await this.mergeLocal(client, userId);
-    return this.remember(userId, await editCloudPrompts(client, userId, edit));
+    return this.remember(userId, await editCloudPrompts(client, userId, (library) => ({ items: edit(library.items), overrides: overrides(library.overrides) })));
   }
 
   /** Create, or replace the one with this id; the undo of a delete saves the prompt back. */
-  savePrompt(prompt: PromptLibraryPrompt): Promise<PromptLibraryPrompt[]> {
+  savePrompt(prompt: PromptLibraryPrompt): Promise<PromptLibrary> {
     return this.editPrompts((all) => (all.some((item) => item.id === prompt.id) ? all.map((item) => (item.id === prompt.id ? prompt : item)) : [...all, prompt]));
   }
 
-  deletePrompt(id: string): Promise<PromptLibraryPrompt[]> {
+  deletePrompt(id: string): Promise<PromptLibrary> {
     return this.editPrompts((all) => all.filter((item) => item.id !== id));
+  }
+
+  /** Edit or hide an App's prompt for this person; null restores the App's own. */
+  overridePrompt(key: string, override: PromptOverride | null): Promise<PromptLibrary> {
+    return this.editPrompts((all) => all, ({ [key]: _, ...rest }) => (override ? { ...rest, [key]: override } : rest));
   }
 }
 

@@ -355,7 +355,7 @@ const ComposerForStore = observer(function ComposerForStore({
   const [sendHold, setSendHold] = useState<'waiting' | 'blocked' | null>(null);
   const sendingRef = useRef(false);
   const promptEditor = useSessionPromptEditor(store, editorApiRef);
-  const { value: promptLibrary } = usePromptLibrary();
+  const { value: promptLibrary, overrides: promptOverrides } = usePromptLibrary();
 
   // Autofocus when the slot becomes available — only while the session page is on screen. 宿主把它常驻挂载在
   // 对话页后面(隐藏);启动时恢复会话在后台挂上这里,抢走对话页输入框的焦点,用户打的字进了看不见的这一格。
@@ -1367,7 +1367,7 @@ const ComposerForStore = observer(function ComposerForStore({
           section: translate('chat.commands'),
         }));
       // 提示词:我的一组,各 App 各一组(prompt-slash-items.ts,聊天输入框用的是同一份)。
-      const prompts = promptSlashItems(promptLibrary, translate('chat.prompts'), normalized);
+      const prompts = promptSlashItems(promptLibrary, promptOverrides, translate('chat.prompts'), normalized);
       // @@@gugu-client-commands —— `/mcp` 是**咕咕自己的**命令,不是 agent 报上来的:
       // 选中时被 `onCommand` 拦下来开面板,**一个字都不发给 agent**。
       // ⚠️ 它出现在这里的前提是 apply 那条路已经接通(面板 → 记录 → 重开)——
@@ -1387,7 +1387,7 @@ const ComposerForStore = observer(function ComposerForStore({
         : [];
       return [...clientCommands, ...commands, ...prompts];
     },
-    [store, promptLibrary, translate]
+    [store, promptLibrary, promptOverrides, translate]
   );
 
   const a = store.affordances;

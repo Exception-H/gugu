@@ -1,5 +1,6 @@
+import { observer } from 'mobx-react-lite';
 import { useCommandProvider } from '@renderer/lib/commands/use-command-provider';
-import { Pencil, Plus, Trash2 } from '@/lib/icons';
+import { EyeOff, Pencil, Plus, RotateCcw, Trash2, type IconComponent } from '@/lib/icons';
 import { useMemo, useRef, useState } from 'react';
 import { DeviceScopeNoticeLine } from '@renderer/features/remote-hosts/device-scope-picker';
 import { MultiLineListItem } from '@renderer/lib/components/multi-line-list-item';
@@ -10,13 +11,9 @@ import { EmptyState } from '@renderer/lib/ui/empty-state';
 import { SearchInput } from '@renderer/lib/ui/search-input';
 import { useSessionMessages } from '@renderer/localization/use-session-messages';
 import { cn } from '@renderer/utils/utils';
-import { usePromptLibraryActions } from './use-prompt-library-actions';
+import { usePromptLibraryActions, type AppPromptRow } from './use-prompt-library-actions';
 
-type PromptListItem = {
-  id: string;
-  title: string;
-  prompt: string;
-};
+type PromptListItem = { title: string; prompt: string } | AppPromptRow;
 
 function matchesSearch(item: PromptListItem, search: string) {
   if (!search) return true;
@@ -24,18 +21,22 @@ function matchesSearch(item: PromptListItem, search: string) {
   return haystack.includes(search.toLowerCase());
 }
 
+type RowAction = { icon: IconComponent; label: string; onClick: () => void };
+
 function PromptRow({
   item,
   disabled,
+  tag,
   onEdit,
-  onDelete,
+  actions,
 }: {
   item: PromptListItem;
   disabled: boolean;
+  /** 「已修改」/「已隐藏」 on an App's prompt; a hidden one is drawn muted. */
+  tag?: string;
   onEdit: () => void;
-  onDelete: () => void;
+  actions: RowAction[];
 }) {
-  const { translate } = useSessionMessages();
   return (
     <div className="flex w-full">
       <button
@@ -44,36 +45,27 @@ function PromptRow({
         onClick={onEdit}
         disabled={disabled}
       >
-        <div className="text-md truncate text-foreground">{item.title}</div>
+        <div className="flex min-w-0 items-center gap-2">
+          <span className={cn('text-md truncate', 'state' in item && item.state === 'hidden' ? 'text-foreground-muted' : 'text-foreground')}>{item.title}</span>
+          {tag && <span className="shrink-0 rounded border border-border px-1 text-xs text-foreground-muted">{tag}</span>}
+        </div>
         <div className="mt-1 line-clamp-1 text-xs leading-relaxed text-foreground-muted">
           {item.prompt}
         </div>
       </button>
       <div className="flex shrink-0 items-center gap-1 opacity-100 sm:opacity-0 sm:transition-opacity sm:group-focus-within:opacity-100 sm:group-hover:opacity-100">
-        <Button
-          variant="ghost"
-          size="icon-xs"
-          onClick={onEdit}
-          disabled={disabled}
-          aria-label={translate('prompts.editLabel', { title: item.title })}
-        >
-          <Pencil />
-        </Button>
-        <Button
-          variant="ghost"
-          size="icon-xs"
-          onClick={onDelete}
-          disabled={disabled}
-          aria-label={translate('prompts.deleteLabel', { title: item.title })}
-        >
-          <Trash2 />
-        </Button>
+        {actions.map(({ icon: Icon, label, onClick }) => (
+          <Button key={label} variant="ghost" size="icon-xs" onClick={onClick} disabled={disabled} aria-label={label} title={label}>
+            <Icon />
+          </Button>
+        ))}
       </div>
     </div>
   );
 }
 
-export function PromptLibraryView() {
+/** Sections like the composer's `/` (prompt-slash-items.ts): the person's own, then each enabled App's. */
+export const PromptLibraryView = observer(function PromptLibraryView() {
   const rootRef = useRef<HTMLDivElement>(null);
   const searchRef = useRef<HTMLInputElement>(null);
   useCommandProvider({
@@ -93,6 +85,20 @@ export function PromptLibraryView() {
     () => promptLibrary.filter((item) => matchesSearch(item, search.trim())),
     [promptLibrary, search]
   );
+  const appSections = new Map<string, AppPromptRow[]>();
+  for (const item of actions.appPrompts.filter((prompt) => matchesSearch(prompt, search.trim()))) appSections.set(item.appName, [...(appSections.get(item.appName) ?? []), item]);
+  const appRow = (prompt: AppPromptRow) => {
+    const edit = { icon: Pencil, label: translate('prompts.editLabel', { title: prompt.title }), onClick: () => actions.editAppPrompt(prompt) };
+    const hide = { icon: EyeOff, label: translate('prompts.hide'), onClick: () => actions.hideAppPrompt(prompt) };
+    const restore = { icon: RotateCcw, label: translate('prompts.restore'), onClick: () => actions.restoreAppPrompt(prompt) };
+    const rows = { default: [edit, hide], modified: [edit, hide, restore], hidden: [restore] }[prompt.state];
+    return (
+      <MultiLineListItem key={prompt.key} className="py-3">
+        <PromptRow item={prompt} disabled={isDisabled} tag={prompt.state === 'modified' ? translate('prompts.modified') : prompt.state === 'hidden' ? translate('prompts.hidden') : undefined}
+          onEdit={() => actions.editAppPrompt(prompt)} actions={rows} />
+      </MultiLineListItem>
+    );
+  };
 
   return (
     <div ref={rootRef} className="flex flex-col text-foreground">
@@ -124,18 +130,30 @@ export function PromptLibraryView() {
       {actions.isLoading ? (
         <PageLoading />
       ) : !actions.hasData ? null : (
-        <div className={cn('flex flex-col py-2', filteredItems.length === 0 && 'min-h-64')}>
-          {filteredItems.length > 0 ? (
-            filteredItems.map((prompt) => (
-              <MultiLineListItem key={prompt.id} className="py-3">
-                <PromptRow
-                  item={prompt}
-                  disabled={isDisabled}
-                  onEdit={() => editPrompt(prompt)}
-                  onDelete={() => deletePrompt(prompt)}
-                />
-              </MultiLineListItem>
-            ))
+        <div className={cn('flex flex-col py-2', filteredItems.length === 0 && appSections.size === 0 && 'min-h-64')}>
+          {filteredItems.length > 0 || appSections.size > 0 ? (
+            <>
+              <div className="px-3 pt-2 text-xs text-foreground-muted">{translate('chat.prompts')}</div>
+              {filteredItems.map((prompt) => (
+                <MultiLineListItem key={prompt.id} className="py-3">
+                  <PromptRow
+                    item={prompt}
+                    disabled={isDisabled}
+                    onEdit={() => editPrompt(prompt)}
+                    actions={[
+                      { icon: Pencil, label: translate('prompts.editLabel', { title: prompt.title }), onClick: () => editPrompt(prompt) },
+                      { icon: Trash2, label: translate('prompts.deleteLabel', { title: prompt.title }), onClick: () => deletePrompt(prompt) },
+                    ]}
+                  />
+                </MultiLineListItem>
+              ))}
+              {[...appSections].map(([app, prompts]) => (
+                <div key={app}>
+                  <div className="px-3 pt-4 text-xs text-foreground-muted">{app}</div>
+                  {prompts.map(appRow)}
+                </div>
+              ))}
+            </>
           ) : (
             <EmptyState
               label={translate('prompts.empty')}
@@ -146,4 +164,4 @@ export function PromptLibraryView() {
       )}
     </div>
   );
-}
+});

@@ -7,9 +7,10 @@
 import { toast } from '@renderer/lib/hooks/use-toast';
 import { useShowModal } from '@renderer/lib/modal/modal-provider';
 import { useSessionMessages } from '@renderer/localization/use-session-messages';
-import type { PromptLibraryPrompt } from '@shared/prompt-library';
+import { installedExtensionsStore } from '@renderer/features/extensions/installed-extensions-store';
+import { withOverrides, type PromptLibraryPrompt, type PromptOverride, type PromptState } from '@shared/prompt-library';
 import type { PromptFormResult } from './prompt-modal';
-import { deletePrompt, savePrompt, usePromptLibrary } from './use-prompt-library';
+import { deletePrompt, overridePrompt, savePrompt, usePromptLibrary } from './use-prompt-library';
 
 function createPromptId(): string {
   return globalThis.crypto?.randomUUID?.() ?? `prompt-${Date.now()}`;
@@ -23,8 +24,12 @@ export function showPromptDeleted(prompt: PromptLibraryPrompt, title: string, un
   toast({ key: `prompt-deleted:${prompt.id}`, title, action: { label: undoLabel, onClick: () => void savePrompt(prompt) }, duration: 8000 });
 }
 
+export type AppPromptRow = (typeof installedExtensionsStore.appPrompts)[number] & { state: PromptState };
+
 export interface PromptLibraryActions {
   prompts: PromptLibraryPrompt[];
+  /** Enabled Apps' prompts as the person sees them (`withOverrides`), hidden ones included so they can be restored. */
+  appPrompts: AppPromptRow[];
   /** 第一次读、还没读到。 */
   isLoading: boolean;
   /** 读写任一在途 → 入口置灰。 */
@@ -41,10 +46,14 @@ export interface PromptLibraryActions {
   createPromptFromDraft(draft: PromptFormResult): PromptLibraryPrompt;
   editPrompt(prompt: PromptLibraryPrompt): void;
   deletePrompt(prompt: PromptLibraryPrompt): void;
+  /** An App's prompt: edit the person's own version, hide it (with an undo), or go back to the App's. */
+  editAppPrompt(prompt: AppPromptRow): void;
+  hideAppPrompt(prompt: AppPromptRow): void;
+  restoreAppPrompt(prompt: AppPromptRow): void;
 }
 
 export function usePromptLibraryActions(): PromptLibraryActions {
-  const { value: prompts, isLoading, isSaving, error, hasData, reload } = usePromptLibrary();
+  const { value: prompts, overrides, isLoading, isSaving, error, hasData, reload } = usePromptLibrary();
   const showPromptModal = useShowModal('promptModal');
   const { translate } = useSessionMessages();
 
@@ -54,8 +63,15 @@ export function usePromptLibraryActions(): PromptLibraryActions {
       .catch((failure: unknown) => toast({ title: String(failure), variant: 'destructive' }));
   };
 
+  const override = (key: string, next: PromptOverride | null, done?: () => void) => {
+    overridePrompt(key, next)
+      .then(done)
+      .catch((failure: unknown) => toast({ title: String(failure), variant: 'destructive' }));
+  };
+
   return {
     prompts,
+    appPrompts: withOverrides(installedExtensionsStore.appPrompts, overrides),
     isLoading,
     isBusy: isLoading || isSaving,
     error,
@@ -82,5 +98,19 @@ export function usePromptLibraryActions(): PromptLibraryActions {
         .then(() => showPromptDeleted(prompt, translate('prompts.deleted'), translate('prompts.undo')))
         .catch((failure: unknown) => toast({ title: String(failure), variant: 'destructive' }));
     },
+    editAppPrompt: (prompt) => {
+      showPromptModal({
+        initialPrompt: prompt,
+        onSuccess: (result: PromptFormResult) => override(prompt.key, result, () => toast({ title: translate('prompts.updated') })),
+      });
+    },
+    hideAppPrompt: (prompt) => {
+      const before = overrides[prompt.key] ?? null;
+      override(prompt.key, { hidden: true }, () => toast({
+        key: `prompt-hidden:${prompt.key}`, title: translate('prompts.hiddenToast', { title: prompt.title }),
+        action: { label: translate('prompts.undo'), onClick: () => void overridePrompt(prompt.key, before) }, duration: 8000,
+      }));
+    },
+    restoreAppPrompt: (prompt) => override(prompt.key, null),
   };
 }

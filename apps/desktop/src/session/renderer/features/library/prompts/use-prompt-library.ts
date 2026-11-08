@@ -1,7 +1,7 @@
 import { useEffect, useSyncExternalStore } from 'react';
 import { rpc } from '@renderer/lib/ipc';
 import { useAssistantPanelAccountId } from '@/lib/assistantPanelBridge';
-import type { PromptLibraryPrompt } from '@shared/prompt-library';
+import type { PromptLibrary, PromptLibraryPrompt, PromptOverride } from '@shared/prompt-library';
 
 /**
  * 提示词是**账号的**(owner 11-07):一行 `user_settings`,主进程拿账号令牌读写(prompt-library/service.ts),
@@ -10,9 +10,9 @@ import type { PromptLibraryPrompt } from '@shared/prompt-library';
  * 会话页的 QueryClientProvider 里,所以 ❌ react-query。窗口回到前台时过期(60 秒)就重读,别的设备的改动这样到。
  */
 const STALE_MS = 60_000;
-const NONE: PromptLibraryPrompt[] = [];
+const NONE: PromptLibrary = { items: [], overrides: {} };
 
-type State = { account: string | null; all: PromptLibraryPrompt[] | undefined; error: unknown; saving: number; readAt: number };
+type State = { account: string | null; all: PromptLibrary | undefined; error: unknown; saving: number; readAt: number };
 let state: State = { account: null, all: undefined, error: null, saving: 0, readAt: 0 };
 const listeners = new Set<() => void>();
 const set = (patch: Partial<State>) => {
@@ -52,7 +52,7 @@ export function reloadPrompts(): void {
 }
 
 /** Saved by main, which answers the saved list; the entries are greyed while it is out (`isSaving`). */
-async function change(save: () => Promise<PromptLibraryPrompt[]>): Promise<void> {
+async function change(save: () => Promise<PromptLibrary>): Promise<void> {
   const { account } = state;
   const request = ++latest;
   set({ saving: state.saving + 1 });
@@ -70,6 +70,9 @@ export const savePrompt = (prompt: PromptLibraryPrompt) => change(() => rpc.prom
 /** Delete outright; the undo saves it back (`showPromptDeleted`). */
 export const deletePrompt = (id: string) => change(() => rpc.promptLibrary.delete(id));
 
+/** Edit or hide an App's prompt (`<App id>/<name>`) for this person; null restores the App's own. */
+export const overridePrompt = (key: string, override: PromptOverride | null) => change(() => rpc.promptLibrary.override(key, override));
+
 export function usePromptLibrary() {
   const account = useAssistantPanelAccountId();
   useEffect(() => follow(account), [account]);
@@ -82,7 +85,8 @@ export function usePromptLibrary() {
   );
   const current = snapshot.account === account ? snapshot : null;
   return {
-    value: current?.all ?? NONE,
+    value: (current?.all ?? NONE).items,
+    overrides: (current?.all ?? NONE).overrides,
     isLoading: !!account && !current?.all && !current?.error,
     isSaving: (current?.saving ?? 0) > 0,
     error: current?.error ?? null,

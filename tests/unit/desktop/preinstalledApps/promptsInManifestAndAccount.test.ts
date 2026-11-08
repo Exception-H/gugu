@@ -5,7 +5,7 @@ import { resolve } from 'node:path'
 import { describe, expect, test } from 'vitest'
 import { localizedPromptText } from '../../../../apps/desktop/src/session/shared/extensions/catalog'
 import { parseExtensionManifest, safeParseExtensionManifest } from '../../../../apps/desktop/src/session/shared/extensions/manifest'
-import { editCloudPrompts, type PromptLibraryPrompt } from '../../../../apps/desktop/src/session/shared/prompt-library'
+import { editCloudPrompts, withOverrides, type PromptLibraryPrompt } from '../../../../apps/desktop/src/session/shared/prompt-library'
 
 const raw = JSON.parse(readFileSync(resolve(__dirname, '../../../../apps/desktop/preinstalled-apps/workspace/manifest.json'), 'utf8'))
 
@@ -47,8 +47,30 @@ describe('the person\'s prompts', () => {
 
   test('an edit is applied to the latest row and saved whole', async () => {
     const table = settingsTable({ items: [prompt('a'), prompt('b')] })
-    const saved = await editCloudPrompts(table.client, 'u1', (all) => [...all.filter((item) => item.id !== 'a'), prompt('c')])
-    expect(saved.map((item) => item.id)).toEqual(['b', 'c'])
-    expect(table.row().config).toEqual({ items: saved })
+    const saved = await editCloudPrompts(table.client, 'u1', (all) => ({ ...all, items: [...all.items.filter((item) => item.id !== 'a'), prompt('c')] }))
+    expect(saved.items.map((item) => item.id)).toEqual(['b', 'c'])
+    expect(table.row().config).toEqual(saved)
+  })
+})
+
+describe('the person\'s version of an App\'s prompt (owner 11-08)', () => {
+  const offered = (text: string) => [
+    { key: 'workspace/tidy-folder', title: '群文件整理', prompt: text },
+    { key: 'workspace/other', title: 'Other', prompt: 'other' },
+  ]
+
+  test('edited and hidden ones are the person\'s; restoring the default is removing the override', async () => {
+    const table = settingsTable({ items: [] })
+    let { overrides } = await editCloudPrompts(table.client, 'u1', (all) => ({ ...all, overrides: {
+      'workspace/tidy-folder': { title: '整理', prompt: 'mine' }, 'workspace/other': { hidden: true } } }))
+    expect(withOverrides(offered('v1'), overrides).map(({ title, prompt, state }) => [title, prompt, state]))
+      .toEqual([['整理', 'mine', 'modified'], ['Other', 'other', 'hidden']])
+    ;({ overrides } = await editCloudPrompts(table.client, 'u1', (all) => ({ ...all, overrides: {} })))
+    expect(withOverrides(offered('v1'), overrides).map(({ prompt, state }) => [prompt, state])).toEqual([['v1', 'default'], ['other', 'default']])
+  })
+
+  test('an App update reaches what the person never touched, not what they edited', () => {
+    const overrides = { 'workspace/other': { title: 'Mine', prompt: 'kept' } }
+    expect(withOverrides(offered('v2'), overrides).map(({ prompt }) => prompt)).toEqual(['v2', 'kept'])
   })
 })

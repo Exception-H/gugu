@@ -207,8 +207,8 @@ export function ChatMessageComposer(props: ChatMessageComposerProps) {
   const editorOptions = { inputTestId: surface === 'aside' ? AUTOMATION_TEST_IDS.chatComposerAside : AUTOMATION_TEST_IDS.chatComposer,
     inputRef: receiveInput, clearOnSubmit: false, enterBehavior: mobile ? 'newline' as const : 'submit' as const, emptyHint: hint }
   // `/`: the person's prompts and their Apps' (prompt-slash-items.ts, the session composer's same list) — the chat's `/` had nothing.
-  const { value: prompts } = usePromptLibrary()
-  const queryPrompts = useCallback(async (query: string) => promptSlashItems(prompts, translateSessionMessage('chat.prompts'), query.trim().toLowerCase()), [prompts])
+  const { value: prompts, overrides } = usePromptLibrary()
+  const queryPrompts = useCallback(async (query: string) => promptSlashItems(prompts, overrides, translateSessionMessage('chat.prompts'), query.trim().toLowerCase()), [prompts, overrides])
   const Composer = props.conversation ? AgentConversationComposer : ChatComposer
   return <ThemeProvider theme={theme} target="documentElement">
     <MessageProvider locale={resolvedLocale} translate={translateSessionMessage}>

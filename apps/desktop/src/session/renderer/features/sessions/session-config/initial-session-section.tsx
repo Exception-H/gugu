@@ -1352,7 +1352,7 @@ export function InitialSessionField({
   const editorApiRef = useRef<PromptEditorRef | null>(null);
   const syncingEditorTextRef = useRef(false);
   const localMentionItemsRef = useRef<MentionItem[]>([]);
-  const { value: promptLibrary } = usePromptLibrary();
+  const { value: promptLibrary, overrides } = usePromptLibrary();
   const harnessModelOptions = useHarnessModelOptions(state.provider, sessionpageLegOfView(state.sessionView));
   const { data: agents, isLoading: agentsLoading } = useAgents();
   // #6264 名单要跨云问另一台机器时,那一格画「正在读取」,❌ 空着让人以为那台机器上什么都开不了。
@@ -1536,9 +1536,9 @@ export function InitialSessionField({
 
   const querySlashItems = useCallback(
     async (query: string): Promise<CommandItem[]> => {
-      return promptSlashItems(promptLibrary, translate('chat.prompts'), query.trim().toLowerCase());
+      return promptSlashItems(promptLibrary, overrides, translate('chat.prompts'), query.trim().toLowerCase());
     },
-    [promptLibrary, translate]
+    [promptLibrary, overrides, translate]
   );
 
   // @@@permission-independent-of-chat-ui — 权限选择与 Chat UI 开关是两件事,不该互相牵制。
