@@ -6,7 +6,8 @@ import { CircleAlert, Trash2Icon } from '@/lib/icons';
 import { UI_EVENTS } from '@/lib/uiEvents';
 import { observer } from 'mobx-react-lite';
 import { useQueryClient } from '@tanstack/react-query';
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { useCallback, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { PageShownContext } from '@renderer/app/recent-session-pages';
 import type { ExtensionAgentStatus } from '@shared/extensions/agent-status';
 import { useDebounce } from '@renderer/lib/hooks/useDebounce';
 import { useLibraryHost } from '@renderer/features/library/library-host';
@@ -114,6 +115,12 @@ function shelfOf(hostKey: string): Extract<ShelfState, { status: 'ready' }> | un
   lastShelf.set(hostKey, shelf);
   return shelf;
 }
+
+/**
+ * 常驻的 App 页(apps-views `retained`)切走再回来不重挂,所以「打开这一页」= 每次重新看见。两次之间至少隔这么久:目录自己
+ * `max-age=60`,隔不到一分钟再取,Chromium 的 HTTP 缓存答的还是同一份。
+ */
+export const MARKET_REOPEN_MIN_MS = 60_000;
 
 /** 「上次更新于」的那个时刻:今天的只写几点几分,不是今天的带上日期。 */
 function marketStaleTime(iso: string, locale: string): string {
@@ -476,9 +483,13 @@ export const ExtensionsSettingsCard = observer(function ExtensionsSettingsCard({
   onMarketRefreshedRef.current = onMarketRefreshed;
   useEffect(() => host.onEvent(marketRefreshedChannel, (refreshed) => onMarketRefreshedRef.current(refreshed)), []);
 
+  const shown = useContext(PageShownContext);
+  const openedAt = useRef<number | null>(null);
   useEffect(() => {
     // 那台机器离线:一问都不发(问不到只会挂满超时),照旧画上次读到的那份、只读。
-    if (remote && !remote.online) return;
+    if (!shown || (remote && !remote.online)) return;
+    if (openedAt.current !== null && Date.now() - openedAt.current < MARKET_REOPEN_MIN_MS) return;
+    openedAt.current = Date.now();
     void refresh();
     // 打开设置页时也查一次「有什么要告诉你的」(spec:启动时一次、打开设置页时一次,
     // ❌ 轮询)。embedded.tsx 已经在启动时查过一次;这里是「打开设置页时」那一次。
@@ -491,7 +502,7 @@ export const ExtensionsSettingsCard = observer(function ExtensionsSettingsCard({
         if (result.success && result.data) onMarketRefreshedRef.current(result.data);
       })
       .catch((error: unknown) => log.warn('App market refresh not asked:', error));
-  }, [refresh]);
+  }, [refresh, shown]);
 
   // 首次与每次搜索词变化:从第 0 页重来。读的是手上那份目录,和上面那趟更新检查同一份;
   // 下载站那趟取回来变了,两边由 onMarketRefreshed 一起重读。
