@@ -74,9 +74,10 @@ export type ResolvedFile = Exclude<FileMetadata, { status: 'ready' }> | {
   /** Opened with `showFirst`: rejects (FileReadRevokedError) when what was read must be taken down. Otherwise already settled by the first read. */
   acknowledgement?(): Promise<void>
   dispose(): Promise<void>
-  saveTo?(directory: string, name: string): Promise<SavedFile>
+  /** `store`: into the shared file store (`fileStoreDirectory`): read-only, one sha once. */
+  saveTo?(directory: string, name: string, store?: boolean): Promise<SavedFile>
 }
-export type SavedFile = { file_path: string; file_name: string; size_bytes: number; sha256: string; content_type: string }
+export type SavedFile = { file_path: string; file_name: string; size_bytes: number; sha256: string; content_type: string; read_only?: true }
 /** Display-only pixels/playback never confer a capability to download, open or re-upload the original. */
 export type FileHandle = Extract<ResolvedFile, { status: 'ready' }>
 export type FilePreviewContent = Blob | { url: string; expiresAt: number }
@@ -87,7 +88,7 @@ export type ResolvedPreview = Exclude<FileMetadata, { status: 'ready' }> | {
 /** `progress`: the bytes arrived of the file being read, from the provider that carries them (a slow machine's line shows it). */
 export type FileContext = { ref: FileRef; actor: FileActor; signal?: AbortSignal; download?: true; progress?: (done: number, total: number) => void }
 export interface FileProviders {
-  saveTo?(revision: FileRevision, context: FileContext, directory: string, name: string): Promise<SavedFile>
+  saveTo?(revision: FileRevision, context: FileContext, directory: string, name: string, store?: boolean): Promise<SavedFile>
   download?(revision: FileRevision, context: FileContext, sink: import('./fileCipher').FileSink): Promise<FileBytes>
   /** Must check the current account, device and project binding locally, before any cloud lookup. */
   local(context: FileContext): Promise<{ revision: FileRevision; open(): Promise<FileBytes> } | null>
@@ -228,9 +229,9 @@ export function createFileResolver(providers: FileProviders) {
       } }
     }
     return { status: 'ready', purpose: 'file', reader: context.actor, revision, read, dispose, acknowledgement: async () => { await (await get()).acknowledged },
-      ...(providers.saveTo ? { saveTo: async (directory: string, name: string) => {
+      ...(providers.saveTo ? { saveTo: async (directory: string, name: string, store?: boolean) => {
         check()
-        try { return await providers.saveTo!(revision, context, directory, name) }
+        try { return await providers.saveTo!(revision, context, directory, name, store) }
         finally { await dispose() }
       } } : {}),
       async *stream() {

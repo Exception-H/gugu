@@ -8,7 +8,7 @@ import type { FileChunkCache } from '../../shared/fileCache'
 import { createHash, randomUUID } from 'node:crypto'
 import { attachmentDownloadName } from '../../shared/attachmentDownloadName.mjs'
 import { cloudFileProviders } from '../../cloud/fileProviders'
-import { createFileResolver, openFileBytes, type FileProviders, type FileContext, type FileHandle } from '../../shared/fileResolver'
+import { createFileResolver, openFileBytes, type FileProviders, type FileContext, type FileHandle, type SavedFile } from '../../shared/fileResolver'
 import type { AttachmentsEndpoint } from '../../cloud/attachmentsApi'
 const cleanupRemoteFileDirectory = async (directory: string) => rm(await requireAgentFileTreeAccess(directory), { recursive: true, force: true })
 
@@ -40,13 +40,11 @@ export function createFileChunkCache(tempRoot: string): FileChunkCache {
 /**
  * This machine's one home for the bytes agents read: `<home>/file-store/<sha256>/<name>`. A version's bytes never change, so
  * one sha is stored once, whoever asked and whatever it was called; a second name is a hard link to the same bytes.
- * Read-only, because it is shared: an agent that wants to change a file copies it first.
+ * Read-only, because it is shared: an agent that wants to change a file copies it. That does not make a change impossible
+ * (the owner of a file can clear the flag), so every hand-out checks the hash and replaces a file that no longer holds its sha.
  */
-export const fileStoreDirectory = (guguHome: string) => join(guguHome, FILE_STORE)
-const FILE_STORE = 'file-store'
+export const fileStoreDirectory = (guguHome: string) => join(guguHome, 'file-store')
 const STORED_FILE_MODE = 0o444
-/** Elsewhere (a phone agent's own downloads) a saved file is that agent's to change, under the name it was saved as. */
-const isFileStore = (directory: string) => basename(directory) === FILE_STORE
 
 /** A private bounded staging file. Only a committed, read-only snapshot can leave this sink. */
 export async function createFileSink(tempRoot: string, size: number, destination?: string): Promise<FileSink & { blob(): Promise<Blob>; path(): string }> {
@@ -115,39 +113,48 @@ export function createNodeFileResolver(root: string, endpoint: (context: FileCon
 
 /** Downloads consume the authorized source into one final file. Random-read consumers keep snapshots. */
 export function createFileSaver(providers: FileProviders): NonNullable<FileProviders['saveTo']> {
-  return async (revision, context, directory, name) => {
+  return async (revision, context, directory, name, store = false) => {
     const path = join(directory, revision.sha256 ?? `legacy-${randomUUID()}`, attachmentDownloadName(name))
     await requireAgentFileAccess(path)
-    const saved = { file_path: path, file_name: name, size_bytes: revision.size_bytes, sha256: revision.sha256!, content_type: revision.content_type }
+    const saved: SavedFile = { file_path: path, file_name: name, size_bytes: revision.size_bytes, sha256: revision.sha256!, content_type: revision.content_type, ...(store ? { read_only: true as const } : {}) }
     const target = dirname(path)
-    if (revision.sha256) {
-      const holds = async (file: string) => {
-        const existing = await stat(file).catch(error => { if (error.code === 'ENOENT') return null; throw error })
-        if (!existing?.isFile() || existing.size !== revision.size_bytes) return false
-        const hash = createHash('sha256')
-        for await (const bytes of createReadStream(await requireAgentFileAccess(file))) { context.signal?.throwIfAborted(); hash.update(bytes) }
-        context.signal?.throwIfAborted()
-        return hash.digest('hex') === revision.sha256
-      }
-      if (await holds(path)) return saved
-      // Changed behind the store's back (chmod and an edit): it no longer holds this sha. Read-only can stop a rename on Windows.
-      if (isFileStore(directory)) {
-        await rm(path, { force: true })
-        for (const name of await readdir(target).catch(error => { if (error.code === 'ENOENT') return [] as string[]; throw error })) {
-          const same = join(target, name)
-          if (name.endsWith('.part') || !await holds(same)) continue
-          // A filesystem without hard links (exFAT, some network drives) just stores the name as its own copy, below.
-          if (await link(await requireAgentFileAccess(same), path).then(() => true, error => error.code === 'EEXIST')) return saved
-          break
-        }
+    const holds = async (file: string) => {
+      if (!revision.sha256) return false
+      const existing = await stat(file).catch(error => { if (error.code === 'ENOENT') return null; throw error })
+      if (!existing?.isFile() || existing.size !== revision.size_bytes) return false
+      const hash = createHash('sha256')
+      for await (const bytes of createReadStream(await requireAgentFileAccess(file))) { context.signal?.throwIfAborted(); hash.update(bytes) }
+      context.signal?.throwIfAborted()
+      return hash.digest('hex') === revision.sha256
+    }
+    if (await holds(path)) return saved
+    if (store && revision.sha256) {
+      // It no longer holds this sha (someone cleared the flag and edited it). Read-only can stop a rename on Windows.
+      await rm(path, { force: true })
+      for (const name of await readdir(target).catch(error => { if (error.code === 'ENOENT') return [] as string[]; throw error })) {
+        const same = join(target, name)
+        if (name.endsWith('.part') || !await holds(same)) continue
+        // A filesystem without hard links (exFAT, some network drives) stores this name as its own copy, below.
+        if (await link(await requireAgentFileAccess(same), path).then(() => true, error => error.code === 'EEXIST')) return saved
+        break
       }
     }
     await mkdir(target, { recursive: true, mode: 0o700 })
-    const sink = await createFileSink(target, revision.size_bytes, path)
+    // The store commits by a link from a private name: two agents saving one new file both succeed, where a rename onto the
+    // other's read-only file fails on Windows.
+    const written = store ? await requireAgentFileAccess(`${path}.${randomUUID()}.part`) : path
+    const sink = await createFileSink(target, revision.size_bytes, written)
     try {
       const bytes = await openFileBytes(providers, revision, { ...context, download: true }, undefined, sink)
       await bytes.dispose()
-      if (isFileStore(directory)) await chmod(path, STORED_FILE_MODE)
+      if (store) {
+        await chmod(written, STORED_FILE_MODE)
+        const placed = () => link(written, path).then(() => true, error => error.code === 'EEXIST' ? holds(path) : null)
+        let done = await placed()
+        if (done === false) { await rm(path, { force: true }); done = await placed() }
+        if (done === null) await rename(written, path).catch(async error => { if (!await holds(path)) throw error })
+        else if (!done) throw new Error('The stored file changed while it was saved')
+      }
       if (!revision.sha256) {
         const hash = createHash('sha256')
         for await (const bytes of createReadStream(path)) hash.update(bytes)
@@ -156,21 +163,28 @@ export function createFileSaver(providers: FileProviders): NonNullable<FileProvi
       return saved
     } catch (error) {
       await sink.abort()
+      if (store) await rm(written, { force: true })
       await rmdir(target).catch(failure => { if (!['ENOENT', 'ENOTEMPTY'].includes(failure.code)) throw failure })
       throw error
+    } finally {
+      if (store) await rm(written, { force: true })
     }
   }
 }
 
 /** Export only complete original bytes, with the existing portable filename and atomic replacement. */
-export async function saveFileHandle(file: FileHandle, directory: string, name = file.revision.file_name) {
+export async function saveFileHandle(file: FileHandle, directory: string, name = file.revision.file_name, store = false): Promise<SavedFile> {
   const destination = join(directory, file.revision.sha256 ?? `legacy-${randomUUID()}`, attachmentDownloadName(name))
   await requireAgentFileAccess(destination)
-  if (file.saveTo) return file.saveTo(directory, name)
+  if (file.saveTo) return file.saveTo(directory, name, store)
+  if (store) await rm(destination, { force: true })
   const saved = await writeFileHandle(file, destination)
-  if (isFileStore(directory)) await chmod(saved.file_path, STORED_FILE_MODE)
-  return { ...saved, file_name: name }
+  if (store) await chmod(saved.file_path, STORED_FILE_MODE)
+  return { ...saved, file_name: name, ...(store ? { read_only: true as const } : {}) }
 }
+
+/** Save into this machine's file store (`fileStoreDirectory`). */
+export const saveToFileStore = (file: FileHandle, guguHome: string, name = file.revision.file_name) => saveFileHandle(file, fileStoreDirectory(guguHome), name, true)
 
 /** A trusted native save dialog may select an exact destination; the original still verifies before atomic rename. */
 export async function writeFileHandle(file: FileHandle, path: string) {

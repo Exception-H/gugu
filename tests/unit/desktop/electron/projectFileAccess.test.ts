@@ -7,7 +7,7 @@ import { createFileResolver, type FileProviders, type FileRevision } from '../..
 import { ciphertextSize, createFileKey, transformFile } from '../../../../packages/core/src/shared/fileCipher'
 import { createProjectTransferHost } from '../../../../apps/desktop/electron/projectFileTransferHost'
 import { createFileChunkCache, createFileSink } from '../../../../apps/desktop/electron/fileSnapshot'
-import { createNodeFileResolver, saveFileHandle } from '@gugu/core/local/files/fileSnapshots'
+import { createNodeFileResolver, saveFileHandle, saveToFileStore } from '@gugu/core/local/files/fileSnapshots'
 import { createProjectFileReader, localProjectFileProvider, openProjectFileSource, snapshotProjectFile } from '../../../../apps/desktop/electron/projectFileHost'
 import { ownSshFileProvider } from '../../../../apps/desktop/electron/projectFileSsh'
 import { createDesktopFileAccess } from '../../../../apps/desktop/electron/desktopFileAccess'
@@ -34,13 +34,25 @@ describe('downloads consume one file without the random-read cache', () => {
     })
     return { resolve: createNodeFileResolver(tempRoot, async () => ({ supabaseUrl: 'https://files.invalid', anonKey: 'public', token: 'test', fetch: fetcher as typeof fetch })), fetcher }
   }
+  it('two agents saving one new file into the store both succeed, and no private name is left', async () => {
+    const { resolve } = remote()
+    const save = async () => {
+      const file = await resolve(ref, actor)
+      if (file.status !== 'ready') throw new Error(file.status)
+      return saveToFileStore(file, home, 'report.bin')
+    }
+    const [a, b] = await Promise.all([save(), save()])
+    expect(a.file_path).toBe(b.file_path)
+    expect(await readdir(join(home, 'file-store', revision.sha256!))).toEqual(['report.bin'])
+    expect(digest(await readFile(a.file_path))).toBe(revision.sha256)
+  })
   it('stores one sha once: read-only, a second name is the same bytes, and a changed file is fetched again', async () => {
     const { resolve, fetcher } = remote()
     const store = join(home, 'file-store')
     const saveAs = async (name: string) => {
       const file = await resolve(ref, actor)
       if (file.status !== 'ready') throw new Error(file.status)
-      return saveFileHandle(file, store, name)
+      return saveToFileStore(file, home, name)
     }
     const first = await saveAs('report.bin')
     const second = await saveAs('renamed.bin')
@@ -49,6 +61,7 @@ describe('downloads consume one file without the random-read cache', () => {
     expect(a.ino).toBe(b.ino)
     expect(a.mode & 0o777).toBe(0o444)
     expect(await readdir(join(store, revision.sha256!))).toEqual(['renamed.bin', 'report.bin'])
+    expect(first.read_only).toBe(true)
     // An agent that forced a write: the store does not hand it out as this version.
     await rm(second.file_path)
     await chmod(first.file_path, 0o644)
