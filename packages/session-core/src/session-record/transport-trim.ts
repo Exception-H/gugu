@@ -1,5 +1,6 @@
 import type { TerminalState, ToolImage, ToolImageRef, ToolNode, TranscriptItem, TranscriptTurn } from '../acp/client';
 import { isGuguServer } from '../acp/models/turns/opened-outputs';
+import { catalogCall } from '../acp/models/turns/tool-calls';
 import type {
   TimelineAfterResult,
   TimelineBatch,
@@ -52,7 +53,8 @@ function trimToolNode(node: ToolNode, limit: number): ToolNode {
     // Cutting its JSON makes the reply disappear on phones and remote desktops.
     if (field === 'rawInput' && node.kind === 'mcp-tool-call' && node.status === 'done'
       && !node.parentToolCallId && isGuguServer(node.server)
-      && (node.tool === 'message_send' || node.tool === 'session_message' || node.tool === 'widget_send')) continue;
+      && (node.tool === 'message_send' || node.tool === 'session_message' || node.tool === 'widget_send'
+        || catalogCall(node.tool, node.rawInput)?.tool === 'widget_send')) continue;
     const value = source[field];
     if (typeof value !== 'string' || value.length <= limit) continue;
     patch ??= {};
