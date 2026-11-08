@@ -405,7 +405,7 @@ describe('the owner’s already-held SSH link', () => {
 })
 
 describe('the host’s on-demand client-encrypted transfer', () => {
-  function fixture(options: { denied?: boolean; changed?: boolean; late?: boolean } = {}) {
+  function fixture(options: { denied?: boolean; changed?: boolean; late?: boolean; bothFail?: boolean } = {}) {
     const calls: string[] = [], commitBodies: Record<string, unknown>[] = []
     let uploaded: Uint8Array | undefined
     const read = vi.fn(async (request: Parameters<ReturnType<typeof createProjectFileReader>>[0]) => reader()(request, 'owner'))
@@ -420,7 +420,7 @@ describe('the host’s on-demand client-encrypted transfer', () => {
         return Response.json({ transfers: options.late && pending > 1 ? [{ ...first, state: 'uploading' }, { ...revision, id: 'late', state: 'requested' }] : [first] })
       }
       if (route === 'file-accept') {
-        if (options.denied) return Response.json({ error: 'quota', message: 'Quota exhausted' }, { status: 403 })
+        if (options.denied || options.bothFail && body.transfer_id === 'late') return Response.json({ error: 'quota', message: 'Quota exhausted' }, { status: 403 })
         expect(body.ciphertext_bytes).toBe(ciphertextSize(bytes.length))
         if (body.transfer_id === 'transfer') expect(read).not.toHaveBeenCalled()
         return Response.json({ url: 'https://objects.invalid/object', fields: { key: 'random-object' }, max_bytes: ciphertextSize(bytes.length) })
@@ -437,6 +437,7 @@ describe('the host’s on-demand client-encrypted transfer', () => {
       if (route === 'file-commit') {
         expect(body.ciphertext_sha256).toBe(digest(uploaded!))
         expect(Buffer.from(body.key, 'base64').length).toBe(32)
+        if (options.bothFail) return Response.json({ error: 'unavailable', message: 'Storage is down' }, { status: 503 })
         commitBodies.push(body)
         return Response.json({ status: 'ready' })
       }
@@ -472,10 +473,23 @@ describe('the host’s on-demand client-encrypted transfer', () => {
     expect(f.commitBodies.map(body => body.transfer_id)).toEqual(['transfer', 'late'])
     expect(f.calls.filter(call => call === 'file-pending')).toHaveLength(2)
   })
+  it('reports the failures of every round, not only the last', async () => {
+    const f = fixture({ late: true, bothFail: true })
+    const both = '2 project file transfer(s) failed; no unverified bytes were committed (transfer: file-commit 503 unavailable; late: file-accept 403 quota)'
+    await expect(f.drain()).rejects.toThrow(both)
+    await expect(f.late()).rejects.toThrow(both) // the event during the round joined it and hears the same outcome
+  })
+  it('names a failed transfer by id and a fixed reason, never a local path', async () => {
+    const f = fixture()
+    await rm(join(root, 'file.bin'))
+    const failure = await f.drain().then(() => null, (error: Error) => error.message)
+    expect(failure).toMatch(/^1 project file transfer\(s\) failed; .*\(transfer: \w+\)$/)
+    expect(failure).not.toContain(root)
+  })
   it.each(['quota', 'revision', 'source-sha'])('does not upload or commit when %s fails', async failure => {
     const f = fixture({ denied: failure === 'quota', changed: failure === 'revision' })
     if (failure === 'source-sha') await writeFile(join(root, 'file.bin'), Buffer.alloc(bytes.length, 9))
-    await expect(f.drain()).rejects.toThrow(failure === 'quota' ? 'transfer: attachments/file-accept: Quota exhausted' : 'transfer: ')
+    await expect(f.drain()).rejects.toThrow(failure === 'quota' ? '(transfer: file-accept 403 quota)' : failure === 'revision' ? '(transfer: Transfer revision changed)' : '(transfer: File SHA-256 mismatch)')
     expect(f.calls).not.toContain('object'); expect(f.calls).not.toContain('file-commit')
     if (failure !== 'source-sha') expect(f.read).not.toHaveBeenCalled()
     expect(await readdir(tempRoot).catch(() => [])).toEqual([])
