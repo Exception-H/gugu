@@ -544,7 +544,8 @@ export default {
       "resource-monitor": "资源监视器",
       "model": "模型",
       "phone": "这台手机",
-      "permissions": "权限",
+      "passwords": "密码",
+      "permissions": "本机控制",
       "sessions": "项目",
       "subscriptions": "订阅",
       "usage": "用量"

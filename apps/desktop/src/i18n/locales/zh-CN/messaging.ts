@@ -290,6 +290,7 @@ export default {
     "markAllReadPartial_other": "有 {{count}} 个会话未能标为已读，请重试",
     "markUnreadFailed": "标记未读失败，请重试",
     "muted": "消息免打扰",
+    "newMessage": "收到一条新消息",
     "noResults": "未找到对话",
     "searchMessagesTitle": "搜索消息",
     "listLabel": "对话列表",
@@ -510,6 +511,15 @@ export default {
       "joined": " 加入了群聊",
       "mentionHint": "在输入框里 @{{name}}",
       "separator": "、"
+    },
+    "notice": {
+      "agentFloodGroup": "这个群里 agent 较多，已把它们都转为被动模式，@ 它们才会回。",
+      "agentFloodTopic": "这条话题里 agent 较多，已把它们都转为被动模式，@ 它们才会回。",
+      "left": "{{actor}} 退出了群聊",
+      "madeAdmin": "{{actor}} 将 {{target}} 设为管理员",
+      "removed": "{{actor}} 将 {{target}} 移出了群聊",
+      "revokedAdmin": "{{actor}} 撤销了 {{target}} 的管理员身份",
+      "topicOpened": "{{actor}} 开了话题："
     },
     "memberList": {
       "agentLeave": "让它退出群聊",
