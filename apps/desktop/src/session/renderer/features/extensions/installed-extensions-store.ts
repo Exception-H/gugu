@@ -5,6 +5,7 @@ import { getLocaleSnapshot, subscribeLocale } from '@/i18n';
 import {
   declaredContexts,
   extensionTabKind,
+  isOwnPage,
   type ExtensionManifest,
   type ExtensionTabKind
 } from '@shared/extensions/manifest';
@@ -44,6 +45,8 @@ export interface ExtensionTabContributionEntry {
    * an uncaught error, in a tab nobody asked for; F3 for the group-only ones, whose session tab made a page at install).
    */
   forFiles: boolean;
+  /** It stands alone as a page (`isOwnPage`): not a file opener, not the App's card in a message. */
+  ownPage: boolean;
   /** One page in each task (`perSession`): each task keeps its own, so it is never moved from one task to another. */
   perSession: boolean;
 }
@@ -152,6 +155,7 @@ export class InstalledExtensionsStore {
         enabled: this.isEnabled(manifest.id),
         preinstalled: this.isPreinstalled(manifest.id),
         forFiles: declaredContexts(tab).length > 0,
+        ownPage: isOwnPage(manifest, tab),
         perSession: tab.perSession === true,
       }));
     });
@@ -160,12 +164,12 @@ export class InstalledExtensionsStore {
   /**
    * The tabs a task session can have of their own — one list for every way a task opens one (its「+」, its empty pane, the
    * phone's task page): the tabs that open no file, of the Apps that are on — the folder App's page among them (P4: a
-   * task's folder is that App, its conversation's folder and its working copy). Not a tab that opens files (`forFiles`). A
+   * task's folder is that App, its conversation's folder and its working copy). Not a tab that opens files, nor an App's card in a message (`ownPage`). A
    * switched-off App is left out, not greyed: the menus list what can be opened (owner 10-20); switching it on is the
    * 「App」page's.
    */
   get enabledTabContributions(): ExtensionTabContributionEntry[] {
-    return this.allTabContributions.filter((entry) => entry.enabled && !entry.forFiles);
+    return this.allTabContributions.filter((entry) => entry.enabled && entry.ownPage);
   }
 
   /** Every enabled App's resident page, preinstalled ones included: what the resident layer keeps alive. */
@@ -178,7 +182,7 @@ export class InstalledExtensionsStore {
    * it can be pinned. A page per task is in many places at once, so it has no one place for the rail to go to.
    */
   mainTabOf(extensionId: string): ExtensionTabContributionEntry | null {
-    return this.allTabContributions.find((entry) => entry.extensionId === extensionId && !entry.forFiles && !entry.perSession) ?? null;
+    return this.allTabContributions.find((entry) => entry.extensionId === extensionId && entry.ownPage && !entry.perSession) ?? null;
   }
 
   /** What the rail shows: the pinned Apps that are installed, on, and have a page of their own, in the person's order. */

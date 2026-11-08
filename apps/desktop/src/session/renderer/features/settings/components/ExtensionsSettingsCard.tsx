@@ -73,7 +73,7 @@ import { marketDownloadProgressChannel, marketRefreshedChannel } from '@shared/e
 import type { MarketRefreshed } from '@shared/extensions/market-snapshot';
 import { marketHome } from '@shared/extensions/market-home';
 import { chatDb } from '@/lib/supabase';
-import { declaredContexts, type ExtensionManifest } from '@shared/extensions/manifest';
+import { isOwnPage, type ExtensionManifest } from '@shared/extensions/manifest';
 import { readCachedDevices } from '@/store/devicesCache';
 import { remoteHostsStore } from '@renderer/features/remote-hosts/remote-hosts-store';
 
@@ -744,7 +744,7 @@ export const ExtensionsSettingsCard = observer(function ExtensionsSettingsCard({
       // What a task's「+」lists: the App's own page, by its name in this language (installedExtensionsStore.mainTabOf); an App
       // whose tabs only open files or come one per task has nothing there to put, and says nothing about it.
       const name = localizedManifestText(manifest, locale).name;
-      const hasPage = manifest.contributes.tabs.some((tab) => declaredContexts(tab).length === 0 && !tab.perSession);
+      const hasPage = manifest.contributes.tabs.some((tab) => isOwnPage(manifest, tab) && !tab.perSession);
       toast({
         title: translateRef.current('extensions.installed', { name }),
         ...(hasPage ? { description: translateRef.current('extensions.installedNext', { name }) } : {}),

@@ -917,6 +917,14 @@ export function declaredContexts(tab: Parameters<typeof claimedSuffixes>[0]): Fi
   return (['session', 'chat'] as const).filter((context) => claimedSuffixes(tab, context).length > 0);
 }
 
+/**
+ * Whether a tab stands alone as a page: what the rail, a task's 「+」 and the command list offer. A tab that opens files has
+ * nothing to show without one. A tab with `widget` is the App's card in a message, unless it is all the App has.
+ */
+export function isOwnPage(manifest: Pick<ExtensionManifest, 'contributes'>, tab: ExtensionManifest['contributes']['tabs'][number]): boolean {
+  return declaredContexts(tab).length === 0 && (!tab.widget || manifest.contributes.tabs.length === 1);
+}
+
 /** Whether the App has something to open in a chat: a page of its own (it opens in any chat), or a tab of chat files. */
 export function opensInChats(manifest: ExtensionManifest): boolean {
   return manifest.contributes.tabs.some((tab) => {

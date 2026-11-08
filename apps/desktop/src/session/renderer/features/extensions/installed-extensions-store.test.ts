@@ -83,6 +83,20 @@ describe('which Apps are a task session tab (L6-8, 摩擦单 F3 / F95 / F98)', (
     expect(store.residentTabContributions.map((entry) => entry.extensionId)).toEqual(['vote', 'grid', 'plain', 'board']);
   });
 
+  it('a tab with a card is not a page beside other tabs, but stays one when it is all the App has', async () => {
+    const withTabs = (id: string, tabs: object[]) => ({ id, name: id, version: '1.0.0', apiVersion: EXTENSION_API_VERSION, defaultLocale: 'en', contributes: { tabs } });
+    const widget = { height: 120 };
+    const store = storeListing([
+      withTabs('board', [{ name: 'board', title: 'Board', entry: 'b.html' }, { name: 'fleet', title: 'Fleet', entry: 'f.html', widget }]),
+      withTabs('lens', [{ name: 'card', title: 'Lens', entry: 'c.html', widget }, { name: 'explore', title: 'Lens', entry: 'e.html', opensFiles: { chat: ['.csv'] } }]),
+      withTabs('poll', [{ name: 'poll', title: 'Poll', entry: 'p.html', widget }]),
+    ]);
+    await store.load();
+    expect(store.enabledTabContributions.map((entry) => entry.kind)).toEqual(['board.board', 'poll.poll']);
+    expect(store.mainTabOf('lens')).toBeNull();
+    expect(store.residentTabContributions.map((entry) => entry.kind)).toContain('board.fleet');
+  });
+
   it('keeps an App-owned per-task HTML page separate from its settings page', async () => {
     const appWithPages = {
       id: 'tool', name: 'Tool', version: '1.0.0', apiVersion: EXTENSION_API_VERSION, defaultLocale: 'en',
