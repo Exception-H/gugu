@@ -1,6 +1,6 @@
 import { chatActor } from '@renderer/lib/chat/actor-identity';
 import { chatDisplayName } from '@renderer/lib/chat/chat-name';
-import { readChatSummary, resolveChatId } from '@/lib/chatSummariesBridge';
+import { readChatSummary, resolveChatId, subscribeChatNames } from '@/lib/chatSummariesBridge';
 import { translateSessionMessage } from '../../../localization/locale-store';
 import { useLayoutEffect, useState } from 'react';
 import { createComputed, createMemo, createRoot, createSignal } from 'solid-js';
@@ -30,6 +30,7 @@ export function useTranscriptTimeline<T>(
       const [identityRevision, setIdentityRevision] = createSignal(0);
       const refreshIdentity = () => setIdentityRevision((revision) => revision + 1);
       const offDirectory = directory?.subscribe(refreshIdentity);
+      const offChatNames = subscribeChatNames(refreshIdentity);
       const offSelf = readSelfIdentityBridge()?.subscribe(refreshIdentity);
       const options: TimelineRailOptions = {
         resolveSenderType: (fromId) => {
@@ -55,7 +56,7 @@ export function useTranscriptTimeline<T>(
       });
       const selected = createMemo(() => select([...committed(), ...active()]));
       createComputed(() => setSnapshot({ transcript, value: selected() }));
-      return () => { offDirectory?.(); offSelf?.(); dispose(); };
+      return () => { offDirectory?.(); offChatNames(); offSelf?.(); dispose(); };
     });
   }, [transcript, selfIdentity, select, session]);
 
