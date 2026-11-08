@@ -23,6 +23,7 @@ vi.mock('../../../../apps/desktop/src/components/appSlot/appsHere', () => ({
 const card = vi.hoisted(() => ({ manifest: null as unknown }))
 vi.mock('../../../../apps/desktop/src/components/extensionBundle/sharedPackages', () => ({
   summaryOf: async () => ({ ok: true, manifest: card.manifest }),
+  watchReading: () => () => {},
   packageKey: (card: { source: { kind: string; url?: string }; messageId: string }) => (card.source.kind === 'url' ? `url:${card.source.url}` : `msg:${card.messageId}`),
   installPackageOf: (card: { messageId: string }) => ({ messageId: card.messageId }),
   showPackage: () => () => {},
