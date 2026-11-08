@@ -455,12 +455,12 @@ export default {
     "filesSendFailed_other": "{{count}} files were not sent: {{guidance}}",
     "failureReason": {
       "tooLarge": "The file is too large. Reduce its size and send it again.",
-      "signIn": "Your sign-in expired. Sign in and send it again.",
+      "signIn": "Your sign-in expired. Sign in and send again.",
       "denied": "You do not have permission to send. Check the conversation permissions before sending again.",
-      "busy": "Too many sends. Wait a moment and send it again.",
+      "busy": "Too many sends. Wait a moment and send again.",
       "chatUnavailable": "The conversation is unavailable. Return to the message list to check it.",
-      "timeout": "The send timed out. Try sending it again later.",
-      "unavailable": "The send did not finish. Try sending it again later."
+      "timeout": "The send timed out. Try sending again later.",
+      "unavailable": "The send did not finish. Try sending again later."
     },
     "verb": {
       "task": "New task"

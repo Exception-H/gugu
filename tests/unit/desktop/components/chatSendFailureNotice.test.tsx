@@ -54,9 +54,9 @@ describe('attachment failure notices', () => {
   it('localizes single and batch notices in English', () => {
     setLocalePreference('en-US')
     const image = new File(['data'], 'IMG_123.png', { type: 'image/png' })
-    expect(notice([image]).title).toBe('Image IMG_123.png was not sent: The send did not finish. Try sending it again later.')
+    expect(notice([image]).title).toBe('Image IMG_123.png was not sent: The send did not finish. Try sending again later.')
     const result = notice([image, new File(['data'], 'report.pdf')])
-    expect(result.title).toBe('2 files were not sent: The send did not finish. Try sending it again later.')
+    expect(result.title).toBe('2 files were not sent: The send did not finish. Try sending again later.')
     expect(renderToStaticMarkup(<>{result.description}</>)).toContain('File report.pdf')
   })
 })
