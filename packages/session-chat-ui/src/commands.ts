@@ -47,6 +47,11 @@ export type ChatCommands = {
   onDiscardSend?: (itemId: string) => void;
   /** A recycled row supplies live getters; the host returns its DOM-listener cleanup. */
   onMessageTextMount?: (target: { root: HTMLElement; menuRoot?: HTMLElement; itemId: string; message: () => ChatMessage; sender?: () => string | null }) => void | (() => void);
+  /**
+   * A slot for one message the agent sent to people (`ChatMessage.sentMessages`): the host draws it with the chat's
+   * MessageBody inside `root` and reports the drawn size with `ChatState.session.setBodySize(message.id, …)`.
+   */
+  onMessageBodyMount?: (target: { root: HTMLElement; message: import('@gugu/core/shared/types/chat').MessageItem }) => void | (() => void);
   onOpenSender?: (target: import('./lib/sender-target').MessageSenderTarget) => void;
   conversationAgentSession?: () => string | null;
   /** External agents may expose only their public identity, with no readable session. */

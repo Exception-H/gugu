@@ -1,7 +1,7 @@
 import { decorateConversationDensity } from './conversation-density';
 import { conversationOutput } from './conversation-process';
 import { conversationMessages } from './conversation-messages';
-import { withSentReplies } from './sent-replies';
+import { sentMessagesOf, withSentReplies } from './sent-replies';
 import { activityArtifacts } from './activity-artifacts';
 import { planConversationSegments } from './conversation-segments';
 import { continuedActivityHeader, foldActivityUnits, hasUnconfirmedSend, incomingActivity, outgoingActivity, pendingActivity,
@@ -329,7 +329,7 @@ export function flattenTier(
         // agent 经 message_send / session_message 说的话:画成它说的话、标明发到了哪里,❌ 一行「调用了 MCP 工具」。
         const send = !ctx.agentConversation && 'toolCallId' in op.item && !sentReplyCalls.has(op.item.id) ? agentSendOf(op.item as TranscriptItem, sendTurn) : null;
         processItem(send
-          ? { kind: 'agent-send', id: op.item.id, turnId, send, status: (op.item as { status?: string }).status === 'running' ? 'running' : 'done' }
+          ? { kind: 'agent-send', id: op.item.id, turnId, send, status: (op.item as { status?: string }).status === 'running' ? 'running' : 'done', ...sentMessagesOf(op.item as TranscriptItem) }
           : op.item, folds);
         continue;
       }

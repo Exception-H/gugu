@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type RefObject, type CSSProperties } from 'react'
+import { useContext, useEffect, useRef, useState, type RefObject, type CSSProperties } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useQuery } from '@tanstack/react-query'
 import type { ParsedAttachment } from '@gugu/core/shared/ui/attachmentModels'
@@ -11,6 +11,7 @@ import { ExtensionBundleCard } from '../extensionBundle/ExtensionBundleCard'; im
 import { openImageFromThumb, registerFullImage } from '../../lib/imageViewer'
 import { Button } from '../ui/Button'
 import { FileAttachmentCard } from './FileAttachmentCard'
+import { LoadImagesOnMount } from './loadImagesOnMount'
 import { ExpiredAttachmentCard } from './ExpiredAttachmentCard'
 import { Markdown } from '../markdown/Markdown'
 import './mediaAttachmentBubble.css'
@@ -63,7 +64,8 @@ function InlineImage({ meta, messageId, chatId, isMine }: { meta: ParsedAttachme
   const { t } = useTranslation('messaging')
   // Observed in either state: a sending row is drawn from its local preview without ever being pending.
   const box = useRef<HTMLElement>(null)
-  const near = useNearViewport(box)
+  const onMount = useContext(LoadImagesOnMount)
+  const near = useNearViewport(box, !onMount) || onMount
   const view = useAttachmentObjectUrl(meta.source, 'thumb', near, meta.fileMetadata)
   const img = useRef<HTMLImageElement>(null)
   const dimensions = meta.fileMetadata?.status === 'ready' ? meta.fileMetadata.revision : meta.imageDimensions ?? ('link' in view ? view.link : undefined)

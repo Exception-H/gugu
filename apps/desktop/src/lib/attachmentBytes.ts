@@ -7,6 +7,7 @@ import { attachmentQuery, attachmentQueryClient } from './attachmentQueryClient'
 import { platform } from '../platform'
 import { openImageViewer, type ImageViewerItem } from './imageViewer'
 import { rendererLogger } from './log'
+import { sessionFileReader } from './sessionFileReaders'
 
 const log = rendererLogger('attachment-bytes')
 
@@ -25,18 +26,8 @@ export async function attachmentPreview(source: AttachmentSource, metadata?: Fil
   const ref = attachmentFileRef(source)
   return ref ? resolveFile(ref, fileReader(), { purpose: 'preview', metadata, signal: fileReadSignal() }) : { status: 'gone' as const, sha256: null }
 }
-/**
- * An owner-notification file stays on the session's machine. Each task timeline already reads its pictures one way
- * (desktop: that machine's `app.readUserImageDataUrl`; phone: the same call over the device link). While a timeline is
- * drawn it lends that very reader here, under its session; nothing else reads these files.
- */
-const sessionFileReaders = new Map<string, (path: string) => Promise<string | null>>()
-export function lendSessionFileReader(sessionId: string, read: (path: string) => Promise<string | null>): () => void {
-  sessionFileReaders.set(sessionId, read)
-  return () => { if (sessionFileReaders.get(sessionId) === read) sessionFileReaders.delete(sessionId) }
-}
 async function sessionFileBytes(source: Extract<AttachmentSource, { kind: 'session-file' }>): Promise<AttachmentBytes> {
-  const read = source.sessionId ? sessionFileReaders.get(source.sessionId) : undefined
+  const read = sessionFileReader(source.sessionId)
   if (!read) throw new Error('This file is kept in its task on another view; open it from that task')
   const dataUrl = await read(source.path)
   if (!dataUrl) return { status: 'missing' }
@@ -109,7 +100,7 @@ export type AttachmentView =
 /** 缩略图在内存里只是一个 blob:记在本次运行里,超过这么久没人再取就丢。 */
 const THUMB_GC_MS = 30 * 60_000
 /** 内容不会变的来源:一条消息 / 一个附件 / 群文件的某一版。 */
-const immutableSource = (source: AttachmentSource) => source.kind === 'message' || source.kind === 'attachment' || source.kind === 'item'
+const immutableSource = (source: AttachmentSource) => source.kind === 'message' || source.kind === 'attachment' || source.kind === 'item' || source.kind === 'session-file'
 
 /**
  * 缩略图按来源记在 attachmentQueryClient 里。本地缓存(Cache Storage)按内容哈希存,优先使用消息的固定版本元数据;旧行才需要先问 file-resolve:

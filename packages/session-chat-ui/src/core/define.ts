@@ -81,6 +81,8 @@ export type MeasureCtx = {
   caches: ChatCaches;
   measureEpoch?: number;
   expandedId?: string | null;
+  /** Lane A: the host's drawn size of a sent message's MessageBody slot (`ChatState.session.setBodySize`). */
+  bodySize?: (messageId: string) => { width: number; height: number } | undefined;
   /** Latest visible conversation bubble: full text without persisting a manual expansion. */
   latestConversationMessageId?: string | null;
   /** The inline user-message editor replaces the measured bubble. */
