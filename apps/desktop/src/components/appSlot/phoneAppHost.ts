@@ -118,6 +118,8 @@ export interface PhoneAppBinding {
   capabilities: readonly ExtensionCapability[]
   locale: string
   themeMode: 'light' | 'dark'
+  /** The signed-in person's own 咕咕号 (`operator.guguNumber`): absent before their profile is read. */
+  guguNumber?: number | null
 }
 
 interface HostedFrame {
@@ -495,7 +497,7 @@ export function hostAppFrame(
         }
       : {}),
     // A page on the phone is the person's to work: no agent opens one there (owner 10-14).
-    operator: { kind: 'person' },
+    operator: hosted.binding.guguNumber !== undefined ? { kind: 'person', guguNumber: hosted.binding.guguNumber } : { kind: 'person' },
     locale: hosted.binding.locale,
     themeMode: hosted.binding.themeMode,
     capabilities: hosted.binding.capabilities.filter((capability) => PHONE_CAPABILITIES.includes(capability)),
@@ -914,7 +916,7 @@ export function hostAppFrame(
       previous = snapshot()
       stateChanged()
       // Reuse the parent's existing subscriptions and host events for its sandboxed modal pages too.
-      for (const [childHost, childBinding] of modalHosts) childHost.update({ ...childBinding, locale: binding.locale, themeMode: binding.themeMode, capabilities: binding.capabilities })
+      for (const [childHost, childBinding] of modalHosts) childHost.update({ ...childBinding, locale: binding.locale, themeMode: binding.themeMode, capabilities: binding.capabilities, guguNumber: binding.guguNumber })
       // Moved to a file a pill is waiting to open: its place is this page's now (after the context that names the file).
       const placed = () => { if (moved) for (const link of takeOpeningLinks(hosted.binding)) event(link) }
       // The theme is part of it: the page's ui.js picks its palette from context.themeMode.

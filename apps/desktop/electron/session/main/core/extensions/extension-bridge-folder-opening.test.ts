@@ -112,7 +112,7 @@ beforeEach(async () => {
   fixture.apiVersion = 27; fixture.held = false; fixture.failList = false; fixture.routes.length = 0; fixture.waiting.length = 0; sent.length = 0;
   fixture.pickedMembers.length = 0;
   await bridge.chatMembersChanged(fixture.chat, [{ memberId: fixture.agent, left: true }]);
-  bridge.setExtensionBridgeHost({ deliver: async () => undefined, presentation: () => ({ locale: 'en', themeMode: 'light', fullscreen: false, windowFocused: true }) });
+  bridge.setExtensionBridgeHost({ deliver: async () => undefined, selfGuguNumber: () => undefined, presentation: () => ({ locale: 'en', themeMode: 'light', fullscreen: false, windowFocused: true }) });
 });
 afterEach(() => bridge.unbindExtensionSurface(21));
 
