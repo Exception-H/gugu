@@ -48,7 +48,7 @@ export function MediaAttachmentBubble({ meta, messageId, isMine, onOpenFile, sen
   // A sending row owns an ephemeral blob preview, not a committed download capability.
   if (meta.source.kind === 'url' && meta.source.url.startsWith('blob:') && !renderable) return <div ref={box} className={FIT_BUBBLE}><FileAttachmentCard file={meta} isMine={isMine} onOpen={() => undefined} />{caption}</div>
   // App 包:按这条消息装(发布者就是发送者,装的时候由宿主读这条消息)。
-  if (isExtensionBundle(meta) && meta.source.kind !== 'gone' && meta.source.kind !== 'attachment') return <div ref={box} className={FIT_BUBBLE}><ExtensionBundleCard meta={meta} card={{ source: meta.source, messageId }} isMine={isMine} senderName={senderName} chatId={chatId} />{caption}</div>
+  if (isExtensionBundle(meta) && meta.source.kind !== 'gone' && meta.source.kind !== 'attachment' && meta.source.kind !== 'session-file') return <div ref={box} className={FIT_BUBBLE}><ExtensionBundleCard meta={meta} card={{ source: meta.source, messageId }} isMine={isMine} senderName={senderName} chatId={chatId} />{caption}</div>
   if (meta.source.kind === 'gone') {
     return <div className={FIT_BUBBLE}><FileAttachmentCard file={meta} isMine={isMine} details={t('attachmentView.fileGone')} onOpen={() => undefined} />{caption}</div>
   }
