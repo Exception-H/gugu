@@ -103,6 +103,16 @@ describe('活设置:provider 确认之后才写回会话记录', () => {
 });
 
 describe('model setting recovery stays beside the model control', () => {
+  it('a model change refused because a turn is running leaves nothing on the picker', async () => {
+    const store = makeStore({
+      success: false,
+      error: { name: 'LiveSettingBusy', message: 'Cannot change model while the current turn is in flight' },
+    });
+    await expect(store.setModel('m2')).resolves.toBeNull();
+    expect(store.modelSettingError).toBeNull();
+    expect(recorded()).toEqual([]);
+  });
+
   it('returns the adapter rejection as a recoverable model result', async () => {
     const data = { kind: 'model-unavailable' as const, requestedValue: 'retired-model' };
     const store = makeStore({ success: false, error: { type: 'set_config_failed', cause: { name: 'RequestError', message: 'unknown model: retired-model', data } } });

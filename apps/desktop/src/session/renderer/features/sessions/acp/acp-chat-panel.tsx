@@ -965,10 +965,12 @@ const ComposerForStore = observer(function ComposerForStore({
   );
   const merged = useComposerModelOptions(ownTier, platformCatalog.models, providerId, runningPlatformModel);
 
+  const lockedForTurn = store.affordances.isBusy && providerCapabilities?.acp.liveSettings?.model?.busy === 'reject';
   const sessionModelOptions = useMemo(() => {
     // 能力声明还没到 ⇒ 还答不出「哪些能当场换」:❌ 不拿「未声明」去判(那会把整张菜单暂时置灰)。
     if ((!merged && !retiredModel) || !providerCapabilities) return null;
     const catalog = platformCatalog.models;
+    const selectedOption = composerSelectedOptionId({ platformModel: runningPlatformModel, model: store.model });
     const options = Object.fromEntries(
       Object.entries(merged ?? {}).map(([id, option]) => {
         // 四态见 @@@session-options-disabled。hot / reload 都是"能选",
@@ -980,6 +982,10 @@ const ComposerForStore = observer(function ComposerForStore({
           runningOn,
           liveSetting: providerCapabilities?.acp.liveSettings?.model,
         });
+        // A hot switch this provider refuses during a turn: say so on the row, rather than offer one that can only fail.
+        if (plan.kind === 'hot' && lockedForTurn && id !== selectedOption) {
+          return [id, { ...option, disabled: true, disabledReason: translate('composer.modelBusy') }];
+        }
         if (plan.kind !== 'unavailable' && plan.kind !== 'unsupported') return [id, option];
         return [
           id,
@@ -1009,6 +1015,8 @@ const ComposerForStore = observer(function ComposerForStore({
     runningOn,
     runningPlatformModel,
     providerCapabilities,
+    lockedForTurn,
+    store.model,
     translate,
   ]);
 
@@ -1517,6 +1525,7 @@ const ComposerForStore = observer(function ComposerForStore({
         onModelChange={handleModelChange}
         modelMenuOpenRequest={modelMenuRequest}
         modelSettingNotice={modelSettingNotice}
+        modelMenuNotice={lockedForTurn ? translate('composer.modelBusy') : undefined}
         onModelMenuOpen={platformCatalog.refresh}
         // 底部「管理模型 / 升级解锁更多模型」(#7056),三个模型菜单同一份。
         {...composerModelFooter(platformCatalog.models)}

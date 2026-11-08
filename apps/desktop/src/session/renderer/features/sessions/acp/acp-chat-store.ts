@@ -1547,6 +1547,12 @@ export class AcpChatStore {
     try {
       this._modelSettingRecovery = false;
       const result = await session.setModelOption('model', model);
+      // The menu locks during a turn; this is the turn that started while it was open. Nothing is wrong with the
+      // model or the session, so nothing stays on the picker.
+      if (!result.success && (result.error as { name?: unknown }).name === 'LiveSettingBusy') {
+        toast({ title: translateSessionMessage('composer.modelBusy') });
+        return null;
+      }
       const rejection = result.success ? null : modelSettingRejection(result.error);
       const reason = result.success ? undefined : describeFailureCause(result.error);
       const displayReason = rejection ? reason?.split('\n')[0] : reason;
