@@ -157,7 +157,7 @@ const CMD_SHIM_SINGLE_PROGRAM = /^\s*@?"([^"\r\n]+\.(?:exe|com))"\s+%\*\s*$/im;
 /** 壳里的 `%dp0%` / `%~dp0` = 壳自己所在目录(带尾分隔符)。 */
 function expandShimDirectory(template: string, shimPath: string): string {
   const directory = path.win32.dirname(shimPath);
-  const expanded = template.replace(/%~?dp0%?/gi, `${directory}\\`);
+  const expanded = template.replace(/%~dp0|%dp0%/gi, `${directory}\\`);
   // `"%dp0%\node_modules\…"` 展开后会多出一个分隔符;Windows 认,但路径比对不认。
   return expanded.replace(/(?<!^)\\{2,}/g, '\\');
 }
@@ -170,6 +170,11 @@ export type WindowsHandoffOptions = {
   exists?: (candidate: string) => boolean;
   /** 程序将要拿到的环境:壳里 `%VAR%` 按它展开。默认本进程的。 */
   env?: NodeJS.ProcessEnv;
+  /**
+   * 壳的 SET 读不全时:默认 null(调用方照旧起壳,设置一个不丢);`'drop'` = 仍交出程序、不带那份设置 ——
+   * 只给没有壳可退的调用方(Claude 的 ACP 适配器:不交出程序就起不来)。
+   */
+  unreadableEnv?: 'drop';
 };
 
 /** 绕过壳直接起的那个程序,以及壳本来会给它设的环境(叠在 spawn env 最上面;壳里的 SET 本来就最后执行)。 */
@@ -203,7 +208,9 @@ export function resolveWindowsHandoffLaunch(
 
   const match = CMD_SHIM_SINGLE_PROGRAM.exec(text);
   if (!match) return null;
-  const env = readShimEnv(text, shimPath, options.env ?? process.env);
+  // 只读程序行之前的:之后的(`if errorlevel 1 pause`、`set RC=%ERRORLEVEL%`)在程序退出后才执行,与它无关。
+  const env = readShimEnv(text.slice(0, match.index), shimPath, options.env ?? process.env)
+    ?? (options.unreadableEnv === 'drop' ? {} : null);
   if (!env) return null;
 
   const target = expandShimDirectory(match[1]!, shimPath);

@@ -242,6 +242,21 @@ describe('resolveWindowsHandoffLaunch:哪些壳能直接起 exe、要带上什�
     });
   });
 
+  it('键名跟程序环境走:base 是 `Path` 时,壳里 SET PATH 改的就是 `Path`,不另起一个键', () => {
+    expect(handoff(lines('@echo off', 'set "PATH=C:\\tools;%PATH%"', EXE_LINE), { Path: 'C:\\gugu\\node;C:\\Windows' }))
+      .toEqual({ program: EXE, env: { Path: 'C:\\tools;C:\\gugu\\node;C:\\Windows' } });
+  });
+
+  it('只读程序行之前的:之后的 IF / SET(`%ERRORLEVEL%` 不是环境变量)与程序无关', () => {
+    expect(handoff(lines('@echo off', 'set HTTPS_PROXY=http://127.0.0.1:7890', EXE_LINE, 'set RC=%ERRORLEVEL%', 'if errorlevel 1 pause')))
+      .toEqual({ program: EXE, env: { HTTPS_PROXY: 'http://127.0.0.1:7890' } });
+  });
+
+  it('`%~dp0%FOO%`:dp0 只吃自己,后面的 %FOO% 照常展开', () => {
+    expect(handoff(lines('@echo off', 'set CFG=%~dp0%SUB%\\cfg', EXE_LINE), { SUB: 'conf' }))
+      .toEqual({ program: EXE, env: { CFG: `${BIN}\\conf\\cfg` } });
+  });
+
   it('设得读不全就不直接起:引用了没定义的变量,或 SET 落在 IF / ELSE 里', () => {
     expect(handoff(lines('@echo off', 'set PROXY=%NOPE%', EXE_LINE))).toBeNull();
     expect(handoff(lines('@SETLOCAL', '@IF NOT DEFINED NODE_PATH (', '  @SET "NODE_PATH=%~dp0..\\x"', ') ELSE (', '  @SET "NODE_PATH=%NODE_PATH%;%~dp0..\\x"', ')', `@${EXE_LINE}`)))

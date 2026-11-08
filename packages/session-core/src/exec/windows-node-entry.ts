@@ -67,7 +67,8 @@ function windowsNormalize(p: string): string {
 
 /** 壳里的 `%dp0%` / `%~dp0` = 壳自己所在目录(带尾分隔符)。 */
 function expandShimDirectory(template: string, shimPath: string): string {
-  return template.replace(/%~?dp0%?/gi, `${windowsDirname(shimPath)}\\`);
+  // `%~dp0`(cmd 的参数修饰,没有收尾的 `%`)或变量 `%dp0%`;❌ `%~?dp0%?` —— 会把 `%~dp0%FOO%` 里 FOO 的开头 `%` 吃掉。
+  return template.replace(/%~dp0|%dp0%/gi, `${windowsDirname(shimPath)}\\`);
 }
 
 /**

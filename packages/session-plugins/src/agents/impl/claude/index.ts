@@ -103,7 +103,8 @@ const CLAUDE_ULTRACODE_SETTINGS = '{"ultracode":true}';
 function claudeLaunchForAdapter(cli: string, env: Record<string, string>): WindowsHandoffLaunch {
   // 壳在调 claude.exe 前设的变量(用户手写的 `set ANTHROPIC_BASE_URL=…`)随 env 交出,叠进适配器的环境,
   // SDK 起的 claude 照样拿得到 —— 与经壳起时一样。
-  const launch = resolveWindowsHandoffLaunch(cli, { env });
+  // 读不全的设置不挡启动(适配器这边没有壳可退):与从前一样交出 claude.exe,只是不带那份设置。
+  const launch = resolveWindowsHandoffLaunch(cli, { env, unreadableEnv: 'drop' });
   if (launch) return launch;
   throw new Error(
     `Claude Code 解析到的是一个 Windows 启动脚本(${cli}),而 ACP 适配器会直接 spawn 它 —— `
