@@ -2,7 +2,7 @@ import { Writable } from 'node:stream';
 import { createAcpWorkSlice } from './acp-work-slice';
 import { ClientSideConnection, ndJsonStream } from '@agentclientprotocol/sdk';
 import { decodePermissionRequest, decodeSessionUpdate } from '@gugu/session-core/acp';
-import type { SessionNotification } from '@agentclientprotocol/sdk';
+import type { RequestPermissionRequest, SessionNotification } from '@agentclientprotocol/sdk';
 import { createRequestActivity } from '@gugu/session-core/acp';
 import type {
   AcpAgentApi,
@@ -25,9 +25,25 @@ const LEGACY_SESSION_UPDATES = new Set([
   'compaction_summary_chunk', 'notice',
 ]);
 
+/** Reads every inbound frame and may raise session updates of its own: vendor facts the ACP client does not model. */
+export type AcpWireObserver = (message: Record<string, unknown>) => SessionNotification[];
+
+export type NativeAcpOptions = {
+  interruptAtToolBoundary?: boolean;
+  observeWire?: () => AcpWireObserver;
+  /** Do not offer the ACP client terminal: this harness runs its own commands (see the plugin for why). */
+  ownTerminal?: boolean;
+  /**
+   * Answers a vendor permission request that needs no person: Gugu's own tools, for a harness with no way to declare
+   * them approved up front (Claude's `allowedTools`, Codex's `default_tools_approval_mode`). Returns the option to select.
+   */
+  preApprove?: (request: RequestPermissionRequest) => string | undefined;
+};
+
 export function routeSessionUpdates(
   source: ReadableStream<Uint8Array>,
   deliver: (notification: SessionNotification) => void,
+  observeWire?: AcpWireObserver,
 ): ReadableStream<Uint8Array> {
   const decoder = new TextDecoder();
   const encoder = new TextEncoder();
@@ -35,6 +51,7 @@ export function routeSessionUpdates(
   const routeLine = (line: string): string | null => {
     let message: { method?: string; params?: SessionNotification };
     try { message = JSON.parse(line) as typeof message; } catch { return line; }
+    observeWire?.(message).forEach(deliver);
     const params = message.params;
     const update = params?.update as unknown as Record<string, unknown> | undefined;
     if (message.method !== 'session/update' || !params || !update) return line;
@@ -72,7 +89,7 @@ export function routeSessionUpdates(
   }));
 }
 
-export function connectStdioAcp(io: AcpProcessIo, toClient: AcpClientFactory, options: { interruptAtToolBoundary?: boolean } = {}): AcpAgentApi {
+export function connectStdioAcp(io: AcpProcessIo, toClient: AcpClientFactory, options: NativeAcpOptions = {}): AcpAgentApi {
   let client: ReturnType<AcpClientFactory>;
   let boundary: ReturnType<typeof createRequestActivity>;
   const deliver = (params: SessionNotification): void => {
@@ -83,12 +100,15 @@ export function connectStdioAcp(io: AcpProcessIo, toClient: AcpClientFactory, op
   };
   const stream = ndJsonStream(
     Writable.toWeb(io.stdin) as WritableStream<Uint8Array>,
-    routeSessionUpdates(nodeReadableToWeb(io.stdout), deliver),
+    routeSessionUpdates(nodeReadableToWeb(io.stdout), deliver, options.observeWire?.()),
   );
   new ClientSideConnection((agent) => {
     boundary = createRequestActivity(agent as ClientSideConnection, params => client.sessionEvent(params), options);
     client = toClient(boundary.agent);
-    return { ...client, sessionUpdate: () => { throw new Error('Session update bypassed ingress decoding'); }, requestPermission: params => client.requestPermission(decodePermissionRequest(params)) };
+    return { ...client, sessionUpdate: () => { throw new Error('Session update bypassed ingress decoding'); }, requestPermission: async params => {
+      const optionId = options.preApprove?.(params);
+      return optionId ? { outcome: { outcome: 'selected', optionId } } : client.requestPermission(decodePermissionRequest(params));
+    } };
   }, stream);
   const api = boundary!.agent;
   const initialize = api.initialize;
@@ -96,7 +116,7 @@ export function connectStdioAcp(io: AcpProcessIo, toClient: AcpClientFactory, op
   return new Proxy(api, { get(target, property) {
     if (property === 'initialize') return (params: Parameters<AcpAgentApi['initialize']>[0]) => initialize({
       ...params,
-      clientCapabilities: { ...params.clientCapabilities, _meta: {
+      clientCapabilities: { ...params.clientCapabilities, ...(options.ownTerminal ? { terminal: false } : {}), _meta: {
         ...params.clientCapabilities?._meta,
         jetbrains: { air: { version: 1, capabilities: ['nativeSubagentSessions', 'asyncTasks'] } },
       } },
@@ -156,7 +176,7 @@ export function nodeReadableToWeb(source: NodeJS.ReadableStream): ReadableStream
 
 export function createNativeAcpBehavior(
   buildSpawn: (ctx: AcpSpawnContext) => NativeAcpSpawnResult,
-  options: { interruptAtToolBoundary?: boolean } = {},
+  options: NativeAcpOptions = {},
 ): IAcpBehavior {
   return {
     buildSpawn: (ctx) => {

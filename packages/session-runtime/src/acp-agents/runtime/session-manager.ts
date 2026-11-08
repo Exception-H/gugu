@@ -1,4 +1,5 @@
 import type { SessionCommandDefinition } from '@gugu/session-core/acp';
+import { isAcpAuthRequired } from '@gugu/session-core/acp';
 import type { AcpPermissionParams } from '@gugu/session-core/agents/plugins';
 import { findToolImage, trimItemsForTransport, type ToolImageLookup } from '@gugu/session-core/session-record';
 import { randomUUID } from 'node:crypto';
@@ -1394,6 +1395,27 @@ export class SessionManager implements InboundRouter {
    * The provider's own reason travels in the error so the surface can show it verbatim and offer
    * the platform-model exit.
    */
+  /**
+   * A harness that publishes its model option after `session/new` (`catalogModelsInConfigUpdate`) is not ready for a
+   * model or a first prompt until then: Kiro waits 5s for its model registry and fails the turn past that (measured over
+   * a slow proxy, where the list took 7.6s). The bound only stops a harness that never publishes from holding the session
+   * shut; the session then opens and whatever is still wrong surfaces as that harness's own error on the first turn.
+   */
+  private async awaitLateModelDimension(record: SessionRecord, input: AcpStartInput): Promise<void> {
+    if (!this.deps.agentHost.resolveAcp(input.providerId)?.behavior.catalogModelsInConfigUpdate) return;
+    const deadline = Date.now() + LATE_MODEL_DIMENSION_WAIT_MS;
+    while (!record.cell.hasConfigTarget('model')) {
+      if (Date.now() >= deadline) {
+        this.deps.logger.warn('SessionManager: harness did not publish its model option in time', {
+          sessionId: input.sessionId,
+          providerId: input.providerId,
+        });
+        return;
+      }
+      await new Promise((resolve) => setTimeout(resolve, 100));
+    }
+  }
+
   private async applyInitialModel(
     record: SessionRecord,
     input: AcpStartInput,
@@ -1401,6 +1423,7 @@ export class SessionManager implements InboundRouter {
     /** provider 在 `session/new` / `session/load` 应答里报的那份目录,用来说出「现在跑的是什么」。 */
     providerConfigOptions?: readonly SessionConfigOption[] | null
   ): Promise<Result<StartupNotice | null, InvalidStateError | SetConfigFailedError>> {
+    await this.awaitLateModelDimension(record, input);
     record.startupSettingsSealed.add('model');
     const chosen = record.startupSettings.model;
     // 启动期间用户选过 ⇒ 断言他选的那个(渲染层递来的就是线上值,与活会话热切同一份)。
@@ -2954,10 +2977,12 @@ function sameQueuedPrompts(
   });
 }
 
+const LATE_MODEL_DIMENSION_WAIT_MS = 30_000;
+
 function isAuthRequiredError(error: unknown): boolean {
   if (typeof error !== 'object' || error === null) return false;
-  const value = error as { code?: unknown; cause?: unknown };
-  if (value.code === -32000) return true;
+  const value = error as { code?: unknown; data?: unknown; cause?: unknown };
+  if (isAcpAuthRequired(value)) return true;
   return isAuthRequiredError(value.cause);
 }
 
