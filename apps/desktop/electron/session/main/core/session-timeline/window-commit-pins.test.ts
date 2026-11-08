@@ -1,0 +1,110 @@
+import { afterEach, describe, expect, it, vi } from 'vitest';
+import { mkdtemp, open, readdir, rm, type FileHandle } from 'node:fs/promises';
+import { join } from 'node:path';
+import { tmpdir } from 'node:os';
+import { randomUUID } from 'node:crypto';
+import { createWindowBudget } from '@gugu/session-core/session-record/window-cache/read-budget';
+import { windowCommitSourcePath, writeWindowCommitSource } from './window-commit-source';
+import { openWindowCommitPins, type CommitVersion } from './window-commit-pins';
+import type { WindowCommitReceipt } from './window-commit-receipt';
+
+const paths: string[] = [];
+afterEach(async () => { vi.restoreAllMocks(); for (const path of paths.splice(0)) await rm(path, { recursive: true, force: true }); });
+async function fixture() {
+  const directory = await mkdtemp(join(tmpdir(), 'version-pin-')); paths.push(directory);
+  const receipts = new Map<string, WindowCommitReceipt>(), current = new Map<string, WindowCommitReceipt>();
+  let lockHeld = true, protectedIntent = false;
+  const input = { directory, proof: { namespace: directory, assertHeld() { if (!lockHeld) throw new Error('exclusive lock lost'); } },
+    receipts: { bySource: (id: string) => receipts.get(id) ?? null, byRow: (id: string) => current.get(id) ?? null },
+    async canCollect() { return !protectedIntent; } };
+  async function version(): Promise<CommitVersion> {
+    const sourceId = randomUUID(), binding = { scope: 'a'.repeat(64), sourceLineage: randomUUID().replaceAll('-', '').repeat(2), decoderVersion: 1 };
+    const source = await writeWindowCommitSource(directory, binding, '{"text":"正文"}');
+    const receipt: WindowCommitReceipt = { version: 1, sourceId, sessionId: 's', rowId: 's:0', referenceId: 'r', storedSeq: 0,
+      firstCommitCursor: null, latestRevisionCursor: { workerEpoch: 'w', storeEpoch: 's', sequence: receipts.size }, binding, source };
+    receipts.set(sourceId, receipt); return { receipt, projectionId: `${sourceId}/${'b'.repeat(32)}` };
+  }
+  return { directory, input, version, current, setLock: (value: boolean) => { lockHeld = value; }, protect: () => { protectedIntent = true; } };
+}
+
+describe('durable version pins under an exclusive gateway incarnation', () => {
+  it('retains duplicate resident references until both explicit releases, independently of any ACK', async () => {
+    const f = await fixture(), pins = await openWindowCommitPins(f.input), v = await f.version(), owner = {};
+    const release1 = await pins.acquire(owner, v, createWindowBudget()), release2 = await pins.acquire(owner, v, createWindowBudget());
+    expect(await pins.beginCollection(v, createWindowBudget())).toBe('pinned');
+    await release1(createWindowBudget()); await release1(createWindowBudget());
+    expect(await pins.beginCollection(v, createWindowBudget())).toBe('pinned');
+    await release2(createWindowBudget()); expect(await pins.beginCollection(v, createWindowBudget())).toBe('collecting');
+    await expect(pins.acquire(owner, v, createWindowBudget())).rejects.toMatchObject({ code: 'version_collecting' });
+  });
+
+  it('isolates owner replacement and closes at most one version per cleanup batch', async () => {
+    const f = await fixture(), pins = await openWindowCommitPins(f.input), first = await f.version(), second = await f.version();
+    const oldOwner = {}, newOwner = {};
+    const releaseOld = await pins.acquire(oldOwner, first, createWindowBudget());
+    await pins.acquire(newOwner, first, createWindowBudget()); await pins.acquire(oldOwner, second, createWindowBudget());
+    expect(await pins.releaseOwner(oldOwner, createWindowBudget())).toEqual({ complete: false });
+    expect(await pins.releaseOwner(oldOwner, createWindowBudget())).toEqual({ complete: true });
+    await releaseOld(createWindowBudget());
+    expect(await pins.beginCollection(first, createWindowBudget())).toBe('pinned');
+    expect(await pins.beginCollection(second, createWindowBudget())).toBe('collecting');
+    await expect(pins.acquire(oldOwner, first, createWindowBudget())).rejects.toMatchObject({ code: 'unsubscribed' });
+  });
+
+  it('requires a positive exclusive-lock proof before writing an epoch or recovering persisted pins', async () => {
+    const f = await fixture(); f.setLock(false);
+    await expect(openWindowCommitPins(f.input)).rejects.toThrow('exclusive lock lost'); expect(await readdir(f.directory)).toEqual([]);
+    f.setLock(true); const old = await openWindowCommitPins(f.input), v = await f.version();
+    const releaseOld = await old.acquire({}, v, createWindowBudget());
+    f.setLock(false); await expect(releaseOld(createWindowBudget())).rejects.toThrow('exclusive lock lost');
+    f.setLock(true); await expect(releaseOld(createWindowBudget())).rejects.toMatchObject({ code: 'gateway_invalidated' });
+    const reopened = await openWindowCommitPins(f.input);
+    expect(await reopened.beginCollection(v, createWindowBudget())).toBe('collecting');
+  });
+
+  it('never lets an old gateway disposer erase a new gateway owner, including concurrent queued operations', async () => {
+    const f = await fixture(), old = await openWindowCommitPins(f.input), v = await f.version();
+    const release = await old.acquire({}, v, createWindowBudget());
+    const current = await openWindowCommitPins(f.input);
+    const [newPin, oldRelease] = await Promise.allSettled([current.acquire({}, v, createWindowBudget()), release(createWindowBudget())]);
+    expect(newPin.status).toBe('fulfilled'); expect(oldRelease).toMatchObject({ status: 'rejected', reason: { code: 'gateway_epoch_changed' } });
+    expect(await current.beginCollection(v, createWindowBudget())).toBe('pinned');
+  });
+
+  it('rechecks lock ownership after an actual async head read, before querying a receipt or changing a pin', async () => {
+    const f = await fixture(), pins = await openWindowCommitPins(f.input), v = await f.version();
+    const file = await open(windowCommitSourcePath(f.directory, v.receipt.binding));
+    const proto = Object.getPrototypeOf(file) as FileHandle, original = proto.read; await file.close();
+    vi.spyOn(proto, 'read').mockImplementation((async function(this: FileHandle, target: Uint8Array, offset: number, length: number, position: number) {
+      const result = await Reflect.apply(original, this, [target, offset, length, position]); f.setLock(false); return result;
+    }) as typeof original);
+    const query = vi.spyOn(f.input.receipts, 'bySource'), budget = createWindowBudget();
+    await expect(pins.acquire({}, v, budget)).rejects.toThrow('exclusive lock lost');
+    expect(budget.counters.indexBytes).toBeGreaterThan(0); expect(query).not.toHaveBeenCalled(); vi.restoreAllMocks();
+    f.setLock(true); const restarted = await openWindowCommitPins(f.input);
+    expect(await restarted.beginCollection(v, createWindowBudget())).toBe('collecting');
+  });
+
+  it('protects current canonical versions, builds, and recovery intents without skipping an uncollectable version', async () => {
+    const f = await fixture(), pins = await openWindowCommitPins(f.input), v = await f.version();
+    f.current.set(v.receipt.rowId, v.receipt); expect(await pins.beginCollection(v, createWindowBudget())).toBe('current');
+    f.current.clear(); const release = await pins.holdBuild({}, v.receipt, createWindowBudget());
+    expect(await pins.beginCollection(v, createWindowBudget())).toBe('pinned'); await release(createWindowBudget());
+    f.protect(); expect(await pins.beginCollection(v, createWindowBudget())).toBe('protected');
+  });
+
+  it('leaves pins intact on an exhausted shared budget or pre-cancellation and resumes a durable collection claim', async () => {
+    const f = await fixture(), pins = await openWindowCommitPins(f.input), v = await f.version();
+    const release = await pins.acquire({}, v, createWindowBudget()), budget = createWindowBudget();
+    await budget.read('indexBytes', 65536, async () => 65536);
+    await expect(release(budget)).rejects.toThrow('budget exhausted');
+    const abort = new AbortController(); abort.abort();
+    await expect(pins.beginCollection(v, createWindowBudget(), abort.signal)).rejects.toMatchObject({ name: 'AbortError' });
+    expect(await pins.beginCollection(v, createWindowBudget())).toBe('pinned'); await release(createWindowBudget());
+    expect(await pins.beginCollection(v, createWindowBudget())).toBe('collecting');
+    const restarted = await openWindowCommitPins(f.input);
+    expect(await restarted.beginCollection(v, createWindowBudget())).toBe('collecting');
+    await restarted.finishCollection(v, createWindowBudget());
+    expect(await restarted.beginCollection(v, createWindowBudget())).toBe('collected');
+  });
+});
