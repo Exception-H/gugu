@@ -3,7 +3,7 @@ import { useTranslation } from 'react-i18next'
 import { formatAttachmentSize } from '@gugu/core/shared/ui/attachmentModels'
 import { resolveReplyDelivery } from '@gugu/core/shared/replyDelivery'
 import { ChatComposer, MessageProvider, type ComposerAttachment, type MentionItem, type PromptEditorRef } from '@gugu/session-ui/react/components'
-import { ThemeProvider } from '@gugu/session-ui/react/primitives'
+import { SessionUiTheme } from '@/components/sessionpage/SessionUiTheme'
 import { useLocale } from '@/i18n'
 import { focusComposer, registerComposerFocusTarget, scheduleComposerFocus } from '@/lib/focusComposer'
 import { useComposerEntryFocus } from '@/lib/composerEntryFocus'
@@ -205,7 +205,7 @@ export function ChatMessageComposer(props: ChatMessageComposerProps) {
   const editorOptions = { inputTestId: surface === 'aside' ? AUTOMATION_TEST_IDS.chatComposerAside : AUTOMATION_TEST_IDS.chatComposer,
     inputRef: receiveInput, clearOnSubmit: false, enterBehavior: mobile ? 'newline' as const : 'submit' as const, emptyHint: hint }
   const Composer = props.conversation ? AgentConversationComposer : ChatComposer
-  return <ThemeProvider theme={theme} target="documentElement">
+  return <SessionUiTheme theme={theme}>
     <MessageProvider locale={resolvedLocale} translate={translateSessionMessage}>
       <div {...hintEvents} title={disabledReason} data-chat-composer-host="" data-mobile-group={mobile && isGroupChat || undefined} data-phone-task={phoneTask.active || undefined} data-sending={sending} hidden={hidden || takenOver}>
         <input ref={fileInputRef} type="file" multiple hidden onChange={(event) => { enqueueFiles(Array.from(event.target.files ?? [])); event.target.value = '' }} />
@@ -240,5 +240,5 @@ export function ChatMessageComposer(props: ChatMessageComposerProps) {
         ]} />}
       </div>
     </MessageProvider>
-  </ThemeProvider>
+  </SessionUiTheme>
 }
