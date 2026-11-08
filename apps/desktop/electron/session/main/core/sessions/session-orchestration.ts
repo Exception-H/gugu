@@ -1,5 +1,6 @@
 import { requireAgentFileAccess } from '@gugu/core/local/state/agentFileBoundary';
 import { taskName, taskNameFor } from './task-name';
+import { sessionHostLocale } from '@main/core/host-locale';
 import { assistantWorkIntentSchema,type AssistantWorkIntent } from '@gugu/core/shared/assistantWorkIntent';
 import { SessionArchivedError } from '@gugu/core/shared/sessionArchival';
 import { assistantWorkLedgerContext } from '../../../../sessionpage/assistant-work-ledger';
@@ -1226,6 +1227,12 @@ async function newSessionMemory(): Promise<NewSessionMemory> {
  * agents listed here on the remembered shape's leg and which are installed. Nothing usable here: said, as the box's
  * empty state.
  */
+// Read by the person the App is working for, not an agent: what to do next, in the product's words and their language.
+const NO_AGENT_INSTALLED: Record<string, string> = {
+  'zh-CN': '这台电脑上还没有装 agent。先在「新建任务」里装一个，再试一次。',
+  'en-US': 'No agent is installed on this computer yet. Install one from New task, then try again.',
+};
+
 async function newSessionEngine(memory: NewSessionMemory): Promise<AgentProviderId> {
   const [{ agentsController }, { appSettingsService }] = await Promise.all([
     import('@main/core/agents/controller'),
@@ -1250,8 +1257,7 @@ async function newSessionEngine(memory: NewSessionMemory): Promise<AgentProvider
     availabilityKnown: true,
   });
   if (!selection.providerId || selection.createDisabled) {
-    // Read by the person the App is working for, not an agent: what to do next, in the product's words.
-    throw new Error('No agent is installed on this computer yet. Install one from New task, then try again.');
+    throw new Error(NO_AGENT_INSTALLED[sessionHostLocale()] ?? NO_AGENT_INSTALLED['en-US']);
   }
   return selection.providerId;
 }
