@@ -76,6 +76,7 @@ const STRINGS = {
     noWorkspace: '这里没有文件。在聊天或任务里打开「文件」，或者从聊天里的文件「用文件打开」。',
     noFiles: '{folder}还是空的。',
     folderEmpty: '这个文件夹还是空的。',
+    listing: '正在读取…',
     noMatch: '没有文件名含「{q}」的文件。',
     denied: '这个 App 没有读取{folder}的权限。',
     openWith: '用别的 App 打开',
@@ -308,6 +309,7 @@ const STRINGS = {
     noWorkspace: 'There are no files here. Open Files in a chat or task, or use it to open a file from a chat.',
     noFiles: 'No files here yet.',
     folderEmpty: 'This folder is empty.',
+    listing: 'Loading…',
     noMatch: 'No file name contains “{q}”.',
     denied: 'This App may not read this folder.',
     openWith: 'Open with another App',
@@ -770,8 +772,10 @@ function renderChrome() {
 // the 36 at its top): the folder on screen — the top with 「附件」, at once — and each folder again as it is entered.
 async function refreshList(readPreferences = false) {
   if (!state.root || !canRead()) return showList()
+  // Drawn as it is asked: a folder not read yet says so (renderList) until its answer is drawn.
+  const asked = inWorkspace() ? null : (state.listing = { heard: [] })
+  renderList()
   if (inWorkspace()) return listDownTo(state.folder ?? '')
-  const asked = (state.listing = { heard: [] })
   // A folder this page was left in (its view state) that no read has named: the whole tree, for the way up to it.
   const far = state.folder && !state.entries.some((e) => e.id === state.folder)
   // The whole tree read before is from before now: the next search reads it again (what it holds is shown meanwhile).
@@ -1077,6 +1081,15 @@ function renderList() {
     .filter((e) => !needle || e.name.toLocaleLowerCase().includes(needle) || shownName(e).toLocaleLowerCase().includes(needle))
   const ofKind = (state.ofKind = shown.filter((e) => !isFolder(e) && (state.kind === 'all' || kindOf(e) === state.kind)))
   renderTools()
+  // A folder not read yet, nothing of it known, is not empty: it says it is being read until its answer is drawn (what is
+  // picked in it waits for that answer too).
+  if (!shown.length && !state.listError && !state.listed.has(state.folder ?? '')) {
+    list.replaceChildren()
+    $('empty-upload').hidden = true
+    empty.hidden = $('files-empty-progress').hidden = false
+    $('files-empty-message').textContent = t.listing
+    return
+  }
   const filtering = Object.values(state.filters).some(Boolean)
   const folders = state.kind === 'all' && !filtering ? shown.filter(isFolder).sort(folderOrder) : []
   const files = ofKind.filter((e) => matches(e, state.filters, machineOf, now)).sort(comparer(state.sort, shownName, changedAt, state.ctx?.locale))
@@ -1125,6 +1138,7 @@ function renderList() {
   }
   const count = folders.length + files.length
   empty.hidden = count > 0
+  $('files-empty-progress').hidden = true
   $('files-empty-message').textContent = state.listError
     ?? (needle ? fmt(t.noMatch, { q: state.filter.trim() }) : filtering && ofKind.length ? t.noFiltered
       : state.kind !== 'all' && shown.length ? t.noKind : state.folder ? t.folderEmpty : t.noFiles)

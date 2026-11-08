@@ -219,6 +219,7 @@ img.details-picture { object-fit: contain; }
 .file[data-git='renamed'] .file-name { color: var(--em-foreground-muted); }
 .transfer { padding: var(--em-spacing-xs) var(--em-spacing-sm); border-top: 1px solid var(--em-border); font-size: var(--em-font-caption); color: var(--em-foreground-muted); }
 .transfer[hidden] { display: none; }
+#files-empty-progress { width: 160px; }
 .transfer-row { display: flex; align-items: center; gap: var(--em-spacing-sm); }
 .transfer-row span { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .file-path { font-size: var(--em-font-caption); color: var(--em-foreground-muted); }
