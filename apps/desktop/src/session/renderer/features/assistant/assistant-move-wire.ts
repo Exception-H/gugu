@@ -372,8 +372,10 @@ export function buildMoveDeps(
       },
       async adopt() {
         // An order aimed at the cloud home is the manager's own and it retries that order itself; any other would block this move.
+        // Without a device id or a definite "none" the two cannot be told apart, so nothing is cancelled.
         const open = await openAdoption(env);
-        if (open && open.device_id !== (await refreshCloudComputer())?.deviceId) await cancelAdoption(env, open.operation_id);
+        const cloud = open ? await refreshCloudComputer() : null;
+        if (open && cloud && (cloud.deviceId || cloud.state === 'none') && open.device_id !== cloud.deviceId) await cancelAdoption(env, open.operation_id);
         try {
           await provisionCloudComputer({ assistant: { existingAgentUserId: env.assistantId } });
         } catch (error) {

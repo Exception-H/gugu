@@ -178,6 +178,22 @@ describe('moving to the cloud while another order is open', () => {
     await expect(toCloud()).rejects.toThrow('still creating');
     expect(server.provisionCloud).not.toHaveBeenCalled();
   });
+  it('cancels an order aimed at a computer when no cloud home exists', async () => {
+    open('elsewhere', 'error');
+    vi.mocked(refreshCloudComputer).mockResolvedValue({ state: 'none', deviceId: null } as never);
+    await expect(toCloud()).rejects.toThrow('stop after the order check');
+    expect(server.cancels).toEqual(['open-op']);
+  });
+  it.each([
+    ['the cloud state cannot be read', null],
+    ['the cloud home has no device id yet', { state: 'provisioning', deviceId: null }],
+  ])('cancels nothing while %s', async (_name, snapshot) => {
+    open('cloud', 'error');
+    vi.mocked(refreshCloudComputer).mockResolvedValue(snapshot as never);
+    await expect(toCloud()).rejects.toThrow('stop after the order check');
+    expect(server.cancels).toEqual([]);
+    expect(server.provisionCloud).toHaveBeenCalled();
+  });
   it('leaves the manager\'s own order for the manager to retry', async () => {
     open('cloud', 'error');
     await expect(toCloud()).rejects.toThrow('stop after the order check');
