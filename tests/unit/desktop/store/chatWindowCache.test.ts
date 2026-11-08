@@ -7,7 +7,8 @@ const row = (seq: number) => message({ id: `m-${seq}`, chat_id: 'chat', seq, is_
 describe('cached scoped history ownership', () => {
   it('opens a conversation with the read positions it already holds, and the network read only moves them forward', () => {
     const held: Record<string, Record<string, number>> = { chat: { 'u-b': 9, 'u-c': 2, 'u-left': 4 } }
-    const cache = new ChatWindowCache('me', (chatId) => held[chatId])
+    const cache = new ChatWindowCache('me')
+    cache.readSeqsOf = (chatId) => held[chatId]
     expect(cache.view('chat', {}).memberReadSeqs).toEqual({ 'u-b': 9, 'u-c': 2, 'u-left': 4 })
     expect(cache.view('other').memberReadSeqs).toEqual({})
     const stop = cache.subscribe('chat', () => undefined)

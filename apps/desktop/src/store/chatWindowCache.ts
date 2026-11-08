@@ -16,8 +16,9 @@ type Listener = (rows: MessageItem[]) => void
 
 /** Account data and receipts are shared; each presenter owns its history range and navigation. */
 export class ChatWindowCache extends Map<string, MessageItem[]> {
-  /** `readSeqsOf` = read positions the account already holds, so a newly opened conversation paints its receipts in its first frame. */
-  constructor(private readonly accountId: string | null = null, private readonly readSeqsOf: (chatId: string) => Record<string, number> | undefined = () => undefined) { super() }
+  constructor(private readonly accountId: string | null = null) { super() }
+  /** Read positions the account already holds, so a newly opened conversation paints its receipts in its first frame. */
+  readSeqsOf: (chatId: string) => Record<string, number> | undefined = () => undefined
   private readonly histories = new Map<string, { window: ChatHistoryWindow; stop: () => void; stopReading?: () => void; receipts: Set<string>; view: ConversationSnapshot }>()
   private readonly listeners = new Map<string, Map<Listener, ConversationViewport>>()
   override set(chatId: string, rows: MessageItem[]): this {

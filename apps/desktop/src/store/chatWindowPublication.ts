@@ -13,8 +13,8 @@ import { messageWindow, setMessageWindow } from '../lib/messageWindows'
 import { ChatWindowCache } from './chatWindowCache'
 import type { ChatHistoryWindow, FetchHistoryPage } from './chatHistoryWindow'
 
-export function useChatWindowCache(accountId?: string | null, readSeqsOf?: (chatId: string) => Record<string, number> | undefined) {
-  const cache = useMemo(() => new ChatWindowCache(accountId, readSeqsOf), [accountId, readSeqsOf])
+export function useChatWindowCache(accountId?: string | null) {
+  const cache = useMemo(() => new ChatWindowCache(accountId), [accountId])
   return { cache, subscribeChatWindow: cache.subscribe }
 }
 

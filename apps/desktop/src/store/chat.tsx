@@ -81,8 +81,7 @@ export function ChatProvider({ children, active = true }: { children: React.Reac
   const activeThreadRootIdRef = useRef<string | null>(null)
 
   // Account facts/read ownership are shared; history and navigation belong to each presenter.
-  const readSeqsOfRef = useRef<(chatId: string) => Record<string, number> | undefined>(() => undefined)
-  const { cache } = useChatWindowCache(userId, useCallback((chatId: string) => readSeqsOfRef.current(chatId), []))
+  const { cache } = useChatWindowCache(userId)
   const startConversationRef = useRef<(chatId: string) => () => void>(() => () => undefined)
   const subscribeChatWindow = useCallback<ChatConversationAccess['subscribe']>((chatId, listener, viewport) =>
     cache.subscribe(chatId, listener, () => startConversationRef.current(chatId), viewport), [cache])
@@ -288,11 +287,10 @@ export function ChatProvider({ children, active = true }: { children: React.Reac
   // @@@chat-projection — 会话列表的每一发云端取数都经投影(spec I7 唯一属主):按键取数、按戳 join,
   // 一条通知的代价与账号里有多少会话无关。绑定的三件事在 chatProjectionBinding.ts。
   const chatProjection = useChatProjectionBinding({
-    ledger: projectionRef.current, repositoryRef: imRepositoryRef, getRepository: getImRepository,
+    ledger: projectionRef.current, repositoryRef: imRepositoryRef, getRepository: getImRepository, conversations: cache,
     chatsRef, activeChatIdRef, requestSeqRef: listRequestSeqRef, setChats, onActiveRevoked, canAcknowledge: canAcknowledgeOpenChat, visibleSeqOf: visibleSeqOfChat,
     notifications: { chatMessages: notificationSettings.chatMessages, sound: notificationSettings.sound },
   })
-  readSeqsOfRef.current = (chatId) => userId ? chatProjection.memberReadSeqs(userId, chatId) : undefined
 
   const loadChats = useChatListRefresh(userId, chatProjection, chatsRef, listRequestSeqRef, setChatsLoad, catchupPriority)
 

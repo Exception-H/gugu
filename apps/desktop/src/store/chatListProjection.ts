@@ -15,6 +15,7 @@ import {
   type ChatProjection, type ChatProjectionAttachment,
 } from '../lib/chatProjection'
 import { shareRows } from '../lib/chatProjectionAlgebra'
+import type { ChatWindowCache } from './chatWindowCache'
 
 // @@@selection-is-intent (#4314) — 一次刷新没提到某条会话，含义取决于这一发相对「最后一次看见它」有多新：
 // 刚 open_dm 出来的会话还没被任何一发投影过，对它的沉默是仪器还没读到、不是阴性读数。契约见 [[conversation-data]]。
@@ -157,6 +158,8 @@ export function useChatProjectionBinding(deps: {
   setChats: (rows: ChatItem[]) => void
   /** 当前选中被权威地撤销了 —— store 自己决定怎么清空那一侧的状态。 */
   onActiveRevoked: (chatId: string) => void
+  /** Conversations opened later start from the member read positions this projection already holds. */
+  conversations: Pick<ChatWindowCache, 'readSeqsOf'>
 }) {
   const { ledger, repositoryRef, getRepository, chatsRef, activeChatIdRef, requestSeqRef, setChats, onActiveRevoked, canAcknowledge, visibleSeqOf } = deps
   const ownerRef = useRef<{ accountId: string; owner: ChatProjection } | null>(null)
@@ -235,7 +238,7 @@ export function useChatProjectionBinding(deps: {
     chats.some(chat => ownerFor(accountId).isConversationDeleted(chat.id)), [ownerFor])
 
   const identities = useCallback((accountId: string) => ownerFor(accountId).identities(), [ownerFor])
-  const memberReadSeqs = useCallback((accountId: string, chatId: string) => ownerFor(accountId).memberReadSeqs(chatId), [ownerFor])
+  deps.conversations.readSeqsOf = (chatId) => ownerRef.current?.owner.memberReadSeqs(chatId)
 
   const confirmPersonalDeletion = useCallback(async (accountId: string, receipt: PersonalConversationDeletion): Promise<boolean> => {
     const binding = ownerRef.current
@@ -263,5 +266,5 @@ export function useChatProjectionBinding(deps: {
 
   // ⚠️ 必须**稳定**:返回新字面量 ⇒ 依赖它的 effect 与 useCallback 每渲染都重建 ⇒ 订阅/渲染循环
   // (实测:第一版返回字面量,chatSelectionIntent4314 直接跑到 heap OOM)。
-  return useMemo(() => ({ hydrate, identities, memberReadSeqs, publish, attach, hasDeletedConversation, confirmPersonalDeletion }), [hydrate, identities, memberReadSeqs, publish, attach, hasDeletedConversation, confirmPersonalDeletion])
+  return useMemo(() => ({ hydrate, identities, publish, attach, hasDeletedConversation, confirmPersonalDeletion }), [hydrate, identities, publish, attach, hasDeletedConversation, confirmPersonalDeletion])
 }
