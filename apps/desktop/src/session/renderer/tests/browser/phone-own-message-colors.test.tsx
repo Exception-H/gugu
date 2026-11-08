@@ -1,4 +1,5 @@
-import { createChatContext, createChatState } from '@gugu/session-chat-ui';
+import { createChatContext, createChatState, type ChatMessage } from '@gugu/session-chat-ui';
+import { act } from 'react';
 import { createRoot } from 'react-dom/client';
 import { afterEach, expect, it } from 'vitest';
 import { page } from 'vitest/browser';
@@ -9,6 +10,7 @@ import { until } from '../../../../../../../tests/support/awaitCondition';
 import '@/styles/tokens.css';
 import '@renderer/index.css';
 import '@/mobile/phone-look.css';
+import '@/components/assistant/assistant-task-chat.css';
 
 const cleanups: (() => void)[] = [];
 const oldTheme = document.documentElement.dataset.theme;
@@ -20,7 +22,7 @@ afterEach(() => {
   else delete document.documentElement.dataset.theme;
 });
 
-it.each(['light', 'dark'] as const)('keeps a phone own message readable inside the scoped %s session theme', async theme => {
+it.each(['light', 'dark'].flatMap(theme => ['conversation', 'task'].map(surface => ({ theme: theme as 'light' | 'dark', surface }))))('keeps a phone $surface own message readable inside the scoped $theme session theme', async ({ theme, surface }) => {
   await page.viewport(390, 780);
   document.documentElement.dataset.theme = theme;
   document.documentElement.classList.remove('emlight', 'emdark');
@@ -39,17 +41,19 @@ it.each(['light', 'dark'] as const)('keeps a phone own message readable inside t
   const context = createChatContext({ locale: () => 'zh-CN', mentionProvider: workspaceFileMentionProvider,
     layout: { preset: 'double', agentConversation: true, userGutter: 0 } });
   const state = createChatState(context);
-  state.transcript.history.seed([{ id: 'owner-input', seq: 1, initiator: 'user', outcome: { kind: 'done' },
-    items: [{ kind: 'message', id: 'own-email', seq: 0, role: 'user',
-      text: '请检查这个构造邮箱：someone@example.com', sentTo: { kind: 'session', count: 1 } }] }]);
-  const root = createRoot(shell);
-  cleanups.push(() => { root.unmount(); state.dispose(); context.dispose(); host.remove(); });
-  root.render(<SessionUiTheme theme={theme}><AgentConversationView context={context} state={state} /></SessionUiTheme>);
+  const message = { kind: 'message', id: 'own-email', seq: 0, role: 'user',
+    text: '请检查这个构造邮箱：someone@example.com', sentTo: { kind: 'session', count: 1 } } satisfies ChatMessage;
+  state.transcript.history.seed([{ id: 'owner-input', seq: 1, initiator: 'user', outcome: { kind: 'done' }, items: [message] }]);
+  const mount = surface === 'task' ? shell.appendChild(document.createElement('section')) : shell;
+  if (surface === 'task') mount.className = 'assistant-task-chat-window';
+  const root = createRoot(mount);
+  cleanups.push(() => { act(() => root.unmount()); state.dispose(); context.dispose(); host.remove(); });
+  await act(async () => { root.render(<SessionUiTheme theme={theme}><AgentConversationView context={context} state={state} /></SessionUiTheme>); });
   await until('actual message body and destination render', () => !!shell.querySelector('[data-user-card] .gg-md p') && !!shell.querySelector('[data-slot="sent-to"]'));
   const card = shell.querySelector<HTMLElement>('[data-user-card]')!;
   const text = card.querySelector<HTMLElement>('.gg-md p')!;
   const phase = import.meta.env.VITE_OWNER_CAPTURE_PHASE;
-  if (phase) await page.screenshot({ element: host, path: `__screenshots__/owner-2245-${phase}-${theme}.png` });
+  if (phase) await page.screenshot({ element: host, path: `__screenshots__/owner-2245-${phase}-${surface}-${theme}.png` });
   expect(document.documentElement.classList.contains(`em${theme}`)).toBe(false);
   expect(getComputedStyle(shell).getPropertyValue('--foreground')).toBe('');
   expect(getComputedStyle(text).color).toBe(getComputedStyle(reference).color);
