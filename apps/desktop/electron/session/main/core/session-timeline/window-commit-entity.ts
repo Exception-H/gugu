@@ -16,6 +16,7 @@ export type CommitEntityState = { version: 1; sourceId: string; buildId: string;
 export type CommitEntityFacts = Readonly<{ sourceId: string; rowId: string; turnId: string; entity: Entity; id: string; kind: string;
   children?: Range; slots: readonly Readonly<{ field: Field; range: Range }>[] }>;
 const anchors = new WeakSet<CommitArrayAnchor>(), entities = new WeakSet<CommitEntityFacts>();
+export const isIssuedCommitEntityFacts = (facts: CommitEntityFacts) => entities.has(facts);
 type Context = { directory: string; receipt: WindowCommitReceipt; index: CommitContainerIndex };
 const positions = new WeakMap<CommitEntityPosition, Context>();
 const fields: readonly Field[] = ['text', 'outputText', 'rawOutput', 'rawInput', 'output'];
