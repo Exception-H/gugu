@@ -7,10 +7,11 @@ import { SentMessageSurface, widgetTabId } from '../../../../apps/desktop/src/co
 import { offerSentMessageSlot } from '../../../../apps/desktop/src/components/chat/sentMessageSlots'
 import { SentMessageBodyHost } from '../../../../apps/desktop/src/components/chat/SentMessageBodyHost'
 
-const open = vi.hoisted(() => ({ file: vi.fn() }))
+const open = vi.hoisted(() => ({ file: vi.fn(), draws: 0 }))
 vi.mock('@/components/chat/MessageBody', () => ({
   MessageBody: function Body({ message, onOpenWorkspaceFile }: { message: MessageItem; onOpenWorkspaceFile: (link: unknown) => void }) {
     const inTimeline = useContext(SentMessageSurface)
+    open.draws++
     open.file = onOpenWorkspaceFile as typeof open.file
     return <p data-tab={widgetTabId(message.id, inTimeline)}>{message.content}</p>
   },
@@ -41,6 +42,20 @@ it('draws one message offered twice in both slots, and takes back only the slot 
   expect(first.textContent).toBe(''); expect(second.textContent).toBe('said')
   await act(async () => takeSecond())
   expect(second.textContent).toBe('')
+})
+
+it('draws only the slot that arrived: a row entering the list does not redraw the others', async () => {
+  harness = createReactHarness(); await harness.render(<SentMessageBodyHost />)
+  const commands = {}
+  const takes: (() => void)[] = []
+  await act(async () => { takes.push(offerSentMessageSlot(slotOf(root(), vi.fn(), commands))) })
+  open.draws = 0
+  await act(async () => { takes.push(offerSentMessageSlot(slotOf(root(), vi.fn(), commands))) })
+  expect(open.draws).toBe(1)
+  open.draws = 0
+  await act(async () => takes[1]())
+  expect(open.draws).toBe(0)
+  await act(async () => takes[0]())
 })
 
 it('names a widget tab per surface, the same each time its row comes back', async () => {
