@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { TerminalManagerStore } from './terminal-manager';
 
 const createTerminal = vi.hoisted(() => vi.fn());
@@ -60,6 +60,9 @@ vi.mock('@renderer/features/sessions/acp/acp-chat-panel', () => ({
   AcpChatPanel: () => null,
 }));
 
+const newTerminal = (store: TerminalManagerStore) =>
+  store.createTerminal({ id: 'terminal-1', projectId: 'project-1', sessionId: 'session-1', name: 'Terminal 1' });
+
 describe('TerminalManagerStore session hydration', () => {
   beforeEach(() => {
     createTerminal.mockReset();
@@ -69,6 +72,7 @@ describe('TerminalManagerStore session hydration', () => {
     deleteTerminal.mockReset();
     frontendConnect.mockReset();
     frontendDispose.mockReset();
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
     getAppSettingValueSnapshot.mockReset();
 
     createTerminal.mockImplementation(async (terminal) => terminal);
@@ -78,6 +82,10 @@ describe('TerminalManagerStore session hydration', () => {
     deleteTerminal.mockResolvedValue(undefined);
     frontendConnect.mockResolvedValue(undefined);
     getAppSettingValueSnapshot.mockReturnValue(undefined);
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
   });
 
   it('creates terminal sessions from records without hydrating until the session connects', async () => {
@@ -136,15 +144,57 @@ describe('TerminalManagerStore session hydration', () => {
     });
     const store = new TerminalManagerStore('project-1', 'session-1');
 
-    const promise = store.createTerminal({
-      id: 'terminal-1',
-      projectId: 'project-1',
-      sessionId: 'session-1',
-      name: 'Terminal 1',
-    });
+    const { created } = newTerminal(store);
 
     expect(store.terminals.get('terminal-1')?.data.shellId).toBe('fish');
-    await promise;
+    vi.advanceTimersByTime(1500);
+    await created;
+    store.dispose();
+  });
+
+  it('starts the shell at the grid the tab measured, and not before', async () => {
+    const store = new TerminalManagerStore('project-1', 'session-1');
+    const { created } = newTerminal(store);
+    const session = store.sessions.get('terminal-1')!;
+
+    await session.connect();
+    expect(hydrateTerminal).not.toHaveBeenCalled();
+    expect(createTerminal).not.toHaveBeenCalled();
+
+    (session.pty as unknown as { onGridMeasured(dims: object): void }).onGridMeasured({ cols: 61, rows: 40 });
+    (session.pty as unknown as { onGridMeasured(dims: object): void }).onGridMeasured({ cols: 99, rows: 9 });
+    await created;
+
+    expect(createTerminal).toHaveBeenCalledExactlyOnceWith(expect.objectContaining({ id: 'terminal-1', initialSize: { cols: 61, rows: 40 } }));
+    store.dispose();
+  });
+
+  it('still starts the shell when no grid is ever measured', async () => {
+    const store = new TerminalManagerStore('project-1', 'session-1');
+    const { created } = newTerminal(store);
+    vi.advanceTimersByTime(1500);
+    await created;
+    expect(createTerminal).toHaveBeenCalledExactlyOnceWith(expect.not.objectContaining({ initialSize: expect.anything() }));
+    store.dispose();
+  });
+
+  it('closed while starting: the shell is ended, never left running', async () => {
+    const store = new TerminalManagerStore('project-1', 'session-1');
+    const { created } = newTerminal(store);
+    await store.deleteTerminal('terminal-1');
+    expect(await created).toBeUndefined();
+    expect(createTerminal).not.toHaveBeenCalled();
+    expect(deleteTerminal).toHaveBeenCalledOnce();
+    store.dispose();
+  });
+
+  it('a failed start takes the terminal back out and reports it', async () => {
+    createTerminal.mockRejectedValue(new Error('no shell'));
+    const store = new TerminalManagerStore('project-1', 'session-1');
+    const { created } = newTerminal(store);
+    vi.advanceTimersByTime(1500);
+    await expect(created).rejects.toThrow('no shell');
+    expect(store.terminals.has('terminal-1')).toBe(false);
     store.dispose();
   });
 });
