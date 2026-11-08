@@ -50,16 +50,13 @@ describe('extension data folder (#6387)', () => {
 });
 
 describe('folderBytes', () => {
-  it('counts files at every depth, leaves out what it is told to, and a folder that is not there is none', async () => {
+  it('counts files at every depth, and a folder that is not there is none', async () => {
     const root = fs.mkdtempSync(path.join(os.tmpdir(), 'folder-bytes-'));
     try {
       fs.mkdirSync(path.join(root, 'a/b'), { recursive: true });
-      fs.mkdirSync(path.join(root, 'Cache'));
       fs.writeFileSync(path.join(root, 'one'), '123');
       fs.writeFileSync(path.join(root, 'a/b/two'), '45');
-      fs.writeFileSync(path.join(root, 'Cache/three'), '6789');
-      expect(await folderBytes(root)).toBe(9);
-      expect(await folderBytes(root, new Set(['Cache']))).toBe(5);
+      expect(await folderBytes(root)).toBe(5);
       expect(await folderBytes(path.join(root, 'nothing'))).toBe(0);
     } finally {
       fs.rmSync(root, { recursive: true, force: true });

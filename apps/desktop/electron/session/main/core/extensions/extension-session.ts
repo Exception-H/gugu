@@ -1,3 +1,4 @@
+import * as path from 'node:path';
 import { folderBytes } from '@main/core/extensions/extension-data';
 import { session, webContents, type Session } from 'electron';
 import { log } from '@main/lib/logger';
@@ -143,13 +144,15 @@ export async function clearExtensionSessionData(extensionId: string): Promise<vo
   await ses.clearCache();
 }
 
-/** Chromium's disposable caches in a session's folder: not what an App saved. */
-const SESSION_CACHES: ReadonlySet<string> = new Set(['Cache', 'Code Cache', 'GPUCache', 'DawnGraphiteCache', 'DawnWebGPUCache', 'Shared Dictionary', 'Dictionaries', 'blob_storage']);
+/** Where a session's folder holds what a page saved. The rest is Chromium's own (caches, quota and network state), and clearing makes that grow. */
+const SESSION_SAVED = ['Local Storage', 'IndexedDB', 'File System'];
 
 /** What an App keeps in browser storage (localStorage, IndexedDB and the like), in bytes. */
 export async function extensionSessionBytes(extensionId: string): Promise<number> {
   const folder = (configured.get(extensionId)?.session ?? session.fromPartition(extensionPartition(extensionId))).getStoragePath();
-  return folder ? folderBytes(folder, SESSION_CACHES) : 0;
+  if (!folder) return 0;
+  const sizes = await Promise.all(SESSION_SAVED.map((name) => folderBytes(path.join(folder, name))));
+  return sizes.reduce((total, size) => total + size, 0);
 }
 
 /**

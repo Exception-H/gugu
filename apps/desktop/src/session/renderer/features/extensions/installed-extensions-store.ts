@@ -187,7 +187,10 @@ export class InstalledExtensionsStore {
    * it can be pinned. A page per task is in many places at once, so it has no one place for the rail to go to.
    */
   mainTabOf(extensionId: string): ExtensionTabContributionEntry | null {
-    return this.allTabContributions.find((entry) => entry.extensionId === extensionId && !entry.forFiles && !entry.perSession && !entry.hidden) ?? null;
+    const pages = this.allTabContributions.filter((entry) => entry.extensionId === extensionId && !entry.forFiles && !entry.perSession);
+    // A card is the main page only of an App with nothing else (Data Lens): hiding an App's page never makes its card the page.
+    const own = pages.filter((entry) => entry.ownPage);
+    return (own.length > 0 ? own : pages).find((entry) => !entry.hidden) ?? null;
   }
 
   /** What the rail shows: the pinned Apps that are installed, on, and have a page of their own, in the person's order. */

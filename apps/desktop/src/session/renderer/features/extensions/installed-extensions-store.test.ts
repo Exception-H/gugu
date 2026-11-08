@@ -96,6 +96,9 @@ describe('which Apps are a task session tab (L6-8, 摩擦单 F3 / F95 / F98)', (
     // Only those lists: a published App keeps its place on the rail and what an open with no tab reaches.
     expect(store.mainTabOf('lens')?.kind).toBe('lens.card');
     expect(store.residentTabContributions.map((entry) => entry.kind)).toContain('board.fleet');
+    // Its one page taken out of the menus: the App leaves the rail, not its card taking the page's place.
+    store.applyHiddenTabs({ board: ['board'] });
+    expect(store.mainTabOf('board')).toBeNull();
   });
 
   it('a page taken out of the menus: the next one is the App\'s main page; with none left the App leaves the rail', async () => {
