@@ -521,7 +521,7 @@ export default {
       "setActive": "改为主动",
       "setPassive": "改为被动",
       "loadFailed": "成员名单没加载出来。关掉再打开一次 👥 试试。",
-      "notParticipant": "你还不是这条话题的参与者，所以看不到成员名单。在里面说一句就进来了。",
+      "notParticipant": "暂时看不到这条话题的成员",
       "sectionAgents": "Agent",
       "sectionPeople": "人",
       "myAgents": "我的 agent · {{count}}",
@@ -848,6 +848,8 @@ export default {
   },
   "topic": {
     "leave": "退出话题",
+    "leaveHint": "你仍可阅读，只是不再收到这个话题的通知",
+    "removeHint": "对方仍可阅读，只是不再收到这个话题的通知",
     "calledYou": "有人 @ 你",
     "pins": {
       "pin": "将“{{name}}”置顶到主群",

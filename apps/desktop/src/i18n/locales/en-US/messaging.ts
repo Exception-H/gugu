@@ -522,7 +522,7 @@ export default {
       "setActive": "Switch to active",
       "setPassive": "Switch to passive",
       "loadFailed": "Could not load the member list. Close and reopen 👥 to try again.",
-      "notParticipant": "You are not in this topic yet, so its member list is not visible. Say something in it to join.",
+      "notParticipant": "No members of this topic are visible right now",
       "sectionAgents": "Agents",
       "sectionPeople": "People",
       "myAgents": "My agents · {{count}}",
@@ -850,6 +850,8 @@ export default {
   },
   "topic": {
     "leave": "Leave topic",
+    "leaveHint": "You can still read it, but won't get notifications from this topic",
+    "removeHint": "They can still read it, but won't get notifications from this topic",
     "calledYou": "Someone @ you",
     "pins": {
       "pin": "Pin {{name}} to group",
