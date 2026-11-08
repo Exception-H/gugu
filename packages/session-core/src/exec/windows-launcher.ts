@@ -121,6 +121,9 @@ export function planDirectSpawn(
 
 // ── 在 PATH 上找程序 ─────────────────────────────────────────────────────────
 
+/** 与 probe 的 `WHICH_TIMEOUT_MS` 同一个量级:PATH 里一个失效的网络盘,每次 stat 都要卡到 SMB 超时。 */
+const WINDOWS_LOOKUP_TIMEOUT_MS = 5_000;
+
 /**
  * Windows 上「这个命令在哪」的进程内做法,替代解析 `where` 的输出。
  *
@@ -136,10 +139,38 @@ export function planDirectSpawn(
  */
 export async function findWindowsCommandPaths(
   command: string,
-  options: { env?: NodeJS.ProcessEnv; cwd?: string; isFile?: (candidate: string) => Promise<boolean> | boolean } = {}
+  options: {
+    env?: NodeJS.ProcessEnv;
+    cwd?: string;
+    isFile?: (candidate: string) => Promise<boolean> | boolean;
+    isDirectory?: (candidate: string) => Promise<boolean> | boolean;
+    /** 整次查找的上限;到点返回 null,调用方退回 `where`(它跑在带超时的子进程里)。 */
+    timeoutMs?: number;
+  } = {}
+): Promise<string[] | null> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const timeout = new Promise<null>((resolve) => {
+    timer = setTimeout(() => resolve(null), options.timeoutMs ?? WINDOWS_LOOKUP_TIMEOUT_MS);
+  });
+  try {
+    return await Promise.race([searchWindowsCommandPaths(command, options), timeout]);
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+async function searchWindowsCommandPaths(
+  command: string,
+  options: {
+    env?: NodeJS.ProcessEnv;
+    cwd?: string;
+    isFile?: (candidate: string) => Promise<boolean> | boolean;
+    isDirectory?: (candidate: string) => Promise<boolean> | boolean;
+  }
 ): Promise<string[]> {
   const env = options.env ?? process.env;
   const isFile = options.isFile ?? defaultIsFile;
+  const isDirectory = options.isDirectory ?? defaultIsDirectory;
   const cwd = options.cwd ?? process.cwd();
   let unresolved = false;
   command = command.replace(/%([^%\r\n]+)%/g, (literal, name: string) => {
@@ -167,6 +198,8 @@ export async function findWindowsCommandPaths(
     if (!entry) continue;
     // 相对的 PATH 段 / `.\bin\x`:按这次查找的 cwd 解析(`where` 跑在 exec 的 cwd 里,打印绝对路径)。
     const directory = path.win32.resolve(cwd, entry);
+    // 每个目录先看一次在不在:不在(或是失效的盘)就整段跳过,❌ 对它逐个扩展名再 stat 十几次。
+    if (!(await isDirectory(directory))) continue;
     for (const candidate of names) {
       const full = path.win32.join(directory, candidate);
       const key = full.toLowerCase();
@@ -178,6 +211,14 @@ export async function findWindowsCommandPaths(
   return found;
 }
 
+async function defaultIsDirectory(candidate: string): Promise<boolean> {
+  try {
+    return (await statAsync(candidate)).isDirectory();
+  } catch {
+    return false;
+  }
+}
+
 /**
  * 「不是目录」就算:WindowsApps 下的 App Execution Alias(Store / MSIX 装的 CLI,0 字节的 APPEXECLINK 重解析点)
  * `stat` 跟不过去会抛错或报不出普通文件,而 `where` 列它、CreateProcess 也跑得动 ⇒ 抛错时退到 `lstat` 看链接本身。
@@ -186,7 +227,10 @@ export async function findWindowsCommandPaths(
 async function defaultIsFile(candidate: string): Promise<boolean> {
   try {
     return !(await statAsync(candidate)).isDirectory();
-  } catch {
+  } catch (error) {
+    // 根本不在(含断掉的符号链接)就是不在;只有「在、但 stat 跟不过去」的(APPEXECLINK)才看链接本身。
+    const code = (error as NodeJS.ErrnoException).code;
+    if (code === 'ENOENT' || code === 'ENOTDIR') return false;
     try {
       return !(await lstatAsync(candidate)).isDirectory();
     } catch {
