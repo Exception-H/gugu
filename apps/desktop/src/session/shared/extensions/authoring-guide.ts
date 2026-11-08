@@ -197,7 +197,7 @@ the dock/background have neither chat nor session. Read context before drawing.
 \`await gugu.modal.open({ entry: 'new.html', title: 'New card', size: 'md', data })\` opens your bundle's HTML in
 gugu's window-level dialog (phone: fullscreen). Sizes: xs/sm/md/lg/xl. No new consent.
 The page stays sandboxed with the opener's context/grants; \`(await gugu.getContext()).modal.data\` holds \`data\`.
-Save, then \`gugu.modal.close(result)\`: the opener receives the result; cancellation returns null.
+Save, then \`gugu.modal.close(result)\`: the opener gets it, or null if cancelled.
 The host handles Escape, Tab traversal, Back and focus restoration.
 
 Free:
@@ -208,13 +208,13 @@ Free:
   Members: \`{ id: 'user:<uuid>', name, kind: 'human' | 'agent', avatar? }\`; \`avatar\` is a \`data:\` image. Pick from these; never copy them into files.
   \`session\`: \`{ id, agentId?, projectId?, root?, deviceId?, deviceLabel? }\`; \`agentId\` is \`user:<uuid>\`.
   Local \`root\` needs \`files:*\`; remote sessions carry \`deviceId\` instead. \`file\`: open with \`files.open(ctx.file)\`.
-  \`operator\`: \`{ kind: 'person' }\` or \`{ kind: 'agent', id }\`. \`capabilities\`: current grants, reflecting revocations.
+  \`operator\`: \`{ kind: 'person', guguNumber? }\` (API 32: own 咕咕号; \`null\`: none/unread) or \`{ kind: 'agent', id }\`. \`capabilities\`: current grants, revocations applied.
 - \`gugu.navigation.go(-1|1)\` → boolean; own history/chat opener. State: \`getContext().navigation\`.
 - \`onContextChanged(fn)\` → theme, language, visibility and size changes; member changes only through API 26. Returns an unsubscribe.
-- \`onCommand(fn)\` → the person picked one of your declared menu/toolbar entries; you get your own id back.
+- \`onCommand(fn)\` → the person picked one of your menu/toolbar entries: its id.
 - \`showContextMenu({ x, y, items: [{ id, label, enabled?, items? }, { type: "separator" }] })\` (API 18, page): App-local point, shared host menu → id or null.
 - \`setTabTitle(title)\` → title (max 48); file tabs use it as a tooltip. Back/forward stay local.
-- \`setTabBadge(badge)\` → a count (99+ at most, <=0 none), a string (a dot), or \`null\` (none).
+- \`setTabBadge(badge)\` → a count (99+ max, <=0 none), a string (a dot) or \`null\`.
 - \`openBrowserTab(url)\` → http(s) only.
 - \`reportError(message)\` → shown to the person. Never fail silently.
 - \`sendToBackground(message)\` → your background page (none: rejects); host stamps \`from\`.
@@ -973,6 +973,15 @@ On a phone, a page with steps of its own (folders) holds Back with \`gugu.naviga
 \`contributes.instructions\` (<= 160 characters; required with programs or skills, refused without) is your App's
 whole line in every new session's \`<gugu_apps>\`: name the tools that matter and when to read which skill. Longer
 standing behavior is a skill whose description says when to read it.
+
+## Prompts (API 34)
+
+\`contributes.prompts\`: up to 8 \`{ "name", "title", "prompt" }\`, plain text the person picks from the composer's \`/\`
+menu under your App's name, edits and sends. Translate with \`localized.<tag>.prompts.<name>\` (\`title\`, \`prompt\`).
+It needs no capability. The person's own prompts are behind \`prompts\` (a program's, for its agent):
+\`gugu.prompts.list({ query? })\`, \`gugu.prompts.save({ id?, title, prompt })\` and \`gugu.prompts.delete(id)\` (the
+person gets an undo at once). App prompts are read-only here: \`list\` gives them as the person sees them, their own
+version marked \`state: "modified"\`, none they hid.
 
 ## Configuration
 

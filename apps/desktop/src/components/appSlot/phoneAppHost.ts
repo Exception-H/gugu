@@ -118,6 +118,8 @@ export interface PhoneAppBinding {
   capabilities: readonly ExtensionCapability[]
   locale: string
   themeMode: 'light' | 'dark'
+  /** The signed-in person's own 咕咕号 (`operator.guguNumber`): absent before their profile is read. */
+  guguNumber?: number | null
 }
 
 interface HostedFrame {
@@ -291,7 +293,12 @@ const failure = (error: unknown): { success: false; error: string } => ({ succes
 const OPENING_LINK_TTL_MS = 30_000
 const openingLinks: { extensionId: string; chatId: string | null; itemId: string | null; sessionId?: string; event: ExtensionHostEvent; expiresAt: number }[] = []
 export function holdPlaceForOpeningPage(chatId: string, itemId: string, candidate: FileOpenerCandidate, at: Record<string, string>): void {
-  openingLinks.push({ extensionId: candidate.extensionId, chatId, itemId, event: placeLink(candidate, at, itemId), expiresAt: Date.now() + OPENING_LINK_TTL_MS })
+  const event = placeLink(candidate, at, itemId)
+  // A page of that file already open is told now: its tab is brought forward, not opened again.
+  const open = [...frames.values()].filter(({ binding }) => binding.extensionId === candidate.extensionId && binding.chatId === chatId
+    && binding.itemId === itemId && (event.type !== 'link' || event.tab === binding.tabName))
+  for (const hosted of open) hosted.deliver(event)
+  if (open.length === 0) openingLinks.push({ extensionId: candidate.extensionId, chatId, itemId, event, expiresAt: Date.now() + OPENING_LINK_TTL_MS })
 }
 function takeOpeningLinks(binding: PhoneAppBinding): ExtensionHostEvent[] {
   const now = Date.now()
@@ -495,7 +502,7 @@ export function hostAppFrame(
         }
       : {}),
     // A page on the phone is the person's to work: no agent opens one there (owner 10-14).
-    operator: { kind: 'person' },
+    operator: hosted.binding.guguNumber !== undefined ? { kind: 'person', guguNumber: hosted.binding.guguNumber } : { kind: 'person' },
     locale: hosted.binding.locale,
     themeMode: hosted.binding.themeMode,
     capabilities: hosted.binding.capabilities.filter((capability) => PHONE_CAPABILITIES.includes(capability)),
@@ -747,7 +754,10 @@ export function hostAppFrame(
       case 'showContextMenu': {
         const menu = appContextMenuOf(args)
         const rect = frame.getBoundingClientRect()
-        return showRendererContentMenu(menu.items, { x: rect.x + menu.x, y: rect.y + menu.y })
+        const picked = await showRendererContentMenu(menu.items, { x: rect.x + menu.x, y: rect.y + menu.y })
+        // A pick is the person's input in this App, as a tap on one of its commands is (@@@command-gesture).
+        if (picked !== null) commandGestureUntil = performance.now() + ACTIVATION_LIFETIME_MS
+        return picked
       }
       case 'filesViewPreferences':
         return files.viewPreferences(chatPlace(args.place), args.showAppData as boolean | undefined)
@@ -914,7 +924,7 @@ export function hostAppFrame(
       previous = snapshot()
       stateChanged()
       // Reuse the parent's existing subscriptions and host events for its sandboxed modal pages too.
-      for (const [childHost, childBinding] of modalHosts) childHost.update({ ...childBinding, locale: binding.locale, themeMode: binding.themeMode, capabilities: binding.capabilities })
+      for (const [childHost, childBinding] of modalHosts) childHost.update({ ...childBinding, locale: binding.locale, themeMode: binding.themeMode, capabilities: binding.capabilities, guguNumber: binding.guguNumber })
       // Moved to a file a pill is waiting to open: its place is this page's now (after the context that names the file).
       const placed = () => { if (moved) for (const link of takeOpeningLinks(hosted.binding)) event(link) }
       // The theme is part of it: the page's ui.js picks its palette from context.themeMode.

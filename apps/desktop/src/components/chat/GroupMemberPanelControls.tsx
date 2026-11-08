@@ -94,6 +94,8 @@ export function useGroupMemberPanelControls({ chatId, chatKind, settings, snapsh
   ), [chatKind, currentUserId])
   const topicRemovalLabel = useCallback((profile: MemberProfileCardModel) => isSelfLeaving(profile)
     ? t('topic.leave') : t('createGroup.removeMember', { ns: 'contacts', name: profile.displayName }), [isSelfLeaving, t])
+  // Leaving a topic only stops its notifications; the source conversation can still read it. Say so where the action is.
+  const topicRemovalHint = useCallback((profile: MemberProfileCardModel) => t(isSelfLeaving(profile) ? 'topic.leaveHint' : 'topic.removeHint'), [isSelfLeaving, t])
 
   const setRole = useCallback((profile: MemberProfileCardModel, role: GroupMemberRole) => (
     runMutation(() => chatService.setGroupMemberRole(chatId, profile.id, role))
@@ -116,11 +118,12 @@ export function useGroupMemberPanelControls({ chatId, chatKind, settings, snapsh
       onChangeListenMode: canEditListenMode(profile) ? (mode) => { void setListenMode(profile, mode) } : undefined,
       canRemove: manageable || owned || self,
       removeLabel: !isGroup ? topicRemovalLabel(profile) : undefined,
+      removeHint: !isGroup ? topicRemovalHint(profile) : undefined,
       onRemove: () => remove(profile),
       busy,
       editError: error,
     }
-  }, [busy, canEditListenMode, canManage, error, isGroup, isSelfLeaving, ownsAgent, remove, setListenMode, setRole, topicRemovalLabel])
+  }, [busy, canEditListenMode, canManage, error, isGroup, isSelfLeaving, ownsAgent, remove, setListenMode, setRole, topicRemovalHint, topicRemovalLabel])
 
   const openProfile = useCallback((memberId: string, anchor: Element) => {
     const profile = profileOf(memberId)
@@ -188,7 +191,8 @@ export function useGroupMemberPanelControls({ chatId, chatKind, settings, snapsh
           ) : null}
           {canManage(menuProfile) || ownsAgent(menuProfile) || isSelfLeaving(menuProfile) ? (
             <MenuItem danger onClick={() => { setMenu(null); void remove(menuProfile) }}>
-              {!isGroup ? topicRemovalLabel(menuProfile) : ownsAgent(menuProfile) ? t('group.memberList.agentLeave') : t('group.settings.removeMemberTitle')}
+              {!isGroup ? <span className="flex flex-col gap-1">{topicRemovalLabel(menuProfile)}<small className="text-[length:var(--font-caption)] text-[var(--faint-fg)]">{topicRemovalHint(menuProfile)}</small></span>
+                : ownsAgent(menuProfile) ? t('group.memberList.agentLeave') : t('group.settings.removeMemberTitle')}
             </MenuItem>
           ) : null}
         </Menu>
