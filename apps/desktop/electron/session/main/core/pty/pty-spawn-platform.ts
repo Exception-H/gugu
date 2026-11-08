@@ -5,7 +5,7 @@ import { log } from '@main/lib/logger';
 import { quoteCshArg } from '@main/utils/shellEscape';
 import {
   diskWindowsShimReader,
-  resolveWindowsHandoffExecutable,
+  resolveWindowsHandoffLaunch,
   resolveWindowsNodeScriptLaunch,
 } from '@gugu/session-core/exec';
 import { getWindowsEnvValue } from '@main/utils/windows-env';
@@ -338,8 +338,12 @@ function resolveWindowsSpawn(
     // 壳里跑的是 `node "<脚本>" %*`(npm / pnpm / aube 装的 JS 包,包括咕咕托管装的那些)时,直接起
     // `node.exe <脚本> <原参数…>`,同样走 32767:读壳的规矩与认不全就返回 null 的理由见 windows-node-entry.ts。
     // 两样都认不出来就照旧起壳:❌ 不猜一个。
-    const handoff = resolveWindowsHandoffExecutable(resolvedCommand, { platform: 'win32', exists: fileExists });
-    if (handoff) return { command: handoff, args, cwd: intent.cwd, warnings };
+    // 壳在调程序前设的变量(用户手写的 `set CODEX_HOME=…`)随 handoff.env 一起带上,见 resolveWindowsHandoffLaunch。
+    const handoff = resolveWindowsHandoffLaunch(resolvedCommand, { platform: 'win32', exists: fileExists, env });
+    if (handoff) {
+      const shimEnv = Object.keys(handoff.env).length > 0 ? { env: handoff.env } : {};
+      return { command: handoff.program, args, cwd: intent.cwd, warnings, ...shimEnv };
+    }
     const script = resolveWindowsNodeScriptLaunch(resolvedCommand, {
       platform: 'win32',
       reader: { readShim: diskWindowsShimReader.readShim, exists: fileExists },

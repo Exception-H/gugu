@@ -1,6 +1,6 @@
 import { existsSync, readFileSync, realpathSync, statSync } from 'node:fs';
 import path from 'node:path';
-import { readShimSets, type WindowsShimReader } from './windows-node-entry';
+import { readShimEnv, type WindowsShimReader } from './windows-node-entry';
 
 /**
  * Windows 上「已经解析出一个程序路径，现在要直接把它 spawn 起来」这件事的**唯一一份**做法。
@@ -33,6 +33,8 @@ export type DirectSpawnPlan = {
   spawnOverrides: WindowsLauncherOverrides;
   /** 包了 cmd.exe / powershell.exe：`child.pid` 是壳，真程序是它的孩子。 */
   wrapsShell: boolean;
+  /** 跳过的壳本来会设的变量已叠上去的**完整**环境;spawn 用它代替调用方那份。没有要叠的就不给。 */
+  env?: NodeJS.ProcessEnv;
 };
 
 /** Windows 的环境变量名不分大小写，`ComSpec` / `COMSPEC` / `comspec` 都得认。 */
@@ -84,10 +86,13 @@ export function planDirectSpawn(
 
   const env = options.env ?? process.env;
   const extension = path.win32.extname(command).toLowerCase();
-  const program = extension === '.cmd' || extension === '.ps1'
-    ? resolveWindowsHandoffExecutable(command, { ...options, platform })
+  const handoff = extension === '.cmd' || extension === '.ps1'
+    ? resolveWindowsHandoffLaunch(command, { ...options, platform, env })
     : null;
-  if (program) return { command: program, args: [...args], spawnOverrides: PASSTHROUGH, wrapsShell: false };
+  if (handoff) {
+    const shimEnv = Object.keys(handoff.env).length > 0 ? { env: { ...env, ...handoff.env } } : {};
+    return { command: handoff.program, args: [...args], spawnOverrides: PASSTHROUGH, wrapsShell: false, ...shimEnv };
+  }
 
   if (extension === '.cmd' || extension === '.bat') {
     const commandLine = [escapeCmdCommand(command), ...args.map(escapeCmdShimArgument)].join(' ');
@@ -163,19 +168,26 @@ export type WindowsHandoffOptions = {
   readShim?: (shimPath: string) => string | null;
   /** 目标是否真的存在。 */
   exists?: (candidate: string) => boolean;
+  /** 程序将要拿到的环境:壳里 `%VAR%` 按它展开。默认本进程的。 */
+  env?: NodeJS.ProcessEnv;
 };
 
+/** 绕过壳直接起的那个程序,以及壳本来会给它设的环境(叠在 spawn env 最上面;壳里的 SET 本来就最后执行)。 */
+export type WindowsHandoffLaunch = { program: string; env: Record<string, string> };
+
 /**
- * 把一条**要交给别的进程去 spawn** 的路径,翻译成那边真 spawn 得起来的路径。
- * 翻译不出来时返回 null —— 调用方据此响亮失败,❌ 不静默回落。
+ * 把一条**要交给别的进程去 spawn** 的路径,翻译成那边真 spawn 得起来的程序 + 它要带上的环境。
+ * 翻译不出来时返回 null —— 调用方据此响亮失败或照旧起壳,❌ 不静默回落。
+ *
+ * 壳在调程序前设的变量(用户自己写的 `set CODEX_HOME=…` / `set "PATH=C:\\tools;%PATH%"`)随 `env` 一起交出:
+ * 直接起程序却丢了它们,程序就悄悄换了一套配置与登录。设得读不全(条件分支、展不开的 `%VAR%`)⇒ null。
  */
-export function resolveWindowsHandoffExecutable(
+export function resolveWindowsHandoffLaunch(
   command: string,
   options: WindowsHandoffOptions = {}
-): string | null {
+): WindowsHandoffLaunch | null {
   const platform = options.platform ?? process.platform;
-  if (platform !== 'win32') return command;
-  if (isDirectlySpawnableOnWindows(command)) return command;
+  if (platform !== 'win32' || isDirectlySpawnableOnWindows(command)) return { program: command, env: {} };
 
   const extension = path.win32.extname(command).toLowerCase();
   if (extension !== '.cmd' && extension !== '.bat' && extension !== '.ps1') return null;
@@ -189,17 +201,14 @@ export function resolveWindowsHandoffExecutable(
   const text = readShim(shimPath);
   if (!text) return null;
 
-  // 壳除了 `dp0` / `_prog` / `PATHEXT` 还设了别的(用户自己写的 `set CODEX_HOME=…` 再调 exe):绕过壳直接起 exe
-  // 就悄悄丢了那份设置,程序换了一套配置与登录 ⇒ 不换,照旧经壳起。判据与 node 那条链同一份(readShimSets)。
-  const sets = readShimSets(text, shimPath);
-  if (!sets || sets.pathPin !== undefined || sets.nodePath !== undefined) return null;
-
   const match = CMD_SHIM_SINGLE_PROGRAM.exec(text);
   if (!match) return null;
+  const env = readShimEnv(text, shimPath, options.env ?? process.env);
+  if (!env) return null;
 
   const target = expandShimDirectory(match[1]!, shimPath);
   const exists = options.exists ?? defaultExists;
-  return exists(target) ? target : null;
+  return exists(target) ? { program: target, env } : null;
 }
 
 // ── 交给 node 去跑的那条路径 ──────────────────────────────────────────────────

@@ -11,7 +11,7 @@ import {
   diskWindowsShimReader,
   escapeCmdCommand,
   escapeCmdShimArgument,
-  resolveWindowsHandoffExecutable,
+  resolveWindowsHandoffLaunch,
   resolveWindowsNodeScriptLaunch,
   type WindowsShimReader,
 } from '@gugu/session-core/exec'
@@ -260,6 +260,8 @@ export interface CodexAppServerSpawn {
   command: string
   args: string[]
   windowsVerbatimArguments?: boolean
+  /** 跳过的启动脚本本来会设的变量已叠上去的完整环境;spawn 用它代替调用方那份。没有要叠的就不给。 */
+  env?: NodeJS.ProcessEnv
 }
 
 // cmd.exe 会先解析一次，npm 风格 batch shim 的 `%*` 再转发一次 —— 两层转义的那份算法现在
@@ -286,12 +288,17 @@ export function resolveCodexAppServerSpawn(
     return { command: codexBin, args }
   }
   if (/\.(?:cmd|bat|ps1)$/i.test(codexBin)) {
-    const program = resolveWindowsHandoffExecutable(codexBin, {
+    const handoff = resolveWindowsHandoffLaunch(codexBin, {
       platform,
       readShim: shimReader.readShim,
       exists: shimReader.exists,
+      env,
     })
-    if (program) return { command: program, args }
+    if (handoff) {
+      return Object.keys(handoff.env).length > 0
+        ? { command: handoff.program, args, env: { ...env, ...handoff.env } }
+        : { command: handoff.program, args }
+    }
   }
   if (/\.ps1$/i.test(codexBin)) {
     return {

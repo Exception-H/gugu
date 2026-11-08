@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { resolveWindowsHandoffLaunch } from './windows-launcher';
 import { resolveWindowsNodeScriptEntry, resolveWindowsNodeScriptLaunch } from './windows-node-entry';
 
 /**
@@ -197,5 +198,53 @@ describe('resolveWindowsNodeScriptLaunch:上游生成器的壳', () => {
     const text = UPSTREAM_SHIMS['npm cmd-shim 9.0.2']!.join('\r\n')
       .replace('"%_prog%"  "', '"%_prog%" --no-warnings "');
     expect(resolveWindowsNodeScriptLaunch(TOOL_SHIM, fs({ [TOOL_SHIM]: text, [TOOL_ENTRY]: '' }))).toBeNull();
+  });
+});
+
+/**
+ * 同一批生成器的壳,交给「绕过壳直接起 exe」那条解析(resolveWindowsHandoffLaunch):
+ * Codex app-server、PTY、Claude ACP 适配器与 planDirectSpawn 共用它。
+ */
+describe('resolveWindowsHandoffLaunch:哪些壳能直接起 exe、要带上什么环境', () => {
+  const BIN = 'C:\\Users\\张 三\\tools';
+  const EXE = `${BIN}\\node_modules\\@anthropic-ai\\claude-code\\bin\\claude.exe`;
+  const handoff = (text: string, base: Record<string, string> = {}) =>
+    resolveWindowsHandoffLaunch(`${BIN}\\claude.cmd`, {
+      platform: 'win32',
+      readShim: (p) => (p === `${BIN}\\claude.cmd` ? text : null),
+      exists: (p) => p === EXE,
+      env: base,
+    });
+  const lines = (...l: string[]) => [...l, ''].join('\r\n');
+  const EXE_LINE = '"%dp0%\\node_modules\\@anthropic-ai\\claude-code\\bin\\claude.exe"   %*';
+
+  it('npm cmd-shim 指向原生 exe 的那种壳:直接起 exe,不加环境', () => {
+    expect(handoff(lines('@ECHO off', 'GOTO start', ':find_dp0', 'SET dp0=%~dp0', 'EXIT /b', ':start', 'SETLOCAL', 'CALL :find_dp0', EXE_LINE)))
+      .toEqual({ program: EXE, env: {} });
+  });
+
+  it('上游生成器的 node 脚本壳、咕咕 npm 形态的启动器、aube 壳:都不是「一个 exe」,交给 node 那条链', () => {
+    for (const shim of [...Object.values(UPSTREAM_SHIMS).map((l) => l.join('\r\n')), MANAGED_LAUNCHER_TEXT, AUBE_SHIM_TEXT]) {
+      expect(handoff(shim)).toBeNull();
+    }
+  });
+
+  it('用户手写的 wrapper:先 set 再调 exe ⇒ 直接起 exe,把设的变量带上(`%VAR%` 按程序的环境展开,键名沿用它的写法)', () => {
+    const wrapper = lines(
+      '@echo off',
+      'set CODEX_HOME=D:\\codex 工作区',
+      'set "Path=%~dp0bin;%PATH%"',
+      '@"%~dp0node_modules\\@anthropic-ai\\claude-code\\bin\\claude.exe" %*',
+    );
+    expect(handoff(wrapper, { PATH: 'C:\\Windows' })).toEqual({
+      program: EXE,
+      env: { CODEX_HOME: 'D:\\codex 工作区', PATH: `${BIN}\\bin;C:\\Windows` },
+    });
+  });
+
+  it('设得读不全就不直接起:引用了没定义的变量,或 SET 落在 IF / ELSE 里', () => {
+    expect(handoff(lines('@echo off', 'set PROXY=%NOPE%', EXE_LINE))).toBeNull();
+    expect(handoff(lines('@SETLOCAL', '@IF NOT DEFINED NODE_PATH (', '  @SET "NODE_PATH=%~dp0..\\x"', ') ELSE (', '  @SET "NODE_PATH=%NODE_PATH%;%~dp0..\\x"', ')', `@${EXE_LINE}`)))
+      .toBeNull();
   });
 });

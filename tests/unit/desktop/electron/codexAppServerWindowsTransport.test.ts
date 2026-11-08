@@ -1093,14 +1093,22 @@ while :; do sleep 1; done
       reader({ [`${dir}\\codex.cmd`]: '@echo off\r\n"%~dp0\\bin\\codex.exe" %*\r\n' })))
       .toEqual({ command: exe, args })
 
-    // A user's own launcher that sets CODEX_HOME (or PATH) first keeps running through cmd, setting and all.
-    for (const set of ['set CODEX_HOME=D:\\codex-work', 'set "PATH=C:\\Tools\\extra;%PATH%"']) {
-      const launcher = `${dir}\\codex.cmd`
-      const launch = resolveCodexAppServerSpawn(launcher, args, 'win32', comSpec,
-        reader({ [launcher]: `@echo off\r\n${set}\r\n"%~dp0\\bin\\codex.exe" %*\r\n` }))
-      expect(launch.command).toBe(comSpec.ComSpec)
-      expect(launch.args[3]).toContain('codex.cmd')
-    }
+    // A user's own launcher that sets CODEX_HOME / PATH first: still the exe, with those settings carried in its env.
+    const launcher = `${dir}\\codex.cmd`
+    const base = { ...comSpec, PATH: String.raw`C:\Windows` }
+    expect(resolveCodexAppServerSpawn(launcher, args, 'win32', base, reader({
+      [launcher]: '@echo off\r\nset CODEX_HOME=D:\\codex-work\r\nset "PATH=C:\\Tools\\extra;%PATH%"\r\n"%~dp0\\bin\\codex.exe" %*\r\n',
+    }))).toEqual({
+      command: exe,
+      args,
+      env: { ...base, CODEX_HOME: String.raw`D:\codex-work`, PATH: String.raw`C:\Tools\extra;C:\Windows` },
+    })
+
+    // One it cannot read fully (an undefined variable) keeps running through cmd, setting and all.
+    const opaque = resolveCodexAppServerSpawn(launcher, args, 'win32', comSpec,
+      reader({ [launcher]: '@echo off\r\nset CODEX_HOME=%NOPE%\r\n"%~dp0\\bin\\codex.exe" %*\r\n' }))
+    expect(opaque.command).toBe(comSpec.ComSpec)
+    expect(opaque.args[3]).toContain('codex.cmd')
   })
 
   it('resolves the managed launcher under a home path with spaces and non-ASCII characters', () => {

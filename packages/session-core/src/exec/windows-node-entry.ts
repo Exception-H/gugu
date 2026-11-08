@@ -108,6 +108,38 @@ export function readShimSets(text: string, shimPath: string): ShimSets | null {
   return sets;
 }
 
+/**
+ * 壳在跑程序之前给它设的环境:绕过壳直接起程序时,要原样带上的那份(用户自己写的 `set CODEX_HOME=…` /
+ * `set "PATH=C:\\tools;%PATH%"` 再调 exe)。`dp0` / `_prog` / `PATHEXT` 只在壳里用,不算。
+ * 值里的 `%VAR%` 按 `base` 与前面已设的展开,键名沿用 `base` 里的写法(Windows 不分大小写,`Path` 与 `PATH`
+ * 不能并存)。展不开,或 SET 落在 IF / ELSE 里(不知道走哪支)⇒ null:这份壳认不全,调用方照旧起壳。
+ */
+export function readShimEnv(
+  text: string,
+  shimPath: string,
+  base: Readonly<Record<string, string | undefined>>
+): Record<string, string> | null {
+  const env: Record<string, string> = {};
+  const keyOf = (name: string): string | undefined =>
+    [...Object.keys(env), ...Object.keys(base)].find((key) => key.toLowerCase() === name.toLowerCase());
+  const conditional = /^\s*@?IF\b|\)\s*ELSE\b/im.test(text);
+  for (const match of text.matchAll(SHIM_SET)) {
+    const name = (match[1] ?? match[3])!;
+    if (/^(?:dp0|_prog|pathext)$/i.test(name)) continue;
+    if (conditional) return null;
+    let unresolved = false;
+    const value = expandShimDirectory((match[2] ?? match[4])!.trim(), shimPath).replace(/%([^%\r\n]+)%/g, (literal, variable: string) => {
+      const key = keyOf(variable);
+      const known = key === undefined ? undefined : env[key] ?? base[key];
+      if (known === undefined) unresolved = true;
+      return known ?? literal;
+    });
+    if (unresolved) return null;
+    env[keyOf(name) ?? name] = value;
+  }
+  return env;
+}
+
 function resolveShimNode(token: string, variables: Map<string, string>, shimPath: string): string {
   const variable = /^%([^%]+)%$/.exec(token);
   const value = variable ? variables.get(variable[1]!.toLowerCase()) : token;
