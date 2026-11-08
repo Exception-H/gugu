@@ -473,7 +473,7 @@ export function AppProductPage({
           <span className="mk-review-k">{sourceButton ?? publisher}</span>
         </div>
       </div>
-      {links.length > 0 || manifest.license ? (
+      {links.length > 0 ? (
         <section className="mk-dsec is-side">
           <h3>{translate('extensions.detailLinks')}</h3>
           <div className="mk-side-links">
@@ -483,11 +483,6 @@ export function AppProductPage({
                 <ExternalLink className="size-3" />
               </button>
             ))}
-            {manifest.license ? (
-              <span className="mk-note">
-                {translate('extensions.infoLicense')} {manifest.license}
-              </span>
-            ) : null}
           </div>
         </section>
       ) : null}

@@ -2,10 +2,14 @@
 .mg {
   display: grid;
   grid-template-columns: 156px minmax(0, 720px);
-  gap: 36px;
+  gap: 0 36px;
   justify-content: center;
   align-items: start;
   padding: 32px 16px 64px;
+}
+.mg-top {
+  grid-column: 2;
+  min-width: 0;
 }
 .mg-anchors {
   position: sticky;
@@ -13,7 +17,7 @@
   display: flex;
   flex-direction: column;
   gap: 2px;
-  padding-top: 92px;
+  margin-top: 28px;
 }
 .mg-anchors > button {
   padding: 5px 10px;
@@ -22,12 +26,16 @@
   text-align: left;
   cursor: pointer;
 }
-.mg-anchors > button:hover,
-.mg-anchors > button.is-on {
-  background: color-mix(in oklab, var(--foreground) 6%, transparent);
+.mg-anchors > button:hover {
   color: var(--foreground);
 }
+.mg-anchors > button.is-on {
+  background: color-mix(in oklab, var(--foreground) 7%, transparent);
+  color: var(--foreground);
+  font-weight: var(--font-weight-medium);
+}
 .mg-main {
+  grid-column: 2;
   min-width: 0;
 }
 .mg-head {
@@ -47,10 +55,20 @@
   font-weight: var(--font-weight-semibold);
   letter-spacing: -0.4px;
   overflow-wrap: anywhere;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  overflow: hidden;
 }
 .mg-head-tx > p {
   margin: 0;
   color: var(--foreground-muted);
+}
+.mg-head-acts {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: 8px;
 }
 .mg-sec {
   margin-top: 28px;
@@ -68,7 +86,7 @@
   color: var(--foreground-muted);
 }
 .mg-group {
-  border: 1px solid var(--border);
+  border: 1px solid color-mix(in oklab, var(--foreground) 14%, transparent);
   border-radius: 12px;
 }
 .mg-row {
@@ -121,12 +139,22 @@
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
 }
-.mg-permission {
-  align-items: flex-start;
+.mg-permission > span {
+  overflow-wrap: anywhere;
 }
-.mg-permission > .mk-link {
-  margin-left: auto;
+.mg-permission > svg {
+  margin-top: 0;
+}
+.mg-row > button {
   flex: none;
+}
+.mg-fold {
+  margin: 8px 0 0;
+  font-size: var(--font-caption);
+  line-height: 17px;
+  color: var(--foreground-muted);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
 }
 .mg .mk-tools {
   margin-top: 8px;
@@ -145,10 +173,24 @@
     grid-template-columns: minmax(0, 1fr);
     padding: 12px 12px 48px;
   }
+  .mg-top,
+  .mg-main {
+    grid-column: 1;
+  }
   .mg-anchors {
     display: none;
   }
   .mg-head {
     flex-wrap: wrap;
+  }
+  /* 名字占满图标旁边那一行,按钮另起一行,窄了不会把名字挤成一个字一列。 */
+  .mg-head-tx {
+    flex-basis: calc(100% - 72px);
+  }
+  .mg-head-acts {
+    width: 100%;
+  }
+  .mg-head-acts > :first-child {
+    flex: 1;
   }
 }

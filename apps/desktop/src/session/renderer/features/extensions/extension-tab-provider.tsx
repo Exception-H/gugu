@@ -280,7 +280,7 @@ export function createExtensionTabProvider(
             id: `${kind}:app-settings`,
             label: translateSessionMessage('extensions.appSettings'),
             group: 'extension',
-            run: () => void followLink({ kind: 'app-detail', extensionId: parseExtensionTabKind(kind)!.extensionId }),
+            run: () => void followLink({ kind: 'app-detail', extensionId: parseExtensionTabKind(kind)!.extensionId, fromApp: true }),
           },
         ],
         [blockId, claimedFile, perSession, place, sessionId, tab.tabId]

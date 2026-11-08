@@ -26,7 +26,7 @@ export function useAppDetailRequest({ target, ready, host, setDetail, detail, ro
       const installed = host.store.manifests.find((row) => row.id === target.extensionId);
       if (target.variant && !installed) throw new Error('The installed App is no longer available on this device.');
       if (installed) {
-        setDetail({ page: 'manage', extensionId: target.extensionId });
+        setDetail({ page: 'manage', extensionId: target.extensionId, fromApp: target.fromApp });
         return;
       }
       const result = await host.api.marketEntry({ extensionId: target.extensionId });

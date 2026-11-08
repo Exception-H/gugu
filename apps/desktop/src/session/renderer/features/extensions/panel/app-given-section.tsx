@@ -46,7 +46,7 @@ export function AppGivenSection({
   useEffect(() => {
     void load();
   }, [load]);
-  if (!places && !failed) return null;
+  if (!places && !failed) return <p className="text-sm text-foreground-passive" data-testid="extension-given-loading">{translate('extensions.loading')}</p>;
   const change = async (changes: readonly PlaceChange[]) => {
     setBusy(true);
     try {

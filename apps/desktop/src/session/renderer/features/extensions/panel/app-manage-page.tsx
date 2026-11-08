@@ -1,4 +1,4 @@
-import { useEffect, useId, useState, type ReactNode } from 'react';
+import { useEffect, useId, useRef, useState, type ReactNode } from 'react';
 import { ChevronLeft, ChevronRight } from '@/lib/icons';
 import './extensions-panel.css';
 import './app-store.css';
@@ -69,6 +69,7 @@ export function AppManagePage({
   autoUpdate,
   dataBytesKey = 0,
   resource,
+  permissionsNote,
   onBack,
   onLifecycle,
   onInstallVersion,
@@ -119,6 +120,8 @@ export function AppManagePage({
   /** Changes when the App's data was cleared, so its size is read again. */
   dataBytesKey?: number;
   resource?: ResourceContext;
+  /** Replaces the words above the permissions: the phone lists only what it can use. */
+  permissionsNote?: string;
   onBack: () => void;
   onLifecycle: () => void;
   onInstallVersion?: (ref: MarketSourceRef) => void;
@@ -220,31 +223,32 @@ export function AppManagePage({
     return () => { cancelled = true; };
   }, [api, manifest.id, dataBytesKey]);
 
-  // ── 页面 ──
-  const pageRows = manifest.contributes.tabs.filter((tab) => !tab.hostPage).map((tab) => {
-    const title = localizedTabText(manifest, tab, locale).title;
-    const suffixes = [...new Set([...claimedSuffixes(tab, 'session'), ...claimedSuffixes(tab, 'chat')])];
-    const own = isOwnPage(manifest, tab);
-    const note = own
-      ? translate('extensions.addsTabPlain')
-      : suffixes.length
-        ? translate('extensions.addsTabOpens', { suffixes: listOf(suffixes, locale) })
-        : translate('extensions.managePageCard');
-    return (
-      <Row key={tab.name} title={title} note={note} testId={`app-manage-page-${tab.name}`}>
-        {own && onSetTabHidden ? (
-          <Switch size="sm" checked={!hiddenTabs.includes(tab.name)} aria-label={title} onCheckedChange={(shown) => onSetTabHidden(tab.name, !shown)} />
-        ) : null}
-      </Row>
-    );
-  });
+  // ── 页面:能关的一页一行;打开文件的和消息卡片关不了,各并成一行,不重复 App 的名字 ──
+  const pageTabs = manifest.contributes.tabs.filter((tab) => !tab.hostPage);
+  const ownPages = pageTabs.filter((tab) => isOwnPage(manifest, tab));
+  const listJoin = locale.startsWith('zh') ? '、' : ', ';
+  const fileTypes = [...new Set(pageTabs.flatMap((tab) => [...claimedSuffixes(tab, 'session'), ...claimedSuffixes(tab, 'chat')]))]
+    .map((suffix) => (suffix === '*' ? translate('extensions.manageAnyFile') : suffix));
+  const cards = pageTabs.filter((tab) => !isOwnPage(manifest, tab) && claimedSuffixes(tab, 'session').length + claimedSuffixes(tab, 'chat').length === 0);
+  const pageRows = [
+    ...ownPages.map((tab) => {
+      const title = localizedTabText(manifest, tab, locale).title;
+      return (
+        <Row key={tab.name} title={title} testId={`app-manage-page-${tab.name}`}>
+          {onSetTabHidden ? <Switch size="sm" checked={!hiddenTabs.includes(tab.name)} aria-label={title} onCheckedChange={(shown) => onSetTabHidden(tab.name, !shown)} /> : null}
+        </Row>
+      );
+    }),
+    ...(fileTypes.length > 0 ? [<Row key="files" title={translate('extensions.manageFileTypes')} note={fileTypes.join(listJoin)} testId="app-manage-page-files" />] : []),
+    ...(cards.length > 0 ? [<Row key="cards" title={translate('extensions.managePageCard')} note={cards.map((tab) => localizedTabText(manifest, tab, locale).title).join(listJoin)} testId="app-manage-page-cards" />] : []),
+  ];
 
   // ── 权限 ──
   const permissionRow = (permission: DeclaredPermission) => {
     const off = revoked.includes(permission.key);
     const commands = permission.kind === 'capability' && permission.key === 'agents:tools' ? programDetails(manifest, translate) : undefined;
     return (
-      <div className={cn('mk-pl mg-permission', off && 'is-revoked')} key={permission.key} data-testid={`app-permission-${permission.key}`}>
+      <div className={cn('mg-row mk-pl mg-permission', off && 'is-revoked')} key={permission.key} data-testid={`app-permission-${permission.key}`}>
         <PermissionIcon permission={permission} side={permissionSide(permission)} />
         <span>
           {permission.kind === 'network'
@@ -253,9 +257,9 @@ export function AppManagePage({
           {commands ? <pre>{`${commands.caption}\n${commands.lines.join('\n')}`}</pre> : null}
         </span>
         {onTogglePermission ? (
-          <button type="button" className="mk-link" disabled={readOnly || pending !== undefined || pendingPermissions.includes(permission.key)} onClick={() => onTogglePermission(permission.key, off)}>
+          <Button type="button" variant="outline" size="sm" disabled={readOnly || pending !== undefined || pendingPermissions.includes(permission.key)} onClick={() => onTogglePermission(permission.key, off)}>
             {translate(off ? 'extensions.restore' : 'extensions.revoke')}
-          </button>
+          </Button>
         ) : null}
       </div>
     );
@@ -268,10 +272,14 @@ export function AppManagePage({
   ].filter((entry): entry is { label: string; href: string } => Boolean(entry));
 
   const sections: { id: string; label: string; note?: string; body: ReactNode }[] = [];
-  if (onToggleDock || onOpenInWindow) {
+  if (onToggleEnabled || onToggleDock) {
     sections.push({ id: 'general', label: translate('extensions.manageGeneral'), body: <>
+      {onToggleEnabled ? (
+        <Row title={translate('extensions.manageEnabled')} note={enabled ? undefined : translate('extensions.manageEnabledOffNote')} testId="app-manage-enabled">
+          <Switch size="sm" checked={enabled} disabled={readOnly || switching} aria-label={translate('extensions.switchLabel', { name: text.name })} onCheckedChange={onToggleEnabled} data-testid="app-manage-switch" />
+        </Row>
+      ) : null}
       {onToggleDock ? <Row title={translate('extensions.managePin')} testId="app-manage-pin"><Switch size="sm" checked={docked} aria-label={translate('extensions.managePin')} onCheckedChange={onToggleDock} /></Row> : null}
-      {onOpenInWindow ? <Row title={translate('tabs.openInWindow')}><Button type="button" variant="outline" size="sm" onClick={onOpenInWindow}>{translate('extensions.open')}</Button></Row> : null}
     </> });
   }
   // The version itself is in the head; this section is what can be done about it, so one gugu ships has none.
@@ -335,7 +343,7 @@ export function AppManagePage({
         <Row title={<span className="text-foreground-destructive" title={agentStatus.lastFailure.stderrTail || undefined}>{programFailureText(agentStatus.lastFailure, translate)}</span>} />
       ) : null}
       {givenApi ? (
-        <div className="mg-row is-block">
+        <div className="mg-row is-block" data-testid="app-manage-given">
           <AppGivenSection extensionId={manifest.id} api={givenApi} machineName={machine} blocked={!enabled ? 'off' : revoked.includes('agents:tools') ? 'revoked' : undefined} />
         </div>
       ) : null}
@@ -352,10 +360,7 @@ export function AppManagePage({
         toolList.length > 0 ? (
           <Collapsible className="mg-row is-block" data-testid="app-manage-tools">
             <CollapsibleTrigger className="mg-row-toggle">
-              <span className="mg-row-tx">
-                <span>{translate('extensions.manageTools', { n: String(toolList.length) })}</span>
-                <i className="truncate">{toolList.slice(0, 6).map((tool) => tool.name).join('、')}</i>
-              </span>
+              <span>{translate('extensions.manageTools', { n: String(toolList.length) })}</span>
               <ChevronRight className="size-4" />
             </CollapsibleTrigger>
             <CollapsibleContent>
@@ -373,16 +378,24 @@ export function AppManagePage({
           <Row title={translate('extensions.addsTools')} note={tools.status === 'loading' ? translate('extensions.inspecting') : translate('extensions.addsToolsWhenOn', { programs: listOf(programs, locale) })} testId="app-manage-tools" />
         )
       ) : null}
-      {manifest.contributes.skills ? <Row title={translate('extensions.manageSkills')} note={skills.length > 0 ? skills.join('、') : translate('extensions.addsSkillsText')} testId="app-manage-skills" /> : null}
-      {manifest.contributes.instructions ? <Row title={translate('extensions.addsInstructions')} note={manifest.contributes.instructions} testId="app-product-instructions" /> : null}
+      {manifest.contributes.skills ? <Row title={translate('extensions.manageSkills')} note={skills.length > 0 ? translate('extensions.manageSkillsNote', { skills: skills.join(listJoin) }) : translate('extensions.addsSkillsText')} testId="app-manage-skills" /> : null}
+      {manifest.contributes.instructions ? (
+        <Collapsible className="mg-row is-block" data-testid="app-product-instructions">
+          <CollapsibleTrigger className="mg-row-toggle">
+            <span>{translate('extensions.addsInstructions')}</span>
+            <ChevronRight className="size-4" />
+          </CollapsibleTrigger>
+          <CollapsibleContent><p className="mg-fold">{manifest.contributes.instructions}</p></CollapsibleContent>
+        </Collapsible>
+      ) : null}
     </fieldset> });
   }
-  if (prompts) sections.push({ id: 'prompts', label: translate('extensions.managePrompts'), note: translate('extensions.managePromptsNote'), body: <div className="mg-row is-block">{prompts}</div> });
-  sections.push({ id: 'permissions', label: translate('extensions.detailPermissions'), note: withdrawn > 0
+  if (prompts) sections.push({ id: 'prompts', label: translate('extensions.managePrompts'), note: translate('extensions.managePromptsNote'), body: prompts });
+  sections.push({ id: 'permissions', label: translate('extensions.detailPermissions'), note: permissionsNote ?? (withdrawn > 0
     ? translate('extensions.permissionsWithdrawnNote', { count: permissions.length, revoked: withdrawn })
-    : translate(permissions.length === 0 ? 'extensions.permissionsNoteNone' : onTogglePermission ? 'extensions.permissionsNoteAsked' : 'extensions.permissionsNoteInstall'), body: permissions.length === 0
+    : translate(permissions.length === 0 ? 'extensions.permissionsNoteNone' : onTogglePermission ? 'extensions.permissionsNoteAsked' : 'extensions.permissionsNoteInstall')), body: permissions.length === 0
     ? <Row title={translate('extensions.permissionsNone')} />
-    : <div className="mg-row is-block"><fieldset disabled={readOnly} className="contents">{permissions.map(permissionRow)}</fieldset></div> });
+    : <fieldset disabled={readOnly} className="contents">{permissions.map(permissionRow)}</fieldset> });
   if (api.appData && onClearData) {
     sections.push({ id: 'data', label: translate('extensions.manageData'), body: (
       <Row title={translate('extensions.manageDataRow')} note={translate('extensions.manageDataNote')} testId="app-manage-data">
@@ -395,41 +408,46 @@ export function AppManagePage({
     <Row title={translate(`extensions.origin.${origin ?? 'unknown'}`)} note={manifest.author} testId="app-manage-origin">
       {onViewInMarket ? <Button type="button" variant="outline" size="sm" onClick={onViewInMarket} data-testid="app-manage-market">{translate('extensions.viewInMarket')}</Button> : null}
     </Row>
-    <Row title={translate('extensions.manageApi', { version: String(manifest.apiVersion) })} note={manifest.license ? `${translate('extensions.infoLicense')} ${manifest.license}` : undefined}>
-      {links.map((link) => <button type="button" className="mk-link" key={link.href} onClick={() => onOpenExternal(link.href)}>{link.label}</button>)}
+    <Row title={translate('extensions.manageTechnical')} note={[manifest.id, translate('extensions.manageApi', { version: String(manifest.apiVersion) }), manifest.license && `${translate('extensions.infoLicense')} ${manifest.license}`].filter(Boolean).join(' · ')} testId="app-manage-technical">
+      {links.map((link) => <Button type="button" variant="outline" size="sm" key={link.href} onClick={() => onOpenExternal(link.href)}>{link.label}</Button>)}
     </Row>
     {onUninstall ? (
-      <Row title={<span className="text-foreground-destructive">{translate('extensions.uninstallAction')}</span>} note={translate('extensions.manageUninstallNote')} testId="app-manage-uninstall">
-        <Button type="button" variant="outline" size="sm" disabled={readOnly || pending !== undefined} onClick={onUninstall} data-testid="app-manage-uninstall-action">{translate('extensions.uninstallAction')}</Button>
+      <Row title={translate('extensions.manageUninstall', { name: text.name })} note={translate('extensions.manageUninstallNote')} testId="app-manage-uninstall">
+        <Button type="button" variant="destructive" size="sm" disabled={readOnly || pending !== undefined} onClick={onUninstall} data-testid="app-manage-uninstall-action">{translate('extensions.uninstallAction')}</Button>
       </Row>
     ) : null}
   </> });
 
-  // 页面滚动时,左边那一列标出正看着哪一节。
+  // 左边那一列标出正看着哪一节:滚到顶上的最后一节;到底了是最后一节。点了哪节就是哪节(到底了那节顶不到上面),直到人自己再滚。
   const [current, setCurrent] = useState(sections[0]!.id);
   const anchors = sections.map((section) => section.id).join(' ');
+  const pageRef = useRef<HTMLDivElement>(null);
+  const clicked = useRef(false);
   useEffect(() => {
-    if (typeof IntersectionObserver === 'undefined') return;
-    const observer = new IntersectionObserver((entries) => {
-      const seen = entries.find((entry) => entry.isIntersecting);
-      if (seen) setCurrent(seen.target.getAttribute('data-manage-section')!);
-    }, { rootMargin: '-15% 0px -75% 0px' });
-    for (const node of document.querySelectorAll('[data-manage-section]')) observer.observe(node);
-    return () => observer.disconnect();
+    const scroller = scrollParent(pageRef.current);
+    if (!scroller) return;
+    const nodes = [...scroller.querySelectorAll<HTMLElement>('[data-manage-section]')];
+    const onScroll = () => {
+      if (clicked.current) return;
+      const top = scroller.getBoundingClientRect().top + 80;
+      const atEnd = scroller.scrollTop + scroller.clientHeight >= scroller.scrollHeight - 2;
+      const seen = atEnd ? nodes.at(-1) : nodes.filter((node) => node.getBoundingClientRect().top <= top).at(-1);
+      setCurrent((seen ?? nodes[0])!.getAttribute('data-manage-section')!);
+    };
+    const release = () => { clicked.current = false; };
+    scroller.addEventListener('scroll', onScroll, { passive: true });
+    for (const event of ['wheel', 'touchmove', 'keydown', 'pointerdown'] as const) scroller.addEventListener(event, release, { passive: true });
+    return () => {
+      scroller.removeEventListener('scroll', onScroll);
+      for (const event of ['wheel', 'touchmove', 'keydown', 'pointerdown'] as const) scroller.removeEventListener(event, release);
+    };
   }, [anchors]);
 
   return (
     // Two boxes: `.mk` is the size container, and a container query reads an ancestor, never the element itself.
-    <div className="mk" data-testid="app-manage-page" data-extension-id={manifest.id}>
+    <div className="mk" ref={pageRef} data-testid="app-manage-page" data-extension-id={manifest.id}>
       <div className="mg">
-      <nav className="mg-anchors" aria-label={translate('extensions.appSettings')}>
-        {sections.map((section) => (
-          <button type="button" key={section.id} className={cn(current === section.id && 'is-on')} onClick={() => document.querySelector(`[data-manage-section="${section.id}"]`)?.scrollIntoView({ block: 'start' })}>
-            {section.label}
-          </button>
-        ))}
-      </nav>
-      <div className="mg-main">
+      <div className="mg-top">
         <button type="button" className="mk-back" onClick={onBack} data-testid="app-manage-back">
           <ChevronLeft className="size-3.5" />
           {backLabel}
@@ -438,13 +456,12 @@ export function AppManagePage({
           <header className="mg-head">
             <span className="mk-icon is-56"><ExtensionMonogram name={text.name} iconDataUrl={iconDataUrl} /></span>
             <div className="mg-head-tx">
-              <h2>{text.name}</h2>
-              <p>{[`v${manifest.version}`, machine].filter(Boolean).join(' · ')}</p>
+              <h2 title={text.name}>{text.name}</h2>
+              <p>{[`v${manifest.version}`, machine, enabled ? undefined : translate('extensions.switchedOff')].filter(Boolean).join(' · ')}</p>
             </div>
-            <fieldset disabled={readOnly} className="contents">
-              {onToggleEnabled ? <Switch checked={enabled} disabled={readOnly || switching} aria-label={translate('extensions.switchLabel', { name: text.name })} onCheckedChange={onToggleEnabled} data-testid="app-manage-switch" /> : null}
+            <fieldset disabled={readOnly} className="mg-head-acts">
               <AppLifecycleButton state={lifecycle} pending={pending} percent={pendingPercent} disabled={readOnly} translate={translate} onClick={onLifecycle} testId="app-manage-action" />
-              <AppMoreMenu name={text.name} enabled={enabled} docked={docked} disabled={readOnly || pending !== undefined} translate={translate} resource={resource} onForward={onForward} testId="app-manage-more" />
+              <AppMoreMenu name={text.name} enabled={enabled} docked={docked} disabled={readOnly || pending !== undefined} translate={translate} resource={resource} onOpenInWindow={onOpenInWindow} onForward={onForward} testId="app-manage-more" />
             </fieldset>
           </header>
         </ResourceMenu>
@@ -461,6 +478,25 @@ export function AppManagePage({
             </div>
           </fieldset>
         ) : null}
+      </div>
+      <nav className="mg-anchors" aria-label={translate('extensions.appSettings')}>
+        {sections.map((section) => (
+          <button
+            type="button"
+            key={section.id}
+            className={cn(current === section.id && 'is-on')}
+            aria-current={current === section.id ? 'true' : undefined}
+            onClick={() => {
+              clicked.current = true;
+              setCurrent(section.id);
+              document.querySelector(`[data-manage-section="${section.id}"]`)?.scrollIntoView({ block: 'start' });
+            }}
+          >
+            {section.label}
+          </button>
+        ))}
+      </nav>
+      <div className="mg-main">
         {sections.map((section) => (
           <section className="mg-sec" key={section.id} data-manage-section={section.id} data-testid={`app-manage-${section.id}`}>
             <h3>{section.label}</h3>
@@ -472,6 +508,14 @@ export function AppManagePage({
       </div>
     </div>
   );
+}
+
+/** The nearest box that scrolls: the page is drawn inside different ones on desktop and phone. */
+function scrollParent(node: HTMLElement | null): HTMLElement | null {
+  for (let at = node?.parentElement ?? null; at; at = at.parentElement) {
+    if (/(auto|scroll)/.test(getComputedStyle(at).overflowY)) return at;
+  }
+  return null;
 }
 
 /** 一行:左边名目和一句说明,右边它的控件。 */

@@ -12,6 +12,8 @@ import { installedExtensionsStore } from '../../session/renderer/features/extens
 import type { AppOpenWithDetail } from '../../session/shared/extensions/app-runtime-protocol'
 import { displayNameOf, openerAhead, openerChoice } from '../../session/shared/extensions/file-openers'
 import { installPackageOf, packageKey, sharedPackagesOf, subscribeSharedPackages, type SharedPackage } from '../extensionBundle/sharedPackages'
+import { followLink } from '../../lib/guguLinks'
+import { translateSessionMessage } from '../../session/renderer/localization/locale-store'
 import { parseExtensionTabKind, type ExtensionManifest } from '../../session/shared/extensions/manifest'
 import type { ExtensionOrigin } from '../../session/shared/extensions/upgrade'
 import { availableInstallOffers, type AppInstallOffer, type MarketOffer } from '../extensionBundle/installOffers'
@@ -340,7 +342,7 @@ export const GroupTabContent = observer(function GroupTabContent({ chatId, tabId
           {command.title}
         </Button>
       ))}
-      {folded.length > 0 || fileHost ? (
+      {folded.length > 0 || fileHost || (mobile && shownApp) ? (
         <DropdownMenu.Root>
           <DropdownMenu.Trigger className="gg-ghost" data-testid="group-app-slot-more" aria-label={t('chatArea.openWith.more')}>
             <MoreHorizontal size={16} />
@@ -352,6 +354,7 @@ export const GroupTabContent = observer(function GroupTabContent({ chatId, tabId
               </DropdownMenu.Item>
             ))}
             {fileHost ? <DropdownMenu.Item className={menuRowClassName} onClick={openFileStorageSettings}>{t('fileStoredOn.settings')}</DropdownMenu.Item> : null}
+            {mobile && shownApp ? <DropdownMenu.Item className={menuRowClassName} data-testid="group-app-slot-settings" onClick={() => void followLink({ kind: 'app-detail', extensionId: shownApp })}>{translateSessionMessage('extensions.appSettings')}</DropdownMenu.Item> : null}
           </DropdownMenu.Content>
         </DropdownMenu.Root>
       ) : null}

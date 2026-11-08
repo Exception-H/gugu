@@ -214,7 +214,7 @@ export default {
       "done": "Done",
       "noPlaces": "You have no agents and are in no groups yet",
       "noMatch": "Nothing found",
-      "used": "Given to: ",
+      "used": "Used by: ",
       "hereAll": "All agents here",
       "hereAllOn": "All agents on {{machine}}",
       "more": "{{names}} and {{count}} in all",
@@ -252,6 +252,7 @@ export default {
       "showRaw": "Show the raw content",
       "hideRaw": "Hide the raw content",
       "install": "Install",
+      "goToApps": "Go to Apps",
       "unavailable": "This App cannot open here right now: it is not installed, or it is switched off.",
       "title": "Open “{{name}}” with"
     },

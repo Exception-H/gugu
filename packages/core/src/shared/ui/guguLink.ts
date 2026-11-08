@@ -228,7 +228,7 @@ function buildAppLink(input: ParsedExtensionLink, scheme: string): string {
 
 /** Stored chat/file links are independent of the build that writes or reads the message. */
 export const APP_VARIANT_NAME_PATTERN = /^[a-z0-9][a-z0-9-]{0,62}$/
-export type AppDetailLink = { kind: 'app-detail'; extensionId: string; deviceId?: string; variant?: string }
+export type AppDetailLink = { kind: 'app-detail'; extensionId: string; deviceId?: string; variant?: string; /** Asked from inside the App: back returns there. Never in the URL. */ fromApp?: boolean }
 function validAppDetail(target: AppDetailLink): boolean {
   return /^[a-z0-9][a-z0-9-]{1,63}$/.test(target.extensionId)
     && (target.deviceId === undefined || (!!target.deviceId && target.deviceId.trim() === target.deviceId && !/\s/.test(target.deviceId)))

@@ -1,3 +1,4 @@
+import { ExtensionMonogram } from '@/session/renderer/features/extensions/panel/extension-monogram'
 import { ResourceMenu } from '../ResourceMenu'
 import { comparer, reaction } from 'mobx'
 import { useEffect, useId, useState } from 'react'
@@ -71,6 +72,7 @@ export function AppsSection({ updates, gone, onManage }: { updates: Record<strin
                 <SettingsRow
                   data-app-id={manifest.id}
                   data-testid="settings-apps-row"
+                  leading={<span className="mk-icon"><ExtensionMonogram name={localizedManifestText(manifest, i18n.language).name} iconDataUrl={installedExtensionsStore.appIcons[manifest.id]} /></span>}
                   onClick={() => onManage(manifest.id)}
                   // 名字跟界面语言走,和电脑上 App 页同一个挑法(manifest 的 localized)。
                   title={localizedManifestText(manifest, i18n.language).name}
@@ -113,7 +115,7 @@ export function AppsSection({ updates, gone, onManage }: { updates: Record<strin
         <Sheet onClose={() => setAsking(null)} testId="settings-apps-uninstall-sheet" titleId={titleId}>
           <div className="flex min-h-0 flex-1 flex-col gap-3 !p-5">
             <div id={titleId} className="text-[length:var(--font-title)] font-semibold text-[var(--text-primary)]">
-              {translateSessionMessage('extensions.uninstallConfirmTitle')}
+              {translateSessionMessage('extensions.uninstallConfirmTitle', { name: asking })}
             </div>
             <div className="text-[length:var(--font-body)] text-[var(--text-secondary)]">
               {translateSessionMessage('extensions.uninstallConfirmDescription', { name: asking })}

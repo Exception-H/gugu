@@ -31,6 +31,7 @@ function PromptRow({
   tag,
   onEdit,
   actions,
+  actionsShown = false,
 }: {
   item: PromptListItem;
   disabled: boolean;
@@ -39,6 +40,8 @@ function PromptRow({
   /** Absent: the row's text opens nothing (a hidden App prompt). */
   onEdit?: () => void;
   actions: RowAction[];
+  /** On a settings page the actions are there to be found, not on hover. */
+  actionsShown?: boolean;
 }) {
   return (
     <div className="flex w-full">
@@ -56,7 +59,7 @@ function PromptRow({
           {item.prompt}
         </div>
       </button>
-      <div className="flex shrink-0 items-center gap-1 opacity-100 sm:opacity-0 sm:transition-opacity sm:group-focus-within:opacity-100 sm:group-hover:opacity-100">
+      <div className={cn('flex shrink-0 items-center gap-1', !actionsShown && 'opacity-100 sm:opacity-0 sm:transition-opacity sm:group-focus-within:opacity-100 sm:group-hover:opacity-100')}>
         {actions.map(({ icon: Icon, label, onClick }) => (
           <Button key={label} variant="ghost" size="icon-xs" onClick={onClick} disabled={disabled} aria-label={label} title={label}>
             <Icon />
@@ -69,6 +72,10 @@ function PromptRow({
 
 /** An App's prompt: edit the person's own version, hide it, or go back to the App's. One row for the library page and the App's settings page. */
 export function AppPromptListRow({ prompt, actions, disabled }: { prompt: AppPromptRow; actions: PromptLibraryActions; disabled: boolean }) {
+  return <MultiLineListItem className="py-3"><AppPromptBody prompt={prompt} actions={actions} disabled={disabled} /></MultiLineListItem>;
+}
+
+function AppPromptBody({ prompt, actions, disabled, actionsShown }: { prompt: AppPromptRow; actions: PromptLibraryActions; disabled: boolean; actionsShown?: boolean }) {
   const { translate } = useSessionMessages();
   const offered = APP_PROMPT_ACTIONS[prompt.state];
   const all = {
@@ -77,17 +84,15 @@ export function AppPromptListRow({ prompt, actions, disabled }: { prompt: AppPro
     restore: { icon: RotateCcw, label: translate('prompts.restore'), onClick: () => actions.restoreAppPrompt(prompt) },
   };
   return (
-    <MultiLineListItem className="py-3">
-      <PromptRow item={prompt} disabled={disabled} tag={prompt.state === 'modified' ? translate('prompts.modified') : prompt.state === 'hidden' ? translate('prompts.hidden') : undefined}
-        onEdit={offered.includes('edit') ? all.edit.onClick : undefined} actions={offered.map((action) => all[action])} />
-    </MultiLineListItem>
+    <PromptRow item={prompt} disabled={disabled} tag={prompt.state === 'modified' ? translate('prompts.modified') : prompt.state === 'hidden' ? translate('prompts.hidden') : undefined}
+        onEdit={offered.includes('edit') ? all.edit.onClick : undefined} actions={offered.map((action) => all[action])} actionsShown={actionsShown} />
   );
 }
 
 /** One App's prompts, on its settings page. Same data and writes as the library page. */
 export const AppPromptsSection = observer(function AppPromptsSection({ extensionId, store }: { extensionId: string; store: Pick<typeof installedExtensionsStore, 'appPrompts'> }) {
   const actions = usePromptLibraryActions(store);
-  return <>{actions.appPrompts.filter((prompt) => prompt.key.startsWith(`${extensionId}/`)).map((prompt) => <AppPromptListRow key={prompt.key} prompt={prompt} actions={actions} disabled={actions.isBusy} />)}</>;
+  return <>{actions.appPrompts.filter((prompt) => prompt.key.startsWith(`${extensionId}/`)).map((prompt) => <div className="mg-row" key={prompt.key}><AppPromptBody prompt={prompt} actions={actions} disabled={actions.isBusy} actionsShown /></div>)}</>;
 });
 
 /** Sections like the composer's `/` (prompt-slash-items.ts): the person's own, then each enabled App's. */

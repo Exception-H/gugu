@@ -8,6 +8,8 @@ import type { SessionTranslate } from '../extension-consent';
 
 export type Loadable<T> = { status: 'idle' } | { status: 'loading' } | { status: 'ready'; data: T } | { status: 'error' };
 
+const HISTORY_FOLDED = 5;
+
 export function shortDate(iso: string, locale: string): string {
   try {
     return new Intl.DateTimeFormat(locale, { month: 'short', day: 'numeric' }).format(new Date(iso));
@@ -37,6 +39,7 @@ export function VersionHistorySection({
   onInstallVersion?: (version: string) => void;
   onOpenExternal: (url: string) => void;
 }) {
+  const [all, setAll] = useState(false);
   if (state.status === 'idle' || state.status === 'loading') {
     return <p className="text-foreground-passive">{translate('extensions.loading')}</p>;
   }
@@ -46,9 +49,12 @@ export function VersionHistorySection({
   if (state.data.length === 0) {
     return <p className="text-foreground-muted">{translate('extensions.historyNone')}</p>;
   }
+  // 默认最近五版,装着的那一版总在;其余点开。
+  const shown = all ? state.data : state.data.filter((entry, index) => index < HISTORY_FOLDED || entry.version === installedVersion);
   return (
+    <>
     <ul className="xp-history">
-      {state.data.map((entry) => (
+      {shown.map((entry) => (
         <VersionHistoryRow
           key={entry.version}
           entry={entry}
@@ -62,6 +68,12 @@ export function VersionHistorySection({
         />
       ))}
     </ul>
+    {shown.length < state.data.length ? (
+      <button type="button" className="xp-link xp-history-more" onClick={() => setAll(true)} data-testid="extension-history-more">
+        {translate('extensions.historyShowAll', { count: state.data.length })}
+      </button>
+    ) : null}
+    </>
   );
 }
 

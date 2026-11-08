@@ -101,9 +101,10 @@ describe('App 设置页', () => {
   it('turning a page off only exists for pages: not for a card or a file opener', async () => {
     const hide = vi.fn();
     await render({ hiddenTabs: ['own'], onSetTabHidden: hide }, async (document) => {
-      expect(document.querySelector('[data-testid="app-manage-page-card"] [role="switch"]')).toBeNull();
-      expect(document.querySelector('[data-testid="app-manage-page-card"]')?.textContent).toContain('extensions.managePageCard');
-      expect(document.querySelector('[data-testid="app-manage-page-file"] [role="switch"]')).toBeNull();
+      expect(document.querySelector('[data-testid="app-manage-page-cards"] [role="switch"]')).toBeNull();
+      expect(document.querySelector('[data-testid="app-manage-page-cards"]')?.textContent).toContain('Note card');
+      expect(document.querySelector('[data-testid="app-manage-page-files"] [role="switch"]')).toBeNull();
+      expect(document.querySelector('[data-testid="app-manage-page-files"]')?.textContent).toContain('.note');
       expect(document.querySelector('[data-testid="app-manage-page-own"] [role="switch"]')?.getAttribute('aria-checked')).toBe('false');
       await click(document, '[data-testid="app-manage-page-main"] [role="switch"]');
     });

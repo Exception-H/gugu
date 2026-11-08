@@ -213,7 +213,7 @@ export default {
       "done": "完成",
       "noPlaces": "你还没有 agent，也不在任何群里",
       "noMatch": "没有找到",
-      "used": "给了：",
+      "used": "谁能用：",
       "hereAll": "本机所有 agent",
       "hereAllOn": "「{{machine}}」上所有 agent",
       "more": "{{names}} 等 {{count}} 处",
@@ -251,6 +251,7 @@ export default {
       "showRaw": "查看原始内容",
       "hideRaw": "收起原始内容",
       "install": "安装",
+      "goToApps": "去 App 页",
       "unavailable": "这个 App 现在打不开：没装上，或者已经停用。",
       "title": "用哪个打开「{{name}}」"
     },

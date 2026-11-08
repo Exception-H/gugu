@@ -105,7 +105,7 @@ const AppTitlebar = observer(function AppTitlebar() {
               size="icon-sm"
               aria-label={translate('extensions.appSettings')}
               title={translate('extensions.appSettings')}
-              onClick={() => params.appId && void followLink({ kind: 'app-detail', extensionId: params.appId })}
+              onClick={() => params.appId && void followLink({ kind: 'app-detail', extensionId: params.appId, fromApp: true })}
               data-testid="app-page-settings"
             >
               <Settings />

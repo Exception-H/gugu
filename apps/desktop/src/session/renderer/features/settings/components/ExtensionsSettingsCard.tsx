@@ -139,7 +139,7 @@ const GROUP_LABEL = {
 /** Which page of an App is open, and the one the back button returns to. */
 export type AppDetail =
   | { page: 'market'; subject: Omit<ExtensionDetailSubject, 'installedVersion'>; from?: AppDetail }
-  | { page: 'manage'; extensionId: string; from?: AppDetail };
+  | { page: 'manage'; extensionId: string; from?: AppDetail; fromApp?: boolean };
 
 const appDetailId = (detail: AppDetail) => (detail.page === 'market' ? detail.subject.manifest.id : detail.extensionId);
 
@@ -887,7 +887,7 @@ export const ExtensionsSettingsCard = observer(function ExtensionsSettingsCard({
    */
   const confirmUninstall = (app: { id: string; name: string }) => {
     showConfirm({
-      title: translate('extensions.uninstallConfirmTitle'),
+      title: translate('extensions.uninstallConfirmTitle', { name: app.name }),
       description: translate('extensions.uninstallConfirmDescription', { name: app.name }),
       confirmLabel: translate('extensions.uninstallAction'),
       variant: 'destructive',
@@ -1129,7 +1129,7 @@ export const ExtensionsSettingsCard = observer(function ExtensionsSettingsCard({
   const clearData = (manifest: ExtensionManifest) => {
     const name = localizedManifestText(manifest, locale).name;
     showConfirm({
-      title: translate('extensions.manageDataConfirmTitle'),
+      title: translate('extensions.manageDataConfirmTitle', { name }),
       description: translate('extensions.manageDataConfirmDescription', { name }),
       confirmLabel: translate('extensions.manageDataClear'),
       variant: 'destructive',
@@ -1280,7 +1280,7 @@ export const ExtensionsSettingsCard = observer(function ExtensionsSettingsCard({
           machine={remote?.deviceLabel}
           api={api}
           readOnly={!!notice?.readOnly}
-          backLabel={translate(detail.from ? 'extensions.title' : 'extensions.tabInstalled')}
+          backLabel={detail.fromApp ? localizedManifestText(managed, locale).name : translate(detail.from ? 'extensions.title' : 'extensions.tabInstalled')}
           notice={noticeOf(managed)}
           origin={origin}
           variants={store.variants[managed.id]}
@@ -1300,6 +1300,11 @@ export const ExtensionsSettingsCard = observer(function ExtensionsSettingsCard({
           dataBytesKey={dataCleared}
           resource={menu.resource}
           onBack={() => {
+            if (detail.fromApp) {
+              setDetail(null);
+              openApp(managed.id);
+              return;
+            }
             if (!detail.from) setTab('installed');
             setDetail(detail.from ?? null);
           }}
@@ -1328,7 +1333,7 @@ export const ExtensionsSettingsCard = observer(function ExtensionsSettingsCard({
     <SearchInput
       ref={searchRef}
       type="search"
-      containerClassName="w-56"
+      containerClassName="w-56 min-w-0 [@container(max-width:600px)]:w-32"
       placeholder={searchPlaceholder}
       aria-label={searchPlaceholder}
       value={query}

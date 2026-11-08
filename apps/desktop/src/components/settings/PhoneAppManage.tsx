@@ -85,6 +85,7 @@ export const PhoneAppManage = observer(function PhoneAppManage({ extensionId, up
             api={phoneProductApi}
             readOnly={busy}
             backLabel={translate('extensions.tabInstalled')}
+            permissionsNote={translate('extensions.permissionsNotePhone')}
             notice={notice}
             origin={builtIn ? 'preinstalled' : phoneApps.originOf(extensionId) ?? undefined}
             autoUpdate={autoUpdate === null ? undefined : { on: autoUpdate, onToggle: (on) => void run(translate('extensions.switchFailed'), () => phoneApps.setAutoUpdate(extensionId, on)) }}
@@ -104,7 +105,7 @@ export const PhoneAppManage = observer(function PhoneAppManage({ extensionId, up
       {asking ? (
         <Sheet onClose={() => setAsking(false)} testId="settings-apps-uninstall-sheet" titleId={titleId}>
           <div className="flex min-h-0 flex-1 flex-col gap-3 !p-5">
-            <div id={titleId} className="text-[length:var(--font-title)] font-semibold text-[var(--text-primary)]">{translate('extensions.uninstallConfirmTitle')}</div>
+            <div id={titleId} className="text-[length:var(--font-title)] font-semibold text-[var(--text-primary)]">{translate('extensions.uninstallConfirmTitle', { name })}</div>
             <div className="text-[length:var(--font-body)] text-[var(--text-secondary)]">{translate('extensions.uninstallConfirmDescription', { name })}</div>
             <div className="flex justify-end gap-2">
               <Button variant="ghost" onClick={() => setAsking(false)}>{translate('common.cancel')}</Button>
