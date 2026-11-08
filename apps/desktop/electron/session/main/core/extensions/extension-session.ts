@@ -160,14 +160,20 @@ export async function extensionSessionBytes(extensionId: string): Promise<number
 }
 
 /**
- * Empties an App's browser storage, which stays installed: its protocol handler and partition stay, and a card still showing in a
- * message reloads, so it neither loses its page nor writes back what it held in memory. Uninstalling is `clearExtensionSessionData`.
+ * Empties an App's browser storage, which stays installed: its protocol handler and partition stay. A page still showing (a card in
+ * a message) leaves before the storage goes and comes back after: left running, or only reloaded afterwards, it wrote what it held in
+ * memory straight back (6 of 6 on a real card). Uninstalling is `clearExtensionSessionData`.
  */
 export async function clearExtensionStorage(extensionId: string): Promise<void> {
   const ses = configured.get(extensionId)?.session ?? session.fromPartition(extensionPartition(extensionId));
-  await ses.clearStorageData();
-  await ses.clearCache();
-  reloadExtensionSurfaces(extensionId);
+  const pages = webContents.getAllWebContents().filter((contents) => contents.session === ses && !contents.isDestroyed()).map((contents) => ({ contents, url: contents.getURL() }));
+  await Promise.all(pages.map(({ contents }) => contents.loadURL('about:blank')));
+  try {
+    await ses.clearStorageData();
+    await ses.clearCache();
+  } finally {
+    await Promise.all(pages.filter(({ contents }) => !contents.isDestroyed()).map(({ contents, url }) => contents.loadURL(url)));
+  }
 }
 
 /** Whether this extension's session was hardened in this run. */

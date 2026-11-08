@@ -78,7 +78,7 @@ class FakeSession {
   clearCache = vi.fn(async () => {});
 }
 
-const pages = vi.hoisted(() => [] as { session: unknown; isDestroyed: () => boolean; reloadIgnoringCache: () => void }[]);
+const pages = vi.hoisted(() => [] as { session: unknown; isDestroyed: () => boolean; getURL: () => string; loadURL: (url: string) => Promise<void> }[]);
 vi.mock('electron', () => ({
   webContents: { getAllWebContents: () => pages },
   session: {
@@ -338,19 +338,32 @@ describe('configureExtensionSession', () => {
 });
 
 describe('what an App saved, while it stays installed', () => {
-  it('clearing empties its storage, keeps its protocol handler for cards still showing, and reloads them', async () => {
+  it('clearing: a page still showing leaves first, the storage empties, and it comes back; the protocol handler stays', async () => {
     configureExtensionSession(bundle([]));
     const ses = fakeSessionFor(EXTENSION_ID);
-    const reloadIgnoringCache = vi.fn();
-    pages.push({ session: ses, isDestroyed: () => false, reloadIgnoringCache });
+    const order: string[] = [];
+    ses.clearStorageData.mockImplementationOnce(async () => void order.push('clear'));
+    const loadURL = vi.fn(async (url: string) => void order.push(url));
+    pages.push({ session: ses, isDestroyed: () => false, getURL: () => 'gugu-ext://arxiv-search/card.html', loadURL });
 
     await clearExtensionStorage(EXTENSION_ID);
 
-    expect(ses.clearStorageData).toHaveBeenCalledOnce();
+    expect(order).toEqual(['about:blank', 'clear', 'gugu-ext://arxiv-search/card.html']);
     expect(ses.clearCache).toHaveBeenCalledOnce();
     expect(ses.handledSchemes.has('gugu-ext')).toBe(true);
     expect(configuredExtensionIds().has(EXTENSION_ID)).toBe(true);
-    expect(reloadIgnoringCache).toHaveBeenCalledOnce();
+    pages.length = 0;
+  });
+
+  it('a clear that fails still brings the page back, and says so', async () => {
+    configureExtensionSession(bundle([]));
+    const ses = fakeSessionFor(EXTENSION_ID);
+    ses.clearStorageData.mockRejectedValueOnce(new Error('disk'));
+    const loadURL = vi.fn(async () => undefined);
+    pages.push({ session: ses, isDestroyed: () => false, getURL: () => 'gugu-ext://arxiv-search/card.html', loadURL });
+
+    await expect(clearExtensionStorage(EXTENSION_ID)).rejects.toThrow('disk');
+    expect(loadURL).toHaveBeenLastCalledWith('gugu-ext://arxiv-search/card.html');
     pages.length = 0;
   });
 
