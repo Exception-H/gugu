@@ -52,7 +52,7 @@ import { localQueuedInputs } from './local-queued-inputs'
 import type { SessionInput } from '@/lib/sessionInputOutbox'
 import { projectRejectedSessionInputs } from '@/lib/pendingSessionInput'
 import { projectPhonePendingInputs } from './phone-pending-inputs'
-import { projectSessionPendingDeliveries } from '@/lib/pendingSessionDeliveries'
+import { projectSessionPendingDeliveries, settledHostRow } from '@/lib/pendingSessionDeliveries'
 import { readDeliveryEnvelope } from '@gugu/core/local/agent/deliveryEnvelope'
 import { useSessionLifeView } from './useSessionLifeView'
 import { usePendingDeliveryHistory } from './usePendingDeliveryHistory'
@@ -255,6 +255,9 @@ export function SessionConversation({ timeline, deviceId, sessionId, agentName, 
     ? { ...projectedInput, starting: startupPrompt.starting } : projectedInput
   pendingInput.current = { sessionId, prompts: projectedInputs }
   const received = useRef<{ key: string; inputs: readonly PendingPrompt[] }>({ key: '', inputs: [] })
+  // Commands read the host view at click time; a new view must not republish them (see `commands`).
+  const lifeView = useRef(life.view)
+  lifeView.current = life.view
   const receivedKey = `${deviceId}/${sessionId}`
   // Phone-host jobs expose their waiting envelope through the existing native queue snapshot.
   const phonePending = useMemo<LifeView | null>(() => phoneHost ? { sessionId, version: 0, kind: 'ready', stage: null, hold: null,
@@ -297,9 +300,14 @@ export function SessionConversation({ timeline, deviceId, sessionId, agentName, 
   const commands = useMemo<ChatCommands>(() => ({
     ...rejectedInputCommands,
     onRetrySend: id => {
-      const input = received.current.inputs.find(input => input.id === id && input.delivery?.state === 'unknown')
+      const input = received.current.inputs.find(input => input.id === id && (input.delivery?.state === 'unknown' || (input.delivery?.state === 'failed' && settledHostRow(lifeView.current, id))))
       if (!input) return rejectedInputCommands.onRetrySend?.(id)
       if (input.delivery?.retryable) void machineRpc(deviceId, local).sessions.lifeRetryUnknown(sessionId, id).catch(error => setBackgroundError(messageForUser(error)))
+    },
+    canDiscardSend: id => !!rejectedInputCommands.canDiscardSend?.(id) || settledHostRow(lifeView.current, id),
+    onDiscardSend: id => {
+      if (rejectedInputCommands.canDiscardSend?.(id)) return rejectedInputCommands.onDiscardSend?.(id)
+      void machineRpc(deviceId, local).sessions.lifeDiscard(sessionId, id).catch(error => setBackgroundError(messageForUser(error)))
     },
     ...(nativeRecord && !phoneHost ? userAttachments : { onViewAttachment: userAttachments.onViewAttachment }),
     classifyLink: classifyFileLink, onOpenLink: followConversationLink, onOpenSender: openMessageSender,
