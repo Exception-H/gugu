@@ -48,7 +48,7 @@ export interface IExecutionContext {
    * (`findWindowsCommandPaths`). `null` = this context cannot look itself (not on Windows, or not local);
    * callers then fall back to `where`, whose console-code-page output garbles non-ASCII paths.
    */
-  findWindowsCommandPaths?(command: string, env?: Record<string, string>): string[] | null;
+  findWindowsCommandPaths?(command: string, env?: Record<string, string>): Promise<string[] | null>;
 
   /** Run a command and buffer all output. Rejects on non-zero exit code. */
   exec(

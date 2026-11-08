@@ -1,4 +1,5 @@
 import { existsSync, readFileSync, realpathSync, statSync } from 'node:fs';
+import { lstat as lstatAsync, stat as statAsync } from 'node:fs/promises';
 import path from 'node:path';
 // `.ts` 扩展名:Codex ACP 桥(codex-app-server-acp.mjs)经 owned-child.ts 用 Node 原生的 TS 剥离直接加载这条链,
 // 无扩展名的值导入在那边解析不到,桥当场 exit 1(类型导入会被擦掉,所以从前没事)。
@@ -133,14 +134,15 @@ export function planDirectSpawn(
  * 命令里的 `%VAR%` 按 env 展开(厂商固定安装位置 `%LOCALAPPDATA%\…`);有一个展不开 = 没有,❌ 拿字面量去碰。
  * 不带扩展名的同名文件(npm 给 POSIX 留的那份壳)不算:Windows 跑不了它。
  */
-export function findWindowsCommandPaths(
+export async function findWindowsCommandPaths(
   command: string,
-  options: { env?: NodeJS.ProcessEnv; cwd?: string; isFile?: (candidate: string) => boolean } = {}
-): string[] {
+  options: { env?: NodeJS.ProcessEnv; cwd?: string; isFile?: (candidate: string) => Promise<boolean> | boolean } = {}
+): Promise<string[]> {
   const env = options.env ?? process.env;
   const isFile = options.isFile ?? defaultIsFile;
+  const cwd = options.cwd ?? process.cwd();
   let unresolved = false;
-  command = command.replace(/%([A-Za-z_][A-Za-z0-9_]*)%/g, (literal, name: string) => {
+  command = command.replace(/%([^%\r\n]+)%/g, (literal, name: string) => {
     const value = windowsEnvValue(env, name);
     if (value === undefined) unresolved = true;
     return value ?? literal;
@@ -151,7 +153,7 @@ export function findWindowsCommandPaths(
   if (!name) return [];
   const directories = separator >= 0
     ? [command.slice(0, separator + 1)]
-    : [options.cwd ?? process.cwd(), ...(windowsEnvValue(env, 'PATH') ?? '').split(';')];
+    : [cwd, ...(windowsEnvValue(env, 'PATH') ?? '').split(';')];
   const extensions = (windowsEnvValue(env, 'PATHEXT') ?? '.COM;.EXE;.BAT;.CMD;.VBS;.VBE;.JS;.JSE;.WSF;.WSH;.MSC')
     .split(';')
     .map((extension) => extension.trim().toLowerCase())
@@ -161,12 +163,14 @@ export function findWindowsCommandPaths(
   const found: string[] = [];
   const seen = new Set<string>();
   for (const raw of directories) {
-    const directory = raw.trim().replace(/^"(.*)"$/, '$1');
-    if (!directory) continue;
+    const entry = raw.trim().replace(/^"(.*)"$/, '$1');
+    if (!entry) continue;
+    // 相对的 PATH 段 / `.\bin\x`:按这次查找的 cwd 解析(`where` 跑在 exec 的 cwd 里,打印绝对路径)。
+    const directory = path.win32.resolve(cwd, entry);
     for (const candidate of names) {
       const full = path.win32.join(directory, candidate);
       const key = full.toLowerCase();
-      if (seen.has(key) || !isFile(full)) continue;
+      if (seen.has(key) || !(await isFile(full))) continue;
       seen.add(key);
       found.push(full);
     }
@@ -174,11 +178,20 @@ export function findWindowsCommandPaths(
   return found;
 }
 
-function defaultIsFile(candidate: string): boolean {
+/**
+ * 「不是目录」就算:WindowsApps 下的 App Execution Alias(Store / MSIX 装的 CLI,0 字节的 APPEXECLINK 重解析点)
+ * `stat` 跟不过去会抛错或报不出普通文件,而 `where` 列它、CreateProcess 也跑得动 ⇒ 抛错时退到 `lstat` 看链接本身。
+ * 异步:PATH 里一个失效的网络盘会让每次 stat 卡到 SMB 超时,不能卡在主线程上。
+ */
+async function defaultIsFile(candidate: string): Promise<boolean> {
   try {
-    return statSync(candidate).isFile();
+    return !(await statAsync(candidate)).isDirectory();
   } catch {
-    return false;
+    try {
+      return !(await lstatAsync(candidate)).isDirectory();
+    } catch {
+      return false;
+    }
   }
 }
 

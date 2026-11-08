@@ -40,7 +40,7 @@ export class LocalExecutionContext implements IExecutionContext {
     return command === 'git' ? getGitExecutable() : command;
   }
 
-  findWindowsCommandPaths(command: string, env?: Record<string, string>): string[] | null {
+  async findWindowsCommandPaths(command: string, env?: Record<string, string>): Promise<string[] | null> {
     if (process.platform !== 'win32') return null;
     // 与 exec 同一份环境:找到的就是 exec 会跑的那个。
     return findWindowsCommandPaths(command, { env: env ?? buildExternalToolEnv(), cwd: this.root || undefined });

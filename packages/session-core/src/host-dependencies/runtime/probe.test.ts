@@ -55,7 +55,7 @@ describe('a local Windows context looks commands up in-process, never through `w
   function localWindows(found: Record<string, string[]>) {
     const { ctx, calls } = recordingContext('');
     const asked: Array<{ command: string; env?: Record<string, string> }> = [];
-    (ctx as { findWindowsCommandPaths?: unknown }).findWindowsCommandPaths = (command: string, env?: Record<string, string>) => {
+    (ctx as { findWindowsCommandPaths?: unknown }).findWindowsCommandPaths = async (command: string, env?: Record<string, string>) => {
       asked.push({ command, env });
       return found[command] ?? [];
     };
@@ -83,7 +83,7 @@ describe('a local Windows context looks commands up in-process, never through `w
 
   it('falls back to `where` when the context cannot look itself (null), and POSIX stays on `which`', async () => {
     const { ctx, calls } = recordingContext('C:\\node\\claude.cmd\r\n');
-    (ctx as { findWindowsCommandPaths?: unknown }).findWindowsCommandPaths = () => null;
+    (ctx as { findWindowsCommandPaths?: unknown }).findWindowsCommandPaths = async () => null;
     await expect(resolveCommandPath('claude', ctx, 'windows')).resolves.toBe('C:\\node\\claude.cmd');
     await resolveCommandPath('claude', ctx, 'linux');
     expect(calls).toEqual([

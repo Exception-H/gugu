@@ -22,7 +22,7 @@ export class NodeExecutionContext implements IExecutionContext {
 
   private readonly env: NodeJS.ProcessEnv | undefined;
 
-  findWindowsCommandPaths(command: string, env?: Record<string, string>): string[] | null {
+  async findWindowsCommandPaths(command: string, env?: Record<string, string>): Promise<string[] | null> {
     if (process.platform !== 'win32') return null;
     return findWindowsCommandPaths(command, { env: env ?? this.env, cwd: this.root || undefined });
   }

@@ -102,7 +102,7 @@ async function windowsCommandLookup(
   ctx: IExecutionContext,
   env?: Record<string, string>,
 ): Promise<string[]> {
-  const found = ctx.findWindowsCommandPaths?.(command, env);
+  const found = await ctx.findWindowsCommandPaths?.(command, env);
   if (found) return found;
   const { stdout } = await ctx.exec('where', [windowsWhereArgument(command)], { timeout: WHICH_TIMEOUT_MS, env });
   return windowsCommandPaths(stdout);
@@ -148,7 +148,7 @@ export async function resolveKnownPaths(
   for (const declared of paths) {
     // 本机 Windows:`%VAR%` 与查找都在进程内做 —— `cmd /c echo` 的回显同样是控制台代码页,中文用户名的
     // `%LOCALAPPDATA%` 展开回来就是乱码。
-    const local = plat === 'windows' ? ctx.findWindowsCommandPaths?.(declared, env) : null;
+    const local = plat === 'windows' ? await ctx.findWindowsCommandPaths?.(declared, env) : null;
     if (local) {
       if (local[0]) found.push(local[0]);
       continue;
