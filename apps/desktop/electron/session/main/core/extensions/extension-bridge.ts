@@ -1130,19 +1130,23 @@ const chatIsRead = (binding: SurfaceBinding) => {
   return read !== undefined && (!contextHasMembers(binding) || read.members !== undefined);
 };
 
-/** The folder's first reads belong to this binding, consumed once even on failure. Machine presence may move before that first call. */
-const openingFolders = new WeakMap<SurfaceBinding, { list?: Promise<AppFileEntry[]>; preferences?: Promise<{ showAppData: boolean }> }>();
+/**
+ * The folder's first reads belong to this binding, consumed once even on failure. Machine presence may move before that first call.
+ * What the App reads first: the top and 「附件」 (whose files the top shows), one folder each — never the whole tree.
+ */
+const OPENING_FOLDERS = ['', '附件'] as const;
+const openingFolders = new WeakMap<SurfaceBinding, { lists: Map<string, Promise<AppFileEntry[]>>; preferences?: Promise<{ showAppData: boolean }> }>();
 function preloadFolder(binding: SurfaceBinding, pageId: number): void {
   if (binding.extensionId !== 'workspace' || binding.tabName !== 'main' || !binding.conversation || binding.workspace || binding.itemId || binding.modal
     || binding.operator.kind !== 'person' || contextHasMembers(binding) || !extensionsService().hasCapability(binding.extensionId, 'files:read')) return;
   const page = pageCaller(binding, pageId, false).filePage({});
   const args = { place: { chat: binding.conversation } };
   const files = import('@main/core/extensions/app-files');
-  const list = files.then((files) => files.listAppFiles(page, args));
+  const lists = new Map(OPENING_FOLDERS.map((folder) => [folder, files.then((files) => files.listAppFiles(page, { ...args, folder }))] as const));
   const preferences = files.then((files) => files.appFileViewPreferences(page, args));
-  openingFolders.set(binding, { list, preferences });
+  openingFolders.set(binding, { lists, preferences });
   // Observe rejection while the App is loading; the original promises still deliver those same errors to its calls.
-  void Promise.allSettled([list, preferences]);
+  void Promise.allSettled([...lists.values(), preferences]);
 }
 
 /** A page's own chat is bound as its resource container (`surfaceResourceChat`); any other is looked up, as whoever works the call. */
@@ -1676,6 +1680,9 @@ async function dispatch(caller: BridgeCaller, method: ExtensionBridgeMethod, arg
       const result = await deliver(thePage(caller), { kind: 'navigateTab', delta: args.delta });
       return !!result && typeof result === 'object' && 'navigated' in result && result.navigated;
     }
+    // A desktop tab has no system Back to hand over: its back is the tab's page history (navigationGo). Not claimed.
+    case 'navigationClaimBack':
+      return false;
     case 'getContext':
       if (!binding) return contextOutside(extensionId);
       // Through API 26, the members come with the first answer. Newer Apps ask for them explicitly. An unread chat is said (the
@@ -1942,11 +1949,19 @@ async function dispatch(caller: BridgeCaller, method: ExtensionBridgeMethod, arg
       const page = method === 'filesClose' ? caller.filePage(args) : asCallingAgent(caller, await caller.resourcePage(args), args);
       if (binding && (method === 'filesList' || method === 'filesViewPreferences')) {
         const opening = openingFolders.get(binding);
-        const key = method === 'filesList' ? 'list' : 'preferences';
-        const read = opening?.[key];
-        if (opening) delete opening[key];
+        const folder = typeof args.folder === 'string' ? args.folder : undefined;
+        let read: Promise<unknown> | undefined;
+        if (method === 'filesList') {
+          // A list it did not read ahead (the whole tree, another folder): what it did is not the App's to be handed later.
+          read = folder === undefined ? undefined : opening?.lists.get(folder);
+          if (read) opening?.lists.delete(folder!);
+          else opening?.lists.clear();
+        } else if (method === 'filesViewPreferences') {
+          read = opening?.preferences;
+          if (opening) delete opening.preferences;
+        }
         const place = args.place as Record<string, unknown> | undefined;
-        if (read && place?.chat === binding.conversation && Object.keys(place).length === 1 && args.folder === undefined && args.showAppData === undefined) return await read;
+        if (read && place?.chat === binding.conversation && Object.keys(place).length === 1 && args.showAppData === undefined) return await read;
       }
       const listsWorkingCopy = method === 'filesList' && Boolean((args.place as { workspace?: unknown } | null)?.workspace);
       if (listsWorkingCopy || method === 'filesReadText' || method === 'filesWriteText') workingCopyPages.add(caller.pageId);
