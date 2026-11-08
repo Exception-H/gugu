@@ -1247,12 +1247,13 @@ button.mk-name:focus-visible {
     display: none;
   }
   /* 版本历史:一版两行,说明另起一行。 */
-  .xp-history-row {
+  .mk .xp-history-row {
     flex-wrap: wrap;
   }
-  .xp-history-note {
+  .mk .xp-history-note {
     order: 3;
-    flex-basis: 100%;
+    flex: 0 0 100%;
+    min-height: 0;
   }
   .mk-dh {
     gap: 20px;
