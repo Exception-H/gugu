@@ -749,7 +749,10 @@ export function hostAppFrame(
       case 'showContextMenu': {
         const menu = appContextMenuOf(args)
         const rect = frame.getBoundingClientRect()
-        return showRendererContentMenu(menu.items, { x: rect.x + menu.x, y: rect.y + menu.y })
+        const picked = await showRendererContentMenu(menu.items, { x: rect.x + menu.x, y: rect.y + menu.y })
+        // A pick is the person's input in this App, as a tap on one of its commands is (@@@command-gesture).
+        if (picked !== null) commandGestureUntil = performance.now() + ACTIVATION_LIFETIME_MS
+        return picked
       }
       case 'filesViewPreferences':
         return files.viewPreferences(chatPlace(args.place), args.showAppData as boolean | undefined)
