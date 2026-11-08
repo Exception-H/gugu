@@ -11,6 +11,7 @@ import { EmptyState } from '@renderer/lib/ui/empty-state';
 import { SearchInput } from '@renderer/lib/ui/search-input';
 import { useSessionMessages } from '@renderer/localization/use-session-messages';
 import { cn } from '@renderer/utils/utils';
+import { APP_PROMPT_ACTIONS } from '@shared/prompt-library';
 import { usePromptLibraryActions, type AppPromptRow } from './use-prompt-library-actions';
 
 type PromptListItem = { title: string; prompt: string } | AppPromptRow;
@@ -34,7 +35,8 @@ function PromptRow({
   disabled: boolean;
   /** 「已修改」/「已隐藏」 on an App's prompt; a hidden one is drawn muted. */
   tag?: string;
-  onEdit: () => void;
+  /** Absent: the row's text opens nothing (a hidden App prompt). */
+  onEdit?: () => void;
   actions: RowAction[];
 }) {
   return (
@@ -43,7 +45,7 @@ function PromptRow({
         type="button"
         className="min-w-0 flex-1 text-left"
         onClick={onEdit}
-        disabled={disabled}
+        disabled={disabled || !onEdit}
       >
         <div className="flex min-w-0 items-center gap-2">
           <span className={cn('text-md truncate', 'state' in item && item.state === 'hidden' ? 'text-foreground-muted' : 'text-foreground')}>{item.title}</span>
@@ -88,14 +90,16 @@ export const PromptLibraryView = observer(function PromptLibraryView() {
   const appSections = new Map<string, AppPromptRow[]>();
   for (const item of actions.appPrompts.filter((prompt) => matchesSearch(prompt, search.trim()))) appSections.set(item.appName, [...(appSections.get(item.appName) ?? []), item]);
   const appRow = (prompt: AppPromptRow) => {
-    const edit = { icon: Pencil, label: translate('prompts.editLabel', { title: prompt.title }), onClick: () => actions.editAppPrompt(prompt) };
-    const hide = { icon: EyeOff, label: translate('prompts.hide'), onClick: () => actions.hideAppPrompt(prompt) };
-    const restore = { icon: RotateCcw, label: translate('prompts.restore'), onClick: () => actions.restoreAppPrompt(prompt) };
-    const rows = { default: [edit, hide], modified: [edit, hide, restore], hidden: [restore] }[prompt.state];
+    const offered = APP_PROMPT_ACTIONS[prompt.state];
+    const all = {
+      edit: { icon: Pencil, label: translate('prompts.editLabel', { title: prompt.title }), onClick: () => actions.editAppPrompt(prompt) },
+      hide: { icon: EyeOff, label: translate('prompts.hide'), onClick: () => actions.hideAppPrompt(prompt) },
+      restore: { icon: RotateCcw, label: translate('prompts.restore'), onClick: () => actions.restoreAppPrompt(prompt) },
+    };
     return (
       <MultiLineListItem key={prompt.key} className="py-3">
         <PromptRow item={prompt} disabled={isDisabled} tag={prompt.state === 'modified' ? translate('prompts.modified') : prompt.state === 'hidden' ? translate('prompts.hidden') : undefined}
-          onEdit={() => actions.editAppPrompt(prompt)} actions={rows} />
+          onEdit={offered.includes('edit') ? all.edit.onClick : undefined} actions={offered.map((action) => all[action])} />
       </MultiLineListItem>
     );
   };

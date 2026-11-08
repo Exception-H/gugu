@@ -6,6 +6,7 @@ import { eq } from 'drizzle-orm';
 import { currentAccountAccessToken } from '@main/core/extensions/account-token';
 import { db } from '@main/db/client';
 import { KV } from '@main/db/kv';
+import { log } from '@main/lib/logger';
 import { appSettings } from '@main/db/schema';
 import {
   PROMPT_LIBRARY_SEED_VERSION,
@@ -38,6 +39,7 @@ async function account(): Promise<{ client: VersionedSettingsTableClient; userId
 }
 
 const promptLibraryKV = new KV<PromptLibraryKV>('prompt-library');
+const warn = (message: string) => log.warn(message);
 
 export class PromptLibraryService implements IInitializable {
   private seedPromise: Promise<void> | null = null;
@@ -125,7 +127,7 @@ export class PromptLibraryService implements IInitializable {
     await this.seedIfNeeded();
     const local = await this.readPrompts();
     if (local.length === 0) return;
-    await editCloudPrompts(client, userId, (cloud) => ({ ...cloud, items: [...cloud.items, ...local.filter((prompt) => !cloud.items.some((other) => other.id === prompt.id))] }));
+    await editCloudPrompts(client, userId, (cloud) => ({ ...cloud, items: [...cloud.items, ...local.filter((prompt) => !cloud.items.some((other) => other.id === prompt.id))] }), warn);
     await promptLibraryKV.set('prompts', []);
   }
 
@@ -139,7 +141,7 @@ export class PromptLibraryService implements IInitializable {
     const { client, userId } = await account();
     try {
       await this.mergeLocal(client, userId);
-      return await this.remember(userId, await readCloudPrompts(client, userId));
+      return await this.remember(userId, await readCloudPrompts(client, userId, warn));
     } catch (error) {
       const last = await promptLibraryKV.get('lastRead');
       if (last?.userId === userId) return last.library;
@@ -151,7 +153,7 @@ export class PromptLibraryService implements IInitializable {
   async editPrompts(edit: PromptEdit, overrides = (current: PromptLibrary['overrides']) => current): Promise<PromptLibrary> {
     const { client, userId } = await account();
     await this.mergeLocal(client, userId);
-    return this.remember(userId, await editCloudPrompts(client, userId, (library) => ({ items: edit(library.items), overrides: overrides(library.overrides) })));
+    return this.remember(userId, await editCloudPrompts(client, userId, (library) => ({ items: edit(library.items), overrides: overrides(library.overrides) }), warn));
   }
 
   /** Create, or replace the one with this id; the undo of a delete saves the prompt back. */
