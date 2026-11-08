@@ -1,0 +1,154 @@
+/* App 设置页:左边一列锚点,右边一节一组行(版式同资源库和设置里的行)。窄了只剩一列:手机、分屏。 */
+.mg {
+  display: grid;
+  grid-template-columns: 156px minmax(0, 720px);
+  gap: 36px;
+  justify-content: center;
+  align-items: start;
+  padding: 32px 16px 64px;
+}
+.mg-anchors {
+  position: sticky;
+  top: 32px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding-top: 92px;
+}
+.mg-anchors > button {
+  padding: 5px 10px;
+  border-radius: var(--radius-control);
+  color: var(--foreground-muted);
+  text-align: left;
+  cursor: pointer;
+}
+.mg-anchors > button:hover,
+.mg-anchors > button.is-on {
+  background: color-mix(in oklab, var(--foreground) 6%, transparent);
+  color: var(--foreground);
+}
+.mg-main {
+  min-width: 0;
+}
+.mg-head {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  margin-top: 14px;
+}
+.mg-head-tx {
+  flex: 1;
+  min-width: 0;
+}
+.mg-head-tx > h2 {
+  margin: 0;
+  font-size: var(--font-size-xl);
+  line-height: var(--lh-page);
+  font-weight: var(--font-weight-semibold);
+  letter-spacing: -0.4px;
+  overflow-wrap: anywhere;
+}
+.mg-head-tx > p {
+  margin: 0;
+  color: var(--foreground-muted);
+}
+.mg-sec {
+  margin-top: 28px;
+  scroll-margin-top: 24px;
+}
+.mg-sec > h3 {
+  margin: 0 0 8px;
+  font-size: var(--font-body);
+  line-height: 20px;
+  font-weight: var(--font-weight-semibold);
+}
+.mg-note {
+  margin: -4px 0 8px;
+  font-size: var(--font-caption);
+  color: var(--foreground-muted);
+}
+.mg-group {
+  border: 1px solid var(--border);
+  border-radius: 12px;
+}
+.mg-row {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  min-height: 44px;
+  padding: 10px 16px;
+}
+.mg-row + .mg-row,
+.mg-group > :not(:first-child) {
+  border-top: 1px solid color-mix(in oklab, var(--border) 60%, transparent);
+}
+.mg-row.is-block {
+  display: block;
+}
+.mg-row-tx {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-width: 0;
+}
+.mg-row-tx.is-inline {
+  flex-direction: row;
+  align-items: center;
+  gap: 4px;
+}
+.mg-row-tx > i {
+  font-style: normal;
+  font-size: var(--font-caption);
+  line-height: 17px;
+  color: var(--foreground-muted);
+  overflow-wrap: anywhere;
+}
+.mg-row-toggle {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  width: 100%;
+  min-height: 24px;
+  text-align: left;
+  cursor: pointer;
+}
+.mg-row-toggle[data-panel-open] > svg {
+  transform: rotate(90deg);
+}
+.mg-value {
+  color: var(--foreground-muted);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.mg-permission {
+  align-items: flex-start;
+}
+.mg-permission > .mk-link {
+  margin-left: auto;
+  flex: none;
+}
+.mg .mk-tools {
+  margin-top: 8px;
+}
+.mg .mk-vers {
+  margin-top: 8px;
+}
+.mg .tool-app-fields {
+  padding: 4px 0;
+}
+.mg > .mg-main > .mk-banner {
+  margin-top: 20px;
+}
+@container (max-width: 760px) {
+  .mg {
+    grid-template-columns: minmax(0, 1fr);
+    padding: 12px 12px 48px;
+  }
+  .mg-anchors {
+    display: none;
+  }
+  .mg-head {
+    flex-wrap: wrap;
+  }
+}

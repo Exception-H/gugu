@@ -12,7 +12,8 @@ import { SearchInput } from '@renderer/lib/ui/search-input';
 import { useSessionMessages } from '@renderer/localization/use-session-messages';
 import { cn } from '@renderer/utils/utils';
 import { APP_PROMPT_ACTIONS } from '@shared/prompt-library';
-import { usePromptLibraryActions, type AppPromptRow } from './use-prompt-library-actions';
+import { installedExtensionsStore } from '@renderer/features/extensions/installed-extensions-store';
+import { usePromptLibraryActions, type AppPromptRow, type PromptLibraryActions } from './use-prompt-library-actions';
 
 type PromptListItem = { title: string; prompt: string } | AppPromptRow;
 
@@ -66,6 +67,29 @@ function PromptRow({
   );
 }
 
+/** An App's prompt: edit the person's own version, hide it, or go back to the App's. One row for the library page and the App's settings page. */
+export function AppPromptListRow({ prompt, actions, disabled }: { prompt: AppPromptRow; actions: PromptLibraryActions; disabled: boolean }) {
+  const { translate } = useSessionMessages();
+  const offered = APP_PROMPT_ACTIONS[prompt.state];
+  const all = {
+    edit: { icon: Pencil, label: translate('prompts.editLabel', { title: prompt.title }), onClick: () => actions.editAppPrompt(prompt) },
+    hide: { icon: EyeOff, label: translate('prompts.hide'), onClick: () => actions.hideAppPrompt(prompt) },
+    restore: { icon: RotateCcw, label: translate('prompts.restore'), onClick: () => actions.restoreAppPrompt(prompt) },
+  };
+  return (
+    <MultiLineListItem className="py-3">
+      <PromptRow item={prompt} disabled={disabled} tag={prompt.state === 'modified' ? translate('prompts.modified') : prompt.state === 'hidden' ? translate('prompts.hidden') : undefined}
+        onEdit={offered.includes('edit') ? all.edit.onClick : undefined} actions={offered.map((action) => all[action])} />
+    </MultiLineListItem>
+  );
+}
+
+/** One App's prompts, on its settings page. Same data and writes as the library page. */
+export const AppPromptsSection = observer(function AppPromptsSection({ extensionId, store }: { extensionId: string; store: Pick<typeof installedExtensionsStore, 'appPrompts'> }) {
+  const actions = usePromptLibraryActions(store);
+  return <>{actions.appPrompts.filter((prompt) => prompt.key.startsWith(`${extensionId}/`)).map((prompt) => <AppPromptListRow key={prompt.key} prompt={prompt} actions={actions} disabled={actions.isBusy} />)}</>;
+});
+
 /** Sections like the composer's `/` (prompt-slash-items.ts): the person's own, then each enabled App's. */
 export const PromptLibraryView = observer(function PromptLibraryView() {
   const rootRef = useRef<HTMLDivElement>(null);
@@ -89,21 +113,6 @@ export const PromptLibraryView = observer(function PromptLibraryView() {
   );
   const appSections = new Map<string, AppPromptRow[]>();
   for (const item of actions.appPrompts.filter((prompt) => matchesSearch(prompt, search.trim()))) appSections.set(item.appName, [...(appSections.get(item.appName) ?? []), item]);
-  const appRow = (prompt: AppPromptRow) => {
-    const offered = APP_PROMPT_ACTIONS[prompt.state];
-    const all = {
-      edit: { icon: Pencil, label: translate('prompts.editLabel', { title: prompt.title }), onClick: () => actions.editAppPrompt(prompt) },
-      hide: { icon: EyeOff, label: translate('prompts.hide'), onClick: () => actions.hideAppPrompt(prompt) },
-      restore: { icon: RotateCcw, label: translate('prompts.restore'), onClick: () => actions.restoreAppPrompt(prompt) },
-    };
-    return (
-      <MultiLineListItem key={prompt.key} className="py-3">
-        <PromptRow item={prompt} disabled={isDisabled} tag={prompt.state === 'modified' ? translate('prompts.modified') : prompt.state === 'hidden' ? translate('prompts.hidden') : undefined}
-          onEdit={offered.includes('edit') ? all.edit.onClick : undefined} actions={offered.map((action) => all[action])} />
-      </MultiLineListItem>
-    );
-  };
-
   return (
     <div ref={rootRef} className="flex flex-col text-foreground">
       <PageHeader
@@ -154,7 +163,7 @@ export const PromptLibraryView = observer(function PromptLibraryView() {
               {[...appSections].map(([app, prompts]) => (
                 <div key={app}>
                   <div className="px-3 pt-4 text-xs text-foreground-muted">{app}</div>
-                  {prompts.map(appRow)}
+                  {prompts.map((prompt) => <AppPromptListRow key={prompt.key} prompt={prompt} actions={actions} disabled={isDisabled} />)}
                 </div>
               ))}
             </>

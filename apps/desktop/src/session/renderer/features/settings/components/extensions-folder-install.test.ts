@@ -154,10 +154,8 @@ describe('Install from folder over a folder install (quiet upgrade)', () => {
     expect(h.api.installFromFolder).toHaveBeenLastCalledWith(given);
   });
 
-  // owner 10-10: the workspace App is the chat's 群文件夹, not an App one installs or removes — still preinstalled in code,
-  // no longer a row of the App list. Every other App stays (the workspace is the one preinstalled App now). Control (the parent
-  // commit): a 群文件夹/工作区 row.
-  it('the installed list leaves out the preinstalled workspace App and keeps the others', async () => {
+  // The workspace App has prompts a person can edit, so it needs a settings page: listed, with no switch or uninstall.
+  it('the installed list holds the preinstalled workspace App too', async () => {
     const listed = h.api.list.getMockImplementation();
     const shipped = (id: string, name: string) => ({ ...h.manifest('0.2.51'), id, name, contributes: { tabs: [{ name: 'main', title: name }] } });
     h.api.list.mockResolvedValue({
@@ -179,7 +177,7 @@ describe('Install from folder over a folder install (quiet upgrade)', () => {
       const rows = [...dom.window.document.querySelectorAll('[data-testid^="extension-row-"]')].map((row) => row.getAttribute('data-testid'));
       expect(rows).toContain('extension-row-notes');
       expect(rows).toContain('extension-row-searcher');
-      expect(rows).not.toContain('extension-row-workspace');
+      expect(rows).toContain('extension-row-workspace');
     } finally {
       h.api.list.mockImplementation(listed!);
     }
@@ -845,6 +843,7 @@ describe('App variant switching uses the existing install consent', () => {
     await until('the installed Notes row', () => !!doc().querySelector('[data-testid="extension-row-notes"]'));
     await press('[data-testid="extension-row-notes"] .mk-name');
     await until('the Notes variants', () => !!doc().querySelector('[data-testid="app-variant-upstream"]'));
+    expect(doc().querySelector('[data-testid="app-manage-page"]')).not.toBeNull();
   }
 
   async function render() {
@@ -875,10 +874,9 @@ describe('App variant switching uses the existing install consent', () => {
       forkBehind: { notes: { upstream: '2.0.0', behind: 1, commit: 'c'.repeat(40) } },
     } } as never);
     await openVariantList();
-    await until('the newer market entry is loaded', () => h.api.marketEntry.mock.calls.length > 0);
-    expect(doc().querySelector('[data-testid="app-product-action"]')?.getAttribute('data-lifecycle')).toBe('open');
+    expect(doc().querySelector('[data-testid="app-manage-action"]')?.getAttribute('data-lifecycle')).toBe('open');
     expect(doc().querySelector('.mk-banner .xp-note')?.textContent).toContain('2.0.0');
-    await press('[data-testid="app-product-action"]');
+    await press('[data-testid="app-manage-action"]');
     expect(installFromMarket).not.toHaveBeenCalled();
     expect(h.showConfirm).not.toHaveBeenCalled();
   });
@@ -893,9 +891,9 @@ describe('App variant switching uses the existing install consent', () => {
     await until('both installed Apps', () => !!doc().querySelector('[data-testid="extension-row-notes"]') && !!doc().querySelector('[data-testid="extension-row-other"]'));
     expect(h.api.list).toHaveBeenCalledOnce();
     await press('[data-testid="extension-row-notes"]');
-    expect(doc().querySelector('[data-testid="app-product-page"]')).not.toBeNull();
+    expect(doc().querySelector('[data-testid="app-manage-page"]')).not.toBeNull();
     expect(doc().querySelector('[data-testid="app-variants"]')).toBeNull();
-    await press('[data-testid="app-product-back"]');
+    await press('[data-testid="app-manage-back"]');
     await press('[data-testid="extension-row-other"]');
     expect(doc().querySelector('[data-testid="app-variants"]')).not.toBeNull();
   });

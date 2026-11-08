@@ -40,6 +40,9 @@
 .mk-bar [data-slot='toggle-group-item'][data-pressed] {
   background-color: color-mix(in oklab, var(--foreground) 6%, transparent);
 }
+.mk-views {
+  margin-top: 8px;
+}
 .mk-seg-count {
   color: var(--foreground-passive);
   font-variant-numeric: tabular-nums;
