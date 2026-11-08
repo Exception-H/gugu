@@ -1,23 +1,45 @@
-// #7199 / #2104 助理搬家:它在这台机器上连着的「账号类」服务(邮箱、飞书、Notion、GitHub……)只交一张清单 ——
-// 有哪些、怎么配的(表单里不保密的那几项)。解密后的凭据任何时候都 ❌ 进清单:新家照着清单逐个重新连接。
-// 旧家那几份不撤:什么都没搬过去,撤了就两头都没有。
-import type { IntegrationAuthMethod } from '@gugu/session-plugins/integrations';
-import type { IntegrationMoveSummary, MoveReconnect } from '@shared/core/integrations/integration-move';
+// #7199 助理搬家:它在这台机器上连着的「账号类」服务(邮箱、飞书、Notion、GitHub……)的授权,复制一份到新家。
+// 只管凭据本身 —— 官方命令行那两家(钉钉 / 企业微信)的登录态在那台机器的命令行目录里,带不走,搬完要在新家重新连;
+// 靠 gh 命令行登录、本机没存密钥的 GitHub 账号同理。这些都**不静默丢**:导出时逐条说清「没带」和原因。
+// 导入是照原样写进新家的账号表,❌ 联网校验(搬运不该因为对方服务一时连不上就丢账号);连得上连不上,新家的资源库页自己会查。
+// 一条存不进去只影响这一条:逐条报回去让人手动重连,旧家那份从不动,任何一步失败都不会两边都没有。
+import type { IntegrationAuthMethod, IntegrationCredentials } from '@gugu/session-plugins/integrations';
+import { SecureStorageUnavailableError } from '@main/core/secrets/secure-storage-unavailable';
+import type {
+  IntegrationMoveExport,
+  IntegrationMoveImport,
+  MovableIntegrationAccount,
+  MoveSkipped,
+} from '@shared/core/integrations/integration-move';
 
-export type { IntegrationMoveSummary, MoveReconnect, MoveReconnectReason } from '@shared/core/integrations/integration-move';
+export type {
+  IntegrationMoveExport,
+  IntegrationMoveImport,
+  MovableIntegrationAccount,
+  MoveSkipReason,
+  MoveSkipped,
+} from '@shared/core/integrations/integration-move';
 
 export type IntegrationMoveDeps = {
   integrationIds(): string[];
   isCli(integrationId: string): boolean;
+  hasIntegration(integrationId: string): boolean;
   /** 这一家表单里不保密的字段 id(服务器、端口、用户名……)。 */
   plainFields(integrationId: string): string[];
   listAccounts(integrationId: string): Promise<{
-    accounts: { accountId: string; displayName?: string; isDefault: boolean; credentials: Record<string, unknown> }[];
+    accounts: { accountId: string; displayName?: string; isDefault: boolean; credentials: IntegrationCredentials }[];
     unreadable: string[];
   }>;
+  upsertAccount(
+    integrationId: string,
+    account: { accountId: string; displayName?: string; credentials: IntegrationCredentials }
+  ): Promise<void>;
+  setDefault(integrationId: string, accountId: string): Promise<boolean>;
+  /** 只收 id 和错误类型名:底层错误文案可能夹带写入的参数,❌ 进日志。 */
+  warn(message: string, context: { integrationId: string; accountId: string; errorName: string }): void;
 };
 
-/** 名字像凭据的字段:插件没标 `secret` 也不进清单(Trello 的 apiKey 就没标)。 */
+/** 名字像凭据的字段:插件没标 `secret` 也不算不保密(Trello 的 apiKey 就没标)。 */
 const CREDENTIAL_LIKE = /token|key|secret|password|passwd|authcode/i;
 
 /** 表单里不保密的字段 id:插件声明 `secret: true` 的、名字像凭据的,一律不在里面。 */
@@ -29,35 +51,137 @@ export function plainFormFields(methods: readonly IntegrationAuthMethod[]): stri
   );
 }
 
-/** 地址里夹带的账号密码(`https://user:pass@host`):去掉再进清单,留下的地址照样能认出是哪台。 */
+/** 地址里夹带的账号密码(`https://user:pass@host`):去掉再当配置,留下的地址照样能认出是哪台。 */
 function withoutUserinfo(value: string): string {
   return value.replace(/^([a-z][a-z0-9+.-]*:\/\/)[^/?#@]*@/i, '$1');
 }
 
-export async function summarizeAccountsForMove(deps: IntegrationMoveDeps): Promise<IntegrationMoveSummary> {
-  const reconnect: MoveReconnect[] = [];
+function plainConfig(credentials: IntegrationCredentials, fields: string[]): Record<string, string> | undefined {
+  const values = credentials as Record<string, unknown>;
+  const config = Object.fromEntries(
+    fields.flatMap((id) => (typeof values[id] === 'string' ? [[id, withoutUserinfo(values[id] as string)]] : []))
+  );
+  return Object.keys(config).length > 0 ? config : undefined;
+}
+
+export async function exportAccountsForMove(deps: IntegrationMoveDeps): Promise<IntegrationMoveExport> {
+  const accounts: MovableIntegrationAccount[] = [];
+  const skipped: MoveSkipped[] = [];
   for (const integrationId of deps.integrationIds()) {
     const listed = await deps.listAccounts(integrationId);
     if (deps.isCli(integrationId)) {
       // 命令行那几家记的只是「连过」,一条记录就够说明「这一家搬完要重新连」。
-      if (listed.accounts.length > 0 || listed.unreadable.length > 0) reconnect.push({ integrationId, reason: 'cli' });
+      if (listed.accounts.length > 0 || listed.unreadable.length > 0) skipped.push({ integrationId, reason: 'cli' });
       continue;
     }
     const plain = deps.plainFields(integrationId);
     for (const account of listed.accounts) {
-      const config = Object.fromEntries(
-        plain.flatMap((id) => (typeof account.credentials[id] === 'string' ? [[id, withoutUserinfo(account.credentials[id] as string)]] : []))
-      );
-      reconnect.push({
+      const config = plainConfig(account.credentials, plain);
+      accounts.push({
         integrationId,
         accountId: account.accountId,
         ...(account.displayName ? { displayName: account.displayName } : {}),
         isDefault: account.isDefault,
-        ...(Object.keys(config).length > 0 ? { config } : {}),
-        reason: 'account',
+        credentials: account.credentials,
+        ...(config ? { config } : {}),
       });
     }
-    for (const accountId of listed.unreadable) reconnect.push({ integrationId, accountId, reason: 'no-secret' });
+    for (const accountId of listed.unreadable) skipped.push({ integrationId, accountId, reason: 'no-secret' });
   }
-  return { moving: [], reconnect };
+  return { accounts, skipped };
+}
+
+/** 凭据是否同一份(键序无关);搬运的幂等 / 冲突判断用。 */
+function sameCredentials(a: IntegrationCredentials, b: IntegrationCredentials): boolean {
+  const canon = (value: unknown): string =>
+    Array.isArray(value)
+      ? `[${value.map(canon).join(',')}]`
+      : value && typeof value === 'object'
+        ? `{${Object.keys(value as Record<string, unknown>)
+            .sort()
+            .map((key) => `${JSON.stringify(key)}:${canon((value as Record<string, unknown>)[key])}`)
+            .join(',')}}`
+        : JSON.stringify(value);
+  return canon(a) === canon(b);
+}
+
+export async function importAccountsFromMove(
+  deps: IntegrationMoveDeps,
+  incoming: readonly MovableIntegrationAccount[]
+): Promise<IntegrationMoveImport> {
+  const skipped: MoveSkipped[] = [];
+  let imported = 0;
+  const defaults = new Map<string, string>();
+  const skip = (account: MovableIntegrationAccount, reason: MoveSkipped['reason']) =>
+    skipped.push({
+      integrationId: account.integrationId,
+      accountId: account.accountId,
+      ...(account.displayName ? { displayName: account.displayName } : {}),
+      ...(account.config ? { config: account.config } : {}),
+      reason,
+    });
+  const storedOf = async (account: MovableIntegrationAccount) =>
+    (await deps.listAccounts(account.integrationId)).accounts.find((a) => a.accountId === account.accountId)?.credentials;
+  for (const account of incoming) {
+    if (!deps.hasIntegration(account.integrationId)) {
+      skip(account, 'unknown-integration');
+      continue;
+    }
+    if (deps.isCli(account.integrationId)) {
+      skip(account, 'cli');
+      continue;
+    }
+    try {
+      // 新家已经连着同一个 id 的另一份凭据(人在两头各自连过同一家):不覆盖 —— 覆盖就把新家原来那个账号弄没了。
+      // 同一份凭据 = 上一次搬到一半留下的,当作已经搬过(幂等)。
+      const present = await storedOf(account);
+      if (present && !sameCredentials(present, account.credentials)) {
+        skip(account, 'exists');
+        continue;
+      }
+      await deps.upsertAccount(account.integrationId, {
+        accountId: account.accountId,
+        ...(account.displayName ? { displayName: account.displayName } : {}),
+        credentials: account.credentials,
+      });
+      // 写完读回来对一遍:读不回来就不算带过去了。
+      const stored = await storedOf(account);
+      if (!stored || !sameCredentials(stored, account.credentials)) throw new Error('credential read-back mismatch');
+      imported += 1;
+      if (account.isDefault) defaults.set(account.integrationId, account.accountId);
+    } catch (cause) {
+      deps.warn('Integration account not imported', {
+        integrationId: account.integrationId,
+        accountId: account.accountId,
+        errorName: cause instanceof Error ? cause.name : typeof cause,
+      });
+      skip(account, cause instanceof SecureStorageUnavailableError ? 'no-keyring' : 'import-failed');
+    }
+  }
+  // 「谁是默认」放到最后一并落:账号表对「第一个写进去的当默认」,搬过来的次序不该决定它。账号已经在了,这一步没成不算没搬。
+  for (const [integrationId, accountId] of defaults) {
+    await deps.setDefault(integrationId, accountId).catch((cause: unknown) =>
+      deps.warn('Integration default account not set', { integrationId, accountId, errorName: cause instanceof Error ? cause.name : typeof cause })
+    );
+  }
+  return { imported, skipped };
+}
+
+/**
+ * 确认框要列「这次会带走哪些账号」:只要名字,不含任何密钥 —— 凭据不离开主进程(真正搬的时候才经设备通道走)。
+ * `reconnect` = 带不走、搬完要在新家重新连的(命令行那几家、本机没存密钥的账号)。
+ */
+export async function previewAccountsForMove(deps: IntegrationMoveDeps): Promise<{
+  moving: { integrationId: string; accountId: string; displayName?: string }[];
+  reconnect: MoveSkipped[];
+}> {
+  const exported = await exportAccountsForMove(deps);
+  return {
+    moving: exported.accounts.map(({ integrationId, accountId, displayName }) => ({
+      integrationId,
+      accountId,
+      ...(displayName ? { displayName } : {}),
+    })),
+    reconnect: exported.skipped,
+  };
 }

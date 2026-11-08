@@ -4,7 +4,7 @@ import { Button } from '../ui/Button'
 import { Sheet } from '../ui/Sheet'
 import { LoadingIndicator } from '@/lib/loading/LoadingIndicator'
 import type { MoveDirection } from '@renderer/features/assistant/assistant-move'
-import type { MoveReconnect } from '@shared/core/integrations/integration-move'
+import type { MoveSkipped } from '@shared/core/integrations/integration-move'
 import { appState } from '../../session/renderer/lib/stores/app-state'
 import { UI_EVENTS } from '../../lib/uiEvents'
 import { revealSessionpage } from '../../hooks/useSessionpageReveal'
@@ -24,8 +24,8 @@ function accountLabel(names: Map<string, string>, account: { integrationId: stri
   return who ? `${service} · ${who}` : service
 }
 
-/** #2104 要在新家重新连的一列:名字,后面跟着旧家那份不保密的配置(服务器、用户名……),照着填。 */
-function ReconnectList({ names, items, testId }: { names: Map<string, string>; items: MoveReconnect[]; testId: string }) {
+/** 要在新家手动重连的一列:名字,后面跟着旧家那份不保密的配置(服务器、用户名……),照着填。 */
+function ReconnectList({ names, items, testId }: { names: Map<string, string>; items: MoveSkipped[]; testId: string }) {
   return (
     <ul className="ml-5 list-disc" data-testid={testId}>
       {items.map((item) => {
@@ -49,6 +49,10 @@ export function AssistantMoveDialog() {
   const { t } = useTranslation('assistant')
   const { phase, assistantName, env, language } = useSyncExternalStore(subscribeMove, getMoveState)
   if (phase.kind === 'idle') return null
+  const skipped = phase.kind === 'done' ? phase.report.accounts.skipped : []
+  // 「新家已有同名账号」不用重连:那边本来就连着。
+  const exists = skipped.filter((item) => item.reason === 'exists')
+  const reconnect = skipped.filter((item) => item.reason !== 'exists')
   const go = (direction: MoveDirection, names: Map<string, string>) => {
     if (env) void startMove(env, direction, names, language)
   }
@@ -87,14 +91,24 @@ export function AssistantMoveDialog() {
             </p>
             {phase.preview.accounts.unsupported ? (
               <p className="text-[var(--muted-fg)]" data-testid="assistant-move-accounts-unsupported-note">{t('move.confirmAccountsUnsupported')}</p>
-            ) : phase.preview.accounts.reconnect.length > 0 ? (
-              <div data-testid="assistant-move-reconnect">
-                <p>{t('move.confirmReconnect')}</p>
-                <ReconnectList names={phase.names} items={phase.preview.accounts.reconnect} testId="assistant-move-reconnect-list" />
+            ) : phase.preview.accounts.moving.length > 0 ? (
+              <div data-testid="assistant-move-accounts">
+                <p>{t('move.confirmAccounts', { name: assistantName })}</p>
+                <ul className="ml-5 list-disc">
+                  {phase.preview.accounts.moving.map((account) => (
+                    <li key={`${account.integrationId}/${account.accountId}`}>{accountLabel(phase.names, account)}</li>
+                  ))}
+                </ul>
               </div>
             ) : (
               <p className="text-[var(--muted-fg)]">{t('move.confirmNoAccounts')}</p>
             )}
+            {phase.preview.accounts.reconnect.length > 0 ? (
+              <div data-testid="assistant-move-reconnect">
+                <p>{t('move.confirmReconnect')}</p>
+                <ReconnectList names={phase.names} items={phase.preview.accounts.reconnect} testId="assistant-move-reconnect-list" />
+              </div>
+            ) : null}
             <p className="text-[var(--muted-fg)]">{t('move.confirmKept')}</p>
             <div className="flex justify-end gap-2">
               <Button size="sm" onClick={dismissMove}>{t('move.cancel')}</Button>
@@ -124,22 +138,32 @@ export function AssistantMoveDialog() {
             <div className="text-[length:var(--font-title)] font-semibold text-[var(--fg)]">{t('move.doneTitle')}</div>
             <ul className="ml-5 list-disc" data-testid="assistant-move-report">
               <li>{t('move.doneFiles', { count: phase.report.files })}</li>
+              {phase.report.accounts.moved.length > 0 ? <li>{t('move.doneAccounts', { count: phase.report.accounts.moved.length })}</li> : null}
               <li>{t('move.doneSchedules', { count: phase.report.schedules.restored })}</li>
             </ul>
-            {phase.report.accounts.reconnect.length > 0 ? (
+            {reconnect.length > 0 ? (
               <div data-testid="assistant-move-done-reconnect">
                 <p>{t('move.doneReconnect')}</p>
+                {reconnect.some((item) => item.reason === 'no-keyring') ? (
+                  <p data-testid="assistant-move-no-keyring">{t('move.doneReconnectNoKeyring')}</p>
+                ) : null}
                 <p className="text-[var(--muted-fg)]">
                   {t(phase.direction === 'to-cloud' ? 'move.doneReconnectWhereCloud' : 'move.doneReconnectWhereComputer')}
                 </p>
-                <ReconnectList names={phase.names} items={phase.report.accounts.reconnect} testId="assistant-move-done-reconnect-list" />
+                <ReconnectList names={phase.names} items={reconnect} testId="assistant-move-done-reconnect-list" />
               </div>
             ) : null}
-            {phase.report.skippedFiles.length > 0 ||
+            {exists.length > 0 ||
+            phase.report.skippedFiles.length > 0 ||
             phase.report.schedules.skipped.length > 0 ? (
               <div>
                 <p>{t('move.doneNotMoved')}</p>
                 <ul className="ml-5 list-disc">
+                  {exists.map((item) => (
+                    <li key={`e-${item.integrationId}/${item.accountId ?? ''}`}>
+                      {t('move.doneNotMovedExists', { name: phase.names.get(item.integrationId) ?? item.integrationId })}
+                    </li>
+                  ))}
                   {phase.report.skippedFiles.map((item) => (
                     <li key={`f-${item.rel}`}>{t('move.doneNotMovedFile', { rel: item.rel })}</li>
                   ))}
@@ -162,7 +186,7 @@ export function AssistantMoveDialog() {
             ) : null}
             {phase.report.warnings.length > 0 ? <p className="text-[var(--muted-fg)]">{t('move.doneWarn')}</p> : null}
             <div className="flex justify-end gap-2">
-              {phase.report.accounts.reconnect.length > 0 ? (
+              {reconnect.length > 0 ? (
                 <Button
                   size="sm"
                   onClick={() => {

@@ -6,7 +6,7 @@ function completion(legacy = false) {
     source: { kind: 'computer', deviceId: 'local' }, targetDeviceId: 'cloud', schedules: [],
     done: ['preflight', 'adopt', 'files', 'accounts', 'schedules'],
     ...(legacy ? {} : { completion: { report: { files: 1, skippedFiles: [],
-      accounts: { reconnect: [], unsupported: false },
+      accounts: { moved: [], skipped: [], unsupported: false },
       schedules: { restored: 0, skipped: [], unsupported: [], unreadable: false }, warnings: [] } } }) };
   return { direction: 'to-cloud' as const, assistantId: 'agent', isAdopted: vi.fn(async () => true),
     activate: vi.fn(async () => {}),
@@ -14,21 +14,20 @@ function completion(legacy = false) {
       clear: vi.fn(async () => { journal = null; }) } };
 }
 
-it('restores legacy completed handoffs online and finishes without touching any source account (#2104)', async () => {
+it('restores legacy completed handoffs online and finishes without touching any source account', async () => {
   const deps = completion(true);
   const report = await resumeMoveCompletion(deps);
   expect(deps.activate).toHaveBeenCalledOnce();
   expect(deps.journal.clear).toHaveBeenCalledOnce();
-  expect(report?.accounts).toEqual({ reconnect: [], unsupported: false });
+  expect(report?.accounts).toEqual({ moved: [], skipped: [], unsupported: false });
   expect(report?.warnings).toEqual([]);
 });
 
-it('normalizes a pre-#2104 completion report so the dialog never reads the old account shape', async () => {
+it('counts accounts an older journal verified as moved, and never revokes them', async () => {
   const deps = completion();
-  const saved = deps.journal.load()!;
-  saved.completion!.report.accounts = { moved: [{ integrationId: 'notion', accountId: 'default' }], skipped: [], kept: [], unsupported: false } as never;
+  (deps.journal.load()!.completion as unknown as { accounts: unknown[] }).accounts = [{ integrationId: 'notion', accountId: 'default' }];
   const report = await resumeMoveCompletion(deps);
-  expect(report?.accounts).toEqual({ reconnect: [], unsupported: false });
+  expect(report?.accounts.moved).toEqual([{ integrationId: 'notion', accountId: 'default' }]);
 });
 
 it('requires completed schedules before bypassing source transfer', async () => {

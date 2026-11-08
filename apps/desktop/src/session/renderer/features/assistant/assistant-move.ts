@@ -1,19 +1,19 @@
 // #7199 助理搬家(本机 ⇄ 云上)的编排。纯逻辑:两头的读写、开通 / 接过、重启都由调用方交进来(`MoveDeps`),
 // 桌面的真接线在 components/assistant/AssistantMoveGroup,单测用内存盘 + 假两头。
 //
-// 顺序(owner 10-16 定;controller 补:搬家 = 剪切,账号授权只留一份):
+// 顺序(owner 10-16 定;账号授权是复制,旧家那份留着):
 //   搬上云:读旧家(只读:数文件、记已安排、导出账号) → 接过(管家在云上落定,库把 users.device_id 切过去、给旧家发 agent.retire)
-//           → 拷文件 → 账号写进新家并核对 → 重排已安排 → 重启 → 撤旧家那份账号。
+//           → 拷文件 → 账号写进新家并核对 → 重排已安排 → 重启。
 //   搬回本机:读旧家 → 备好本机的家 → 拷文件 → 账号写进新家 → 接过(客户端 saga,blueprint 带 existing_agent_user_id)
-//           → 核对 → 重排已安排 → 重启 → 撤旧家那份账号。
+//           → 核对 → 重排已安排 → 重启。
 // 不变量:
 //   · 旧家的文件一个字节都不动(agent.retire 只停运行时),「清除旧家」是以后一个独立、明确的操作;
-//   · 账号授权**先写进新家并读回核对,才撤旧家那一份**;核对不上的那一条不撤(宁可两边都有,❌ 搬丢);
+//   · 账号授权只往新家写、从不撤旧家那一份,所以任何一步失败都不会两边都没有;存不进新家的(没有钥匙串……)列出来手动重连,❌ 让搬家失败;
 //   · 已安排要在「接过」之前读到手(旧家收到 agent.retire 时会把它们撤掉),并存进日志,中断后接着搬还在;
-//   · 日志记着「旧家是哪台」:中断后接着搬时旧家以日志为准,❌ 读此刻「它住哪」(接过之后那是新家 —— 会把新家当旧家去撤账号);
+//   · 日志记着「旧家是哪台」:中断后接着搬时旧家以日志为准,❌ 读此刻「它住哪」(接过之后那是新家);日志和报告里 ❌ 任何凭据;
 //   · 旧家的助理在搬的这段时间里还在写东西:搬上云是接过之后才拷(旧家已停,数两遍),搬回本机是接过之后再补一遍变了的;
 //   · 每一步可重来:拷贝同路径覆盖、账号 upsert、重排按「同一条已在」去重、接过先问「已经在新家了吗」。
-import type { IntegrationMoveSummary, MoveReconnect } from '@shared/core/integrations/integration-move';
+import type { IntegrationMoveExport, IntegrationMoveImport, MovableIntegrationAccount, MoveSkipped } from '@shared/core/integrations/integration-move';
 import type { AgentModelSelection } from '@gugu/core/shared/agentModelSelection';
 import {
   assertPlanFits,
@@ -54,8 +54,8 @@ export type MoveSide = {
   base: string;
   paths: { instructions: string; memoryDir: string; skillsDir: string; resourcesDir: string };
   integrations: {
-    /** #2104 这一头连着哪些集成、怎么配的(不含任何凭据)。 */
-    moveSummary(): Promise<IntegrationMoveSummary>;
+    exportForMove(): Promise<IntegrationMoveExport>;
+    importFromMove(accounts: MovableIntegrationAccount[]): Promise<IntegrationMoveImport>;
   };
   /** 搬完放掉为搬家领的那份工作区(住云上的那份圈着整个主目录:建索引、监视都别留着)。单测里不给。 */
   release?(): Promise<void>;
@@ -95,9 +95,11 @@ export type MoveReport = {
   /** 没拷的(软链接),逐条回报。 */
   skippedFiles: { rel: string; reason: string }[];
   accounts: {
-    /** #2104 凭据不搬:旧家连着的这些,新家要逐个重新连接(旧家那份原样留着)。 */
-    reconnect: MoveReconnect[];
-    /** 读不到旧家的清单(它的咕咕比这个功能老,或它的钥匙串打不开):账号都还在原处,搬家照常。 */
+    /** 已经存进新家并读回核对过的(旧家那份还留着)。 */
+    moved: MoveAccountRef[];
+    /** 没带过去的,逐条带原因(新家要手动重连,或新家已有同名账号);旧家那份还留着。 */
+    skipped: MoveSkipped[];
+    /** 读不到旧家的账号(它的咕咕比这个功能老,或它的钥匙串打不开):账号都还在原处,搬家照常。 */
     unsupported: boolean;
   };
   schedules: {
@@ -135,32 +137,14 @@ export interface MoveDeps {
   now?: () => number;
 }
 
+type MoveAccountRef = { integrationId: string; accountId: string; displayName?: string };
 type MoveCompletionDeps = Pick<MoveDeps, 'direction' | 'assistantId' | 'journal' | 'isAdopted' | 'onProgress'> & {
   activate(): Promise<void>;
 };
 
 function emptyMoveReport(): MoveReport {
-  return { files: 0, skippedFiles: [], accounts: { reconnect: [], unsupported: false },
+  return { files: 0, skippedFiles: [], accounts: { moved: [], skipped: [], unsupported: false },
     schedules: { restored: 0, skipped: [], unsupported: [], unreadable: false }, warnings: [] };
-}
-
-/**
- * 旧家回的清单 → 新家要重新连的那一列。老旧家(#2104 之前)的 `moving` 只有名字,同样当成要重新连;
- * 只挑认得的字段,别的(哪怕对面多回了什么)❌ 带进报告和日志。
- */
-export function reconnectList(summary: IntegrationMoveSummary): MoveReconnect[] {
-  const pick = (item: Partial<MoveReconnect> & { integrationId: string }, reason: MoveReconnect['reason']): MoveReconnect => ({
-    integrationId: item.integrationId,
-    ...(item.accountId ? { accountId: item.accountId } : {}),
-    ...(item.displayName ? { displayName: item.displayName } : {}),
-    ...(item.isDefault !== undefined ? { isDefault: item.isDefault } : {}),
-    ...(item.config ? { config: { ...item.config } } : {}),
-    reason,
-  });
-  return [
-    ...(summary.moving ?? []).map((item) => pick(item, 'account')),
-    ...(summary.reconnect ?? []).map((item) => pick(item, item.reason === 'cli' || item.reason === 'no-secret' ? item.reason : 'account')),
-  ];
 }
 
 /** Resume the already committed handoff without opening either filesystem or replaying transferred data. */
@@ -172,8 +156,9 @@ export async function resumeMoveCompletion(deps: MoveCompletionDeps): Promise<Mo
     if (!await deps.isAdopted()) throw new Error('The assistant is no longer at the recorded target');
   } catch (cause) { throw new MoveError('adopt', cause, false); }
   const report = structuredClone(saved.completion?.report ?? emptyMoveReport());
-  // #2104 之前的日志里报告是「搬过去 / 没搬 / 留在原处」那一套:接着搬时不再撤旧家任何一份,清单就空着。
-  report.accounts = { reconnect: report.accounts?.reconnect ?? [], unsupported: report.accounts?.unsupported ?? false };
+  // 老版本的日志把已核对的账号另存在 `completion.accounts`,等撤旧家时才记进报告:现在不撤了,直接算带过去了。
+  const legacyVerified = (saved.completion as { accounts?: MoveAccountRef[] } | undefined)?.accounts ?? [];
+  report.accounts.moved.push(...legacyVerified);
   return completeMove(deps, saved, report);
 }
 
@@ -186,7 +171,6 @@ async function completeMove(deps: Pick<MoveCompletionDeps, 'activate' | 'journal
   deps.onProgress?.({ step: 'restart' });
   await guard('restart', deps.activate);
   if (!journal.done.includes('restart')) journal.done.push('restart');
-  // 旧家连着的账号不撤:#2104 起什么凭据都不搬,撤了就两头都没有。
   await guard('restart', async () => deps.journal.clear());
   return report;
 }
@@ -354,17 +338,39 @@ export async function runMove(deps: MoveDeps): Promise<MoveReport> {
     }
   };
 
-  // 2. 账号:#2104 凭据不搬,只记下旧家连着哪些、怎么配的,搬完在新家逐个重新连接。
-  const listAccounts = async () => {
+  // 2. 账号:读旧家的、写进新家(新家逐条存、逐条读回核对)。到这里失败都不算搬家失败:旧家那份一直在,如实列出来手动重连。
+  const copyAccounts = async (to: MoveSide) => {
     progress('accounts');
+    // 只记错误类型名:错误文案可能夹带写入的参数,❌ 进报告和日志。
+    const errorName = (cause: unknown) => (cause instanceof Error ? cause.name : typeof cause);
+    let exported: IntegrationMoveExport;
     try {
-      report.accounts.reconnect = reconnectList(await deps.source.integrations.moveSummary());
+      exported = await deps.source.integrations.exportForMove();
     } catch (cause) {
-      // 清单只是提示:读不到(旧家的咕咕比这个功能老、旧家的钥匙串打不开)= 账号原样留在原处,如实说,
-      // ❌ 当成搬家失败 —— 这时新家已经接过、文件也拷完了。
+      // 读不到(旧家的咕咕比这个功能老、旧家的钥匙串打不开)= 账号原样留在原处。
       report.accounts.unsupported = true;
-      if (!isUnknownMethod(cause)) report.warnings.push(`integrations list unreadable: ${cause instanceof Error ? cause.message : String(cause)}`);
+      if (!isUnknownMethod(cause)) report.warnings.push(`integrations export failed: ${errorName(cause)}`);
+      return;
     }
+    report.accounts.skipped.push(...exported.skipped);
+    if (exported.accounts.length === 0) return;
+    const ref = ({ integrationId, accountId, displayName }: MovableIntegrationAccount): MoveAccountRef => ({ integrationId, accountId, ...(displayName ? { displayName } : {}) });
+    let imported: IntegrationMoveImport;
+    try {
+      imported = await to.integrations.importFromMove(exported.accounts);
+    } catch (cause) {
+      if (isUnknownMethod(cause)) {
+        report.accounts.unsupported = true;
+        return;
+      }
+      report.warnings.push(`integrations import failed: ${errorName(cause)}`);
+      report.accounts.skipped.push(...exported.accounts.map((account): MoveSkipped => ({
+        ...ref(account), ...(account.config ? { config: account.config } : {}), reason: 'import-failed' })));
+      return;
+    }
+    report.accounts.skipped.push(...imported.skipped);
+    const refused = new Set(imported.skipped.map((s) => `${s.integrationId}/${s.accountId ?? ''}`));
+    report.accounts.moved.push(...exported.accounts.filter((a) => !refused.has(`${a.integrationId}/${a.accountId}`)).map(ref));
   };
 
   if (deps.direction === 'to-cloud') {
@@ -376,7 +382,7 @@ export async function runMove(deps: MoveDeps): Promise<MoveReport> {
     noteSkipped(plan);
     await guard('files', () => copyAll(target!, plan));
     await finish('files');
-    await guard('accounts', listAccounts);
+    await guard('accounts', () => copyAccounts(target!));
     await finish('accounts');
   } else {
     // 搬回本机:本机的家先备好、先拷,最后才接过 —— 拷失败时助理还好好地住在云上。
@@ -385,7 +391,7 @@ export async function runMove(deps: MoveDeps): Promise<MoveReport> {
     noteSkipped(plan);
     await guard('files', () => copyAll(target!, plan));
     await finish('files');
-    await guard('accounts', listAccounts);
+    await guard('accounts', () => copyAccounts(target!));
     await finish('accounts');
     await ensureAdopted();
     // 接过 = 云上那边停了、不会再写:先前拷的这段时间里它写的 / 改的,补一遍(只补变了的)。

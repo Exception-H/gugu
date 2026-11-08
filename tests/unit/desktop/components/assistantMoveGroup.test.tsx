@@ -30,6 +30,7 @@ vi.mock('../../../../apps/desktop/src/session/renderer/features/assistant/assist
   runAssistantMove: (...args: unknown[]) => mocks.runAssistantMove(...args),
 }))
 vi.mock('../../../../apps/desktop/src/session/renderer/lib/ipc', () => ({
+  rpc: {},
   rpcOn: () => ({ integrations: { list: mocks.list } }),
 }))
 vi.mock('../../../../apps/desktop/src/session/renderer/lib/stores/app-state', () => ({
@@ -43,6 +44,7 @@ import { AssistantMoveGroup } from '../../../../apps/desktop/src/components/assi
 import { AssistantMoveDialog } from '../../../../apps/desktop/src/components/assistant/AssistantMoveDialog'
 import { resetMoveForTests, startMove } from '../../../../apps/desktop/src/session/renderer/features/assistant/assistant-move-controller'
 import { MoveError } from '../../../../apps/desktop/src/session/renderer/features/assistant/assistant-move'
+import { queryClient } from '../../../../apps/desktop/src/session/renderer/lib/query-client'
 import { MoveCopyError } from '../../../../apps/desktop/src/session/renderer/features/assistant/assistant-move-copy'
 import type { AssistantHomePlace } from '../../../../apps/desktop/src/lib/assistantHome'
 
@@ -150,14 +152,15 @@ describe('搬家入口', () => {
     expect(q('assistant-move-resume')).not.toBeNull()
   })
 
-  it('#2104 接着搬到结果页:没有确认框那份服务名,也按名字列要重连的集成', async () => {
+  it('接着搬到结果页:没有确认框那份服务名,也按名字列要重连的集成', async () => {
     mocks.runAssistantMove.mockResolvedValue({
       files: 0,
       skippedFiles: [],
-      accounts: { reconnect: [{ integrationId: 'notion', accountId: 'default', reason: 'account' }], unsupported: false },
+      accounts: { moved: [], skipped: [{ integrationId: 'notion', accountId: 'default', reason: 'import-failed' }], unsupported: false },
       schedules: { restored: 0, skipped: [], unsupported: [], unreadable: false },
       warnings: [],
     })
+    const invalidate = vi.spyOn(queryClient, 'invalidateQueries').mockResolvedValue()
     await render(computer)
     await act(async () => {
       await startMove({ ownerUserId: 'owner-1', assistantId: 'agent-1', assistantName: '小满', localDeviceId: 'dev-mac', home: computer }, 'to-cloud', new Map(), 'zh-CN')
@@ -166,20 +169,19 @@ describe('搬家入口', () => {
     const done = document.body.querySelector('[data-testid="assistant-move-done-reconnect-list"]')?.textContent ?? ''
     expect(done).toContain('Notion')
     expect(done).not.toContain('notion')
+    expect(invalidate).toHaveBeenCalledWith({ queryKey: ['issues:connection-status'] })
   })
 })
 
 describe('点了先列清带走什么,确认才搬', () => {
-  it('#2104 确认框与结果都列要在新家重新连的集成(名字与不保密的配置),不含密钥;结果页能直接去资源库', async () => {
+  it('确认框列带过去的账号与要重新连的,不含密钥;结果页列存不进新家的(名字、配置、没有钥匙串的原因),能直接去资源库', async () => {
     mocks.previewMove.mockResolvedValue({
       bytes: 2048,
       files: 3,
       skippedFiles: [],
       accounts: {
-        reconnect: [
-          { integrationId: 'notion', accountId: 'default', displayName: '阿满的 Notion', reason: 'account' },
-          { integrationId: 'dingtalk', reason: 'cli' },
-        ],
+        moving: [{ integrationId: 'notion', accountId: 'default', displayName: '阿满的 Notion' }],
+        reconnect: [{ integrationId: 'dingtalk', reason: 'cli' }],
         unsupported: false,
       },
     })
@@ -187,7 +189,11 @@ describe('点了先列清带走什么,确认才搬', () => {
       files: 3,
       skippedFiles: [],
       accounts: {
-        reconnect: [{ integrationId: 'notion', accountId: 'a@x.cn', config: { imapHost: 'imap.x.cn' }, reason: 'account' }],
+        moved: [{ integrationId: 'feishu', accountId: 'default' }],
+        skipped: [
+          { integrationId: 'notion', accountId: 'a@x.cn', config: { imapHost: 'imap.x.cn' }, reason: 'no-keyring' },
+          { integrationId: 'github', accountId: 'me', reason: 'exists' },
+        ],
         unsupported: false,
       },
       schedules: { restored: 2, skipped: [], unsupported: [], unreadable: false },
@@ -213,7 +219,10 @@ describe('点了先列清带走什么,确认才搬', () => {
     })
     await act(async () => {})
     expect(mocks.runAssistantMove).toHaveBeenCalledWith(expect.objectContaining({ assistantId: 'agent-1' }), 'to-cloud', expect.any(Function))
-    expect(document.body.querySelector('[data-testid="assistant-move-report"]')?.textContent).not.toContain('账号')
+    expect(document.body.querySelector('[data-testid="assistant-move-report"]')?.textContent).toContain('1 个账号已带过去')
+    expect(document.body.querySelector('[data-testid="assistant-move-no-keyring"]')?.textContent).toContain('没有可用的系统钥匙串')
+    expect(document.body.textContent).toContain('新家已经连着另一个同名账号')
+    expect(document.body.querySelector('[data-testid="assistant-move-done-reconnect-list"]')?.textContent).not.toContain('github')
     const done = document.body.querySelector('[data-testid="assistant-move-done-reconnect"]')?.textContent ?? ''
     expect(done).toContain('Notion · a@x.cn')
     expect(done).toContain('imap.x.cn')
@@ -245,7 +254,7 @@ describe('点了先列清带走什么,确认才搬', () => {
   })
 
   it('搬着时「它住哪」翻面、搬家那一组换了位置重挂:弹窗与进度不丢(状态在模块里,不在组件里)', async () => {
-    mocks.previewMove.mockResolvedValue({ bytes: 0, files: 0, skippedFiles: [], accounts: { reconnect: [], unsupported: false } })
+    mocks.previewMove.mockResolvedValue({ bytes: 0, files: 0, skippedFiles: [], accounts: { moving: [], reconnect: [], unsupported: false } })
     let finish: (value: unknown) => void = () => undefined
     mocks.runAssistantMove.mockImplementation(
       (_env: unknown, _direction: unknown, onProgress: (p: unknown) => void) =>
@@ -279,7 +288,7 @@ describe('点了先列清带走什么,确认才搬', () => {
       finish({
         files: 1,
         skippedFiles: [],
-        accounts: { reconnect: [], unsupported: false },
+        accounts: { moved: [], skipped: [], unsupported: false },
         schedules: { restored: 0, skipped: [], unsupported: [], unreadable: false },
         warnings: [],
       })
