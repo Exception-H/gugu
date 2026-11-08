@@ -66,4 +66,21 @@ describe('attachment cache byte budget', () => {
     expect(scans).toBe(1 + 4)
     expect(await names()).toEqual(['/sha256/b', '/sha256/c', '/sha256/d'])
   })
+
+  // Disk guard: with enough free space the budget alone decides; short of it, the cache gives back the shortfall, oldest first.
+  it('keeps the whole budget while the disk has the reserve free', async () => {
+    const writer = budgetedCacheWriter(open, 1000, byPrefix, fail, { bytes: 500, free: async () => 800 })
+    for (const name of ['a', 'b', 'c']) { await writer.put(`${ORIGIN}/sha256/${name}`, bytes(300)); await writer.idle() }
+    expect(await names()).toEqual(['/sha256/a', '/sha256/b', '/sha256/c'])
+  })
+
+  it('shrinks by what the disk is short of the reserve, oldest first', async () => {
+    let free = 800
+    const writer = budgetedCacheWriter(open, 1000, byPrefix, fail, { bytes: 500, free: async () => free })
+    for (const name of ['a', 'b', 'c']) { await writer.put(`${ORIGIN}/sha256/${name}`, bytes(300)); await writer.idle() }
+    free = 100 // 400 short of the reserve: the 900 kept become at most 500
+    await writer.put(`${ORIGIN}/sha256/d`, bytes(100))
+    await writer.idle()
+    expect(await names()).toEqual(['/sha256/c', '/sha256/d'])
+  })
 })

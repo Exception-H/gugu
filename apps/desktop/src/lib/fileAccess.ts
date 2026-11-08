@@ -11,7 +11,13 @@ import { getRendererSession, observeRendererSession } from './sessionPublication
 export const attachmentCache = () => caches.open('gugu-attachments-v1')
 export const attachmentCacheOrigin = 'https://attachments.gugu.invalid'
 const log = rendererLogger('attachments')
-export const ATTACHMENT_CACHE_BYTES = 512 * 1024 * 1024
+export const ATTACHMENT_CACHE_BYTES = 10 * 1024 ** 3
+/** The cache never takes this origin's free space (Chromium's view of the disk: quota left to write) below this. */
+export const ATTACHMENT_CACHE_KEEP_FREE_BYTES = 5 * 1024 ** 3
+const storageFree = async (): Promise<number | null> => {
+  const estimate = await globalThis.navigator?.storage?.estimate?.().catch(() => null)
+  return estimate?.quota === undefined || estimate.usage === undefined ? null : estimate.quota - estimate.usage
+}
 const CHUNK_PREFIX = `${attachmentCacheOrigin}/chunks/`
 /** 续传分片带写入时刻:一天内的是读到一半的(不计入、不删,别的窗口也可能正在读),更早的是崩溃留下的(删)。 */
 const CHUNK_WRITTEN_AT = 'x-gugu-written-at'
@@ -19,7 +25,8 @@ const CHUNK_ORPHAN_MS = 24 * 60 * 60_000
 const attachmentWriter = budgetedCacheWriter(attachmentCache, ATTACHMENT_CACHE_BYTES,
   (url, response) => !url.startsWith(CHUNK_PREFIX) ? 'budget'
     : Date.now() - Number(response.headers.get(CHUNK_WRITTEN_AT) ?? 0) < CHUNK_ORPHAN_MS ? 'keep' : 'drop',
-  (error) => log.warn({ error }, 'attachment cache trim failed'))
+  (error) => log.warn({ error }, 'attachment cache trim failed'),
+  { bytes: ATTACHMENT_CACHE_KEEP_FREE_BYTES, free: storageFree })
 /** 写进附件缓存的唯一入口(打开的原图、预览、发送时留的本机副本)。 */
 export const putAttachment = attachmentWriter.put
 let account = getRendererSession()?.user.id, generation = new AbortController()
