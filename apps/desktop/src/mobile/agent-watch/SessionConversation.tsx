@@ -13,7 +13,7 @@ import { phoneTimelineClient } from '../local-agent/phoneTimelineClient'
 import type { ChatCommands, ChatView } from '@gugu/session-chat-ui'
 import type { ComposerAttachment, PromptEditorRef } from '@gugu/session-ui/react/components'
 import { MessageProvider } from '@gugu/session-ui/react/components'
-import { ThemeProvider } from '@gugu/session-ui/react/primitives'
+import { SessionUiTheme } from '@/components/sessionpage/SessionUiTheme'
 import { appendToDraft } from '@/store/chatContext'
 import { useLocale } from '@/i18n'
 import { useTheme } from '@/store/theme'
@@ -329,11 +329,11 @@ export function SessionConversation({ timeline, deviceId, sessionId, agentName, 
       onRetryAttachment={uploads.retry} onFilesDropped={addFiles} onImageFilesDropped={addFiles}
       toolbarExtra={<><ComposerAttachButton disabled={sending} mobile onPickFile={() => input.current?.click()} /></>} />
   </>
-  return <ThemeProvider theme={theme} target="documentElement"><MessageProvider locale={resolvedLocale} translate={translateSessionMessage}>
+  return <SessionUiTheme theme={theme}><MessageProvider locale={resolvedLocale} translate={translateSessionMessage}>
     <div ref={visibility.ref} className="relative flex min-h-0 flex-1 flex-col"><SessionTranscriptView uri={sessionId} turns={turns} pendingPrompt={pendingPrompt ?? startupPrompt ?? pendingSends[0] ?? null} pendingMessages={pendingMessages} mobile commands={commands} backgroundTasks={background}
       onReachStart={() => { void quotes.loadOlder() }} composerContent={composer} shown={visibility.shown} onAtBottomChange={atBottom => { reading.onAtBottomChange(atBottom); if (atBottom) onAtBottom?.() }} onVisibleItems={reading.onVisibleItems} onReady={ready => { view.current = ready; reading.onReady(ready) }} className="relative min-h-0 flex-1" />
     {turns.length === 0 ? emptyNote : null}</div>{outputs.panel}{options.confirmation}
-  </MessageProvider></ThemeProvider>
+  </MessageProvider></SessionUiTheme>
 }
 
 /** 模型左边那颗锁着的 harness 标(桌面会话页同一颗);不知道 harness 时照旧不画。 */
