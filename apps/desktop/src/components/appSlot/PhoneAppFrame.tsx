@@ -2,7 +2,7 @@ import { followLink, openLinkTarget } from '../../lib/guguLinks'
 import { reaction } from 'mobx'
 import { lazy, Suspense, useEffect, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import { readIdentityRevision, readMemberRosterRevision, readWorkspaceChanges } from '../../lib/accountRevisionCoordinator'
+import { readMemberRosterRevision, readRenamedMembers, readWorkspaceChanges } from '../../lib/accountRevisionCoordinator'
 import { extensionSurfaceStore } from '../../session/renderer/features/extensions/extension-surface-store'
 import { installedExtensionsStore } from '../../session/renderer/features/extensions/installed-extensions-store'
 import {
@@ -222,7 +222,8 @@ export function PhoneAppFrame({
   useEffect(() => {
     if (!chatId) return undefined
     return subscribeAccountRevision('agent_changed', (operations) => {
-      if (operations.length > 0) hostRef.current?.membersChanged(operations.map((operation) => ({ memberId: readIdentityRevision(operation.payload), left: false, renamed: true })))
+      const renamed = readRenamedMembers(operations.map((operation) => operation.payload))
+      if (renamed.length > 0) hostRef.current?.membersChanged(renamed.map((memberId) => ({ memberId, left: false, renamed: true })))
     })
   }, [chatId, subscribeAccountRevision])
 

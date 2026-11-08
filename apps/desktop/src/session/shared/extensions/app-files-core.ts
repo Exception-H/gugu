@@ -310,7 +310,7 @@ type ChatMember = { id: string; name: string; kind: 'human' | 'agent'; avatar?: 
 
 /**
  * One row of a chat's members changed, as `chat_members_changed` says it (`readMemberRosterRevision`); or `renamed`: a
- * person's name or face changed, as `agent_changed` says it (`readIdentityRevision`) — kept on their account, not on a
+ * person's name or face changed, as `agent_changed` says it (`readRenamedMembers`) — kept on their account, not on a
  * member row, so no `chat_members_changed` comes for it.
  */
 export type MemberChange = { memberId: string | null; left: boolean; renamed?: boolean };

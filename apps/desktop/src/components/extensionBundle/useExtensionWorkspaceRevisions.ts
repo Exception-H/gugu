@@ -1,7 +1,7 @@
 import { useEffect, useRef } from 'react'
 import { isDeviceOnline } from '@gugu/core/shared/enums/deviceModels'
 import { fetchInChunks } from '@gugu/core/shared/inChunks'
-import { readIdentityRevision, readMemberRosterRevision, readWorkspaceChanges } from '../../lib/accountRevisionCoordinator'
+import { readMemberRosterRevision, readRenamedMembers, readWorkspaceChanges } from '../../lib/accountRevisionCoordinator'
 import { rendererLogger } from '../../lib/log'
 import { chatDb } from '../../lib/supabase'
 import { platform } from '../../platform'
@@ -56,8 +56,9 @@ export function useExtensionWorkspaceRevisions(): void {
     })
     // A name or face is the person's, not a member row's: no chat_members_changed comes for it (`MemberChange.renamed`).
     const renamed = subscribeAccountRevision('agent_changed', (operations) => {
-      if (!platform.capabilities.agentRuntime || operations.length === 0) return
-      void rpc.extensions.chatMembersChanged({ renamed: operations.map((operation) => readIdentityRevision(operation.payload)) }).catch((error: unknown) => {
+      const renamed = readRenamedMembers(operations.map((operation) => operation.payload))
+      if (!platform.capabilities.agentRuntime || renamed.length === 0) return
+      void rpc.extensions.chatMembersChanged({ renamed }).catch((error: unknown) => {
         log.warn({ error: error instanceof Error ? error.message : String(error) }, 'telling App pages a member was renamed failed')
       })
     })
