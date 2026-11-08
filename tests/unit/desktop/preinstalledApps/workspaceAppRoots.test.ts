@@ -16,7 +16,7 @@ const wc = (path: string, type: 'folder' | 'text'): Entry => {
   return { id: path, name, displayName: name, type, contentType: type === 'folder' ? 'inode/directory' : 'text/markdown', parentId: parent, path, workspace: WS, systemRole: null, version: null, createdBy: null, createdAt: at, updatedAt: at, sourceMessageIds: [], canDelete: true, size: type === 'folder' ? null : 3 }
 }
 const TREE: Record<string, Entry[]> = {
-  '': [wc('src', 'folder'), wc('README.md', 'text')],
+  '': [wc('.git', 'folder'), wc('src', 'folder'), wc('README.md', 'text')],
   src: [wc('src/main.md', 'text'), wc('src/lib', 'folder')],
 }
 const chatNote: Entry = { ...wc('x', 'text'), id: 'item-1', name: 'plan.md', displayName: 'plan.md', path: 'plan.md', parentId: null, workspace: undefined, chat: 'dm-1' }
@@ -86,7 +86,7 @@ describe('a session\'s tab: one folder, two roots', () => {
   test('the working copy lists its top, then a folder only when it is entered — once', async () => {
     switchRoot('workspace')
     await until('the top listed', () => names().includes('README.md'))
-    expect(names()).toEqual(['src', 'README.md'])
+    expect(names(), 'hidden folders after the others').toEqual(['src', '.git', 'README.md'])
     expect(crumbs(), 'a computer\'s folder always says which one it is').toEqual(['电脑文件'])
     expect(($('crumbs').querySelector('.back') as HTMLButtonElement).disabled, 'nowhere up from the top').toBe(true)
     press('src')
@@ -95,7 +95,7 @@ describe('a session\'s tab: one folder, two roots', () => {
     expect(crumbs()).toEqual(['电脑文件', 'src'])
     expect(workspaceListed()).toEqual([{ workspace: WS, folder: '' }, { workspace: WS, folder: 'src' }])
     crumb(0)
-    expect(names()).toEqual(['src', 'README.md'])
+    expect(names()).toEqual(['src', '.git', 'README.md'])
     press('src')
     expect(workspaceListed()).toHaveLength(2)
   })
@@ -166,7 +166,7 @@ describe('a session\'s tab: one folder, two roots', () => {
     expect($('place-switch').hidden, 'one place: no switch to press').toBe(true)
     contextChanged!({ ...context, chat: { ...context.chat, id: 'dm-2' } })
     await until('the computer back, the switch back', () => !$('place-switch').hidden)
-    expect(names()).toEqual(['src', 'README.md'])
+    expect(names()).toEqual(['src', '.git', 'README.md'])
     contextChanged!({ ...context, workspace: undefined })
     await until('the computer gone, the switch gone', () => $('place-switch').hidden === true)
   })
@@ -180,7 +180,7 @@ describe('a session\'s tab: one folder, two roots', () => {
     await until('src', () => names().includes('main.md'))
     expect(crumbs()).toEqual(['/Users/me/proj', 'src'])
     crumb(0)
-    expect(names()).toEqual(['src', 'README.md'])
+    expect(names()).toEqual(['src', '.git', 'README.md'])
     contextChanged!({ ...context, chat: { ...context.chat, id: 'paths' }, workspace: { ...context.workspace, deviceLabel: 'Studio' } })
     await until('the machine', () => crumbs()?.[0] === 'Studio · 电脑文件')
     switchRoot('chat')
