@@ -184,7 +184,7 @@ describe('点一张缩略图', () => {
 })
 
 describe('transport picture loading', () => {
-  it('waits for the shared viewport, resolves the gallery on click, and clears recycled row pictures', async () => {
+  it('waits for the shared viewport, resolves the gallery on click, clears recycled row pictures, keeps a reseeded one', async () => {
     const host = document.createElement('div')
     Object.assign(host.style, { position: 'fixed', top: '100000px', left: '0', width: '180px' })
     document.body.appendChild(host)
@@ -222,6 +222,12 @@ describe('transport picture loading', () => {
       expect(host.querySelector('img')?.getAttribute('src')).toBeNull()
       finishNext(four[1])
       await expect.poll(() => host.querySelector('img')?.getAttribute('src')).toBe(four[1])
+      // A reseeded transcript hands the same call back as a new object: what is shown stays, nothing is fetched again.
+      const asked = requests.length
+      setItem(tool('next-picture', { imageCount: 1 }))
+      await paint()
+      expect(requests.length).toBe(asked)
+      expect(host.querySelector('button')?.getAttribute('data-image-state')).toBe('ready')
     } finally {
       dispose()
       host.remove()
