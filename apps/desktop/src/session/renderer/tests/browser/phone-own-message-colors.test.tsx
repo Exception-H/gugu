@@ -29,7 +29,7 @@ it.each(['light', 'dark'].flatMap(theme => ['conversation', 'task'].map(surface 
   host.style.cssText = 'position:fixed;inset:0;width:390px;height:780px;background:var(--bg);color:var(--text-primary);font:14px sans-serif';
   const label = host.appendChild(document.createElement('div'));
   label.textContent = `测试环境渲染，未经真机验证，原因：无真机\n${import.meta.env.VITE_OWNER_CAPTURE_SHA ?? 'regression test'}`;
-  label.style.cssText = 'height:64px;overflow-wrap:anywhere;padding:8px;box-sizing:border-box;font-size:11px';
+  label.style.cssText = 'height:64px;overflow-wrap:anywhere;padding:8px;box-sizing:border-box;font-size:var(--font-caption)';
   const shell = host.appendChild(document.createElement('div'));
   shell.setAttribute('data-phone-shell', '');
   shell.setAttribute('data-ta-scope', '');

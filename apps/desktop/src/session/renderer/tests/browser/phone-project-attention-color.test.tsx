@@ -39,7 +39,7 @@ it.each(['light', 'dark'] as const)('keeps the phone project waiting dot visible
   host.style.cssText = 'position:fixed;inset:0;background:var(--bg);color:var(--text-primary);padding:12px'
   const label = host.appendChild(document.createElement('div'))
   label.textContent = `测试环境渲染，未经真机验证，原因：无真机\n${import.meta.env.VITE_OWNER_CAPTURE_SHA ?? 'regression test'}`
-  label.style.cssText = 'white-space:pre-wrap;overflow-wrap:anywhere;font:11px sans-serif;margin-bottom:20px'
+  label.style.cssText = 'white-space:pre-wrap;overflow-wrap:anywhere;font:var(--font-caption) sans-serif;margin-bottom:20px'
   const mount = host.appendChild(document.createElement('div'))
   mount.setAttribute('data-phone-shell', '')
   const root = createRoot(mount)
