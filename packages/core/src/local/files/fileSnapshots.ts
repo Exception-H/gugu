@@ -174,11 +174,12 @@ export function createFileSaver(providers: FileProviders): NonNullable<FileProvi
         const placed = () => link(written, path).then(() => true, error => error.code === 'EEXIST' ? holds(path) : null)
         let done = await placed()
         if (done === false) { await moveAside(path); done = await placed() }
-        if (done === null && !await holds(path)) {
-          await moveAside(path)
-          await rename(written, path).catch(async error => { if (!await holds(path)) throw error })
-        }
-        else if (!done) throw new Error('The stored file changed while it was saved')
+        if (done === null) {
+          if (!await holds(path)) {
+            await moveAside(path)
+            await rename(written, path).catch(async error => { if (!await holds(path)) throw error })
+          }
+        } else if (!done) throw new Error('The stored file changed while it was saved')
         // Windows clears the read-only flag on the file to delete a name of it, and the published name shares that file.
         await rm(written, { force: true })
         await chmod(path, STORED_FILE_MODE)

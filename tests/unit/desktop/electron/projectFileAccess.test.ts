@@ -141,6 +141,18 @@ describe('downloads consume one file without the random-read cache', () => {
     expect(aside).toHaveLength(1)
     expect(aside[0]!.equals(edit)).toBe(true)
   })
+  it('where hard links are unavailable and another save already finished this name, the save succeeds on its file', async () => {
+    const { resolve } = remote()
+    fsHooks.link = async (_from, to) => {
+      await writeFile(to, bytes)
+      throw Object.assign(new Error('no links'), { code: 'EPERM' })
+    }
+    const saved = await savedTo(resolve, 'report.bin')
+    expect(digest(await readFile(saved.file_path))).toBe(revision.sha256)
+    expect((await stat(saved.file_path)).mode & 0o777).toBe(0o444)
+    expect(await readdir(dirname(saved.file_path))).toEqual(['report.bin'])
+    expect(await stat(join(home, 'file-store', '.changed')).catch(() => null)).toBeNull()
+  })
   it('a changed name that cannot move holds back only its own hand-out', async () => {
     const { resolve } = remote()
     const first = await savedTo(resolve, 'report.bin')
