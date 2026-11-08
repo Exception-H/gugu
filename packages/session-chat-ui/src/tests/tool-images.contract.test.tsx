@@ -15,7 +15,7 @@ import { ROW_H } from '@session-chat/components/engine/row-metrics'
 import { toolGroupUnitDef } from '@session-chat/components/rows/tools/tool-group/tool-group.def'
 import { toolUnitDef } from '@session-chat/components/rows/tools/tool/tool.def'
 import { conversationStepData, conversationStepUnitDef } from '@session-chat/components/rows/conversation-step/conversation-step.def'
-import { CONVERSATION_NARRATION_H } from '@session-chat/components/rows/message/ConversationNarration'
+import { CONVERSATION_NARRATION_H } from '@session-chat/components/rows/message/conversation-body'
 import type { ChatTranslator } from '@session-chat/localization'
 import {
   TOOL_THUMB_H,
