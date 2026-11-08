@@ -205,10 +205,14 @@ describe('sticky user lanes', () => {
   it('pins a long message as the same two lines whether it is folded or expanded', async () => {
     const long: TranscriptTurn = { id: 'a', seq: 0, initiator: 'user', items: [
       { kind: 'message', id: 'a-user', seq: 0, role: 'user', text: 'A long question that folds. '.repeat(60) },
-      ...exchange('a', 1, 150).slice(1),
+      // The agent conversation folds a turn's commentary into its process: one full final answer fills the turn.
+      { kind: 'message', id: 'a-final', seq: 1, role: 'assistant',
+        text: Array.from({ length: 150 }, (_, i) => `a reply ${i}. Lorem ipsum dolor sit amet.`).join('\n\n') },
     ] as TranscriptTurn['items'] };
     const theme = buildChatTheme(DEFAULT_CONFIG, { preset: 'double', userGutter: 72, agentConversation: true });
     const t = await mount([long, longTurn('b', 1, 150)], undefined, theme);
+    t.host.querySelector<HTMLButtonElement>('[data-expand-user-card="a-final"]')!.click();
+    await untilStable('the full final answer is measured', () => t.scrollEl.scrollHeight);
     const lineHeight = theme.fonts.body.lineHeight;
     const pinned = async () => {
       await t.scrollTo(t.scrollEl.scrollTop + 1200);
