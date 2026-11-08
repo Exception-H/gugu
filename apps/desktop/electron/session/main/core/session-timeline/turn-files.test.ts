@@ -53,7 +53,7 @@ describe('turnFileText (P3 task turn attachments)', () => {
     mocks.saveFileHandle.mockResolvedValue({ file_path: '/home/agent/.gugu/file-store/sha/brief.txt', read_only: true });
     mocks.stat.mockResolvedValue({ isFile: () => true, size: 3, mtimeMs: 1 });
     const first = await turnFileText('stored-session', [doc], false);
-    expect(first.text).toContain('read-only and shared');
+    expect(first.text).toContain('shared and read-only');
     await turnFileText('stored-session', [doc], false);
     expect(mocks.saveFileHandle).toHaveBeenCalledTimes(1);
     mocks.stat.mockResolvedValue({ isFile: () => true, size: 3, mtimeMs: 2 });

@@ -21,7 +21,7 @@ export function attachmentLocationLines(item: { itemId: string; version: number 
   const folder = item ? `\n${attachmentFolderLine(item.itemId, item.version)}` : ''
   if (!saved) return folder
   if ('failure' in saved) return `${folder}\n[${image ? 'Image' : 'File'} not saved: ${saved.failure}]`
-  const shared = saved.readOnly ? ' (read-only and shared; a plain copy stays read-only, so to change it copy it and make the copy writable: chmod u+w, attrib -r)' : ''
+  const shared = saved.readOnly ? ' (shared and read-only: do not change this file or its permissions. To change it, write your version to a new file of your own and send that; a plain copy stays read-only)' : ''
   return `${folder}\n[${image ? 'Image attached at' : 'File saved at'} local path: ${saved.localPath}${shared}]`
 }
 
