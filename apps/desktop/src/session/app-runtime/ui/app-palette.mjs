@@ -37,14 +37,14 @@ export const APP_PALETTE_COLORS = [
   ['--em-accent-9', 'var(--primary)'],
   ['--em-accent-contrast', 'var(--primary-fg)'],
   // gugu has one red, one green, one amber and one blue (--live: links, selected, running).
-  ['--em-foreground-destructive', 'var(--danger)'],
+  ['--em-foreground-destructive', 'var(--danger-fg)'],
   // White text on the saturated red — the same --color-white the host's ui/Button danger uses (#7333). Not --primary-fg:
   // that is the inverted ink, the surface colour in dark (#181818), and would turn the red button's label dark grey.
   ['--em-color-white', 'var(--color-white)'],
   ['--em-background-destructive', 'var(--danger-tint)'],
-  ['--em-foreground-success', 'var(--ok)'],
+  ['--em-foreground-success', 'var(--ok-fg)'],
   ['--em-background-success', 'var(--ok-tint)'],
-  ['--em-foreground-warning', 'var(--warn)'],
+  ['--em-foreground-warning', 'var(--warn-fg)'],
   ['--em-background-warning', 'var(--warn-tint)'],
   ['--em-foreground-info', 'var(--live-fg)'],
   ['--em-background-info', 'var(--live-soft)'],

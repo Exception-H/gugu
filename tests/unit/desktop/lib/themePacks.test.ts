@@ -14,6 +14,7 @@ import {
   packModes,
   paletteFromObsidian,
   paletteFromVSCode,
+  paletteIsReadable,
   resolvePalette,
   themePackStylesheet,
   type PaletteRole,
@@ -24,6 +25,51 @@ const tokens = readFileSync(join(root, 'apps/desktop/src/styles/tokens.css'), 'u
 
 const contrastRatio = (a: string, b: string) => new Color(a).contrast(new Color(b), 'WCAG21')
 const oklabLightness = (value: string) => new Color(value).to('oklab').coords[0]
+
+describe('large surfaces', () => {
+  const pack = (id: string) => BUILTIN_THEME_PACKS.find((p) => p.id === id)!
+
+  it('keep a theme\'s hue but not a whole window of saturated color', () => {
+    const raw = pack('gruvbox').modes.light!
+    expect(raw.bg).toBe('#fbf1c7')
+    const p = resolvePalette(raw, 'light')
+    const lch = (value: string) => new Color(value).to('oklch').coords
+    for (const surface of [p.page, p.bg, p.card, p.muted]) expect(lch(surface)[1]).toBeLessThanOrEqual(0.0285)
+    expect(Math.abs(lch(p.bg)[2] - lch(raw.bg)[2])).toBeLessThan(3)
+  })
+
+  it('use the theme\'s own lower layer when its side bar is the same color as its content', () => {
+    const raw = pack('gruvbox').modes.light!
+    expect(raw.page).toBe(raw.bg)
+    const p = resolvePalette(raw, 'light')
+    expect(oklabLightness(p.bg) - oklabLightness(p.page)).toBeGreaterThanOrEqual(0.012)
+    expect(p.page).not.toBe(p.bg)
+  })
+
+  it('lift a dim light content surface, the whole ladder with it', () => {
+    const raw = pack('tokyo-night').modes.light!
+    const p = resolvePalette(raw, 'light')
+    expect(oklabLightness(p.bg)).toBeGreaterThanOrEqual(0.954)
+    expect(oklabLightness(p.bg) - oklabLightness(p.page)).toBeCloseTo(oklabLightness(raw.bg) - oklabLightness(raw.page!), 2)
+  })
+})
+
+describe('a palette the guard cannot save', () => {
+  it('a mid-gray background is refused: no text color reaches the body floor on it', () => {
+    expect(paletteIsReadable({ bg: '#6e6e6e', fg: '#ffffff' }, 'dark')).toBe(false)
+  })
+
+  it('every built-in palette passes', () => {
+    for (const pack of BUILTIN_THEME_PACKS) for (const mode of packModes(pack)) expect(paletteIsReadable(pack.modes[mode]!, mode), `${pack.id} ${mode}`).toBe(true)
+  })
+})
+
+describe('the raised-contrast system setting', () => {
+  it('still raises secondary and decorative text under a theme, which out-ranks the rule in tokens.css', () => {
+    const css = themePackStylesheet({ dark: BUILTIN_THEME_PACKS.find((p) => p.id === 'tokyo-night') })
+    expect(css).toMatch(/@media \(prefers-contrast: more\) \{\s*:root\[data-theme='dark'\] \{ --muted-fg: var\(--fg\); --faint-fg: var\(--fg\); \}/)
+  })
+})
 
 describe('built-in theme packs', () => {
   it('ship seven families, each MIT or Apache-2.0, each credited in THIRD_PARTY_NOTICES.md', () => {

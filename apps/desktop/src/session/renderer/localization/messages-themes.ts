@@ -28,6 +28,7 @@ export const enUSThemeMessages = {
   'themes.error.marketplace': 'Gugu can’t use the VS Code Marketplace: its terms only allow Microsoft products. Search open-vsx.org for the same extension.',
   'themes.error.not-found': 'Nothing was found at this link.',
   'themes.error.no-themes': 'This extension contains no light or dark color theme.',
+  'themes.error.unreadable': 'Its text stays hard to read on its own background, even at full contrast, so it was not added.',
   'themes.error.network': 'Couldn’t download it. Check your network and try again.',
   'themes.error.obsidian-incomplete': 'This theme only adjusts Obsidian’s built-in colors, so it can’t be used on its own.',
 } as const;
@@ -62,6 +63,7 @@ export const zhCNThemeMessages: Record<ThemeMessageKey, string> = {
   'themes.error.marketplace': '咕咕不能用 VS Code Marketplace：它的条款只允许微软自家产品使用。请在 open-vsx.org 搜同名扩展。',
   'themes.error.not-found': '这个链接下没找到东西。',
   'themes.error.no-themes': '这个扩展里没有浅色或深色的颜色主题。',
+  'themes.error.unreadable': '它的底色上，文字调到最高对比度也读不清，所以没有导入。',
   'themes.error.network': '下载失败，检查一下网络再试。',
   'themes.error.obsidian-incomplete': '这个主题只是在 Obsidian 自带配色上做了调整，单独拿出来用不了。',
 };

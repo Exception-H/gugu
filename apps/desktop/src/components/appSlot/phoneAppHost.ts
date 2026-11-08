@@ -1,4 +1,3 @@
-import { appThemeColors } from '@renderer/lib/theme/app-theme-colors'
 import { composeChatDraft } from '@/lib/composeDraft'
 import { showRendererContentMenu } from '../../lib/contentContextMenu'
 import { appContextMenuOf } from '../../session/shared/extensions/app-context-menu'
@@ -506,7 +505,6 @@ export function hostAppFrame(
     operator: hosted.binding.guguNumber !== undefined ? { kind: 'person', guguNumber: hosted.binding.guguNumber } : { kind: 'person' },
     locale: hosted.binding.locale,
     themeMode: hosted.binding.themeMode,
-    themeColors: appThemeColors(),
     capabilities: hosted.binding.capabilities.filter((capability) => PHONE_CAPABILITIES.includes(capability)),
     layout: { visible: true, fullscreen: Boolean(hosted.binding.modal), width: frame.clientWidth, height: frame.clientHeight },
   })

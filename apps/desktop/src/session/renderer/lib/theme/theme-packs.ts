@@ -205,6 +205,19 @@ export function resolvePalette(raw: RawPalette, mode: ThemeMode): ResolvedPalett
   };
 }
 
+/**
+ * 兜底救不回来的配色:底色亮度不上不下时(相对亮度 0.125~0.18),字推到纯白 / 纯黑也到不了下限。
+ * 内置的都过(themePacks.test.ts);导入时这样的一套不收(theme-pack-import.ts),❌ 收进来给人一片读不清的字。
+ */
+export function paletteIsReadable(raw: RawPalette, mode: ThemeMode): boolean {
+  const p = resolvePalette(raw, mode);
+  const colorOf: Record<PaletteRole, string> = { fg: p.fg, mutedFg: p.mutedFg, faintFg: p.faintFg, live: p.live, dangerFg: p.dangerFg, warnFg: p.warnFg };
+  return (Object.keys(CONTRAST_FLOORS) as PaletteRole[]).every((role) => {
+    const { min, on } = CONTRAST_FLOORS[role];
+    return on.every((surface) => contrastRatio(colorOf[role], p[surface]) >= min);
+  });
+}
+
 /** 一套解析好的配色写成 CSS 声明。只写种子色;气泡、--bg-secondary 这些由种子算出来的,tokens.css 在 [data-theme] 上自己跟着重算。 */
 export function paletteDeclarations(p: ResolvedPalette, mode: ThemeMode): string[] {
   const d = (name: string, value: string) => `--${name}: ${value};`;
@@ -232,7 +245,11 @@ export function themePackStylesheet(slots: Partial<Record<ThemeMode, ThemePack>>
       const raw = slots[mode]?.modes[mode];
       if (!raw) return [];
       const body = paletteDeclarations(resolvePalette(raw, mode), mode).map((line) => `  ${line}`).join('\n');
-      return [`:root[data-theme='${mode}'] {\n${body}\n}`];
+      // tokens.css 的「提高对比度」写在 :root 上(0,1,0),压不过上面这条:这里接着把次级字和装饰字提回正文。
+      return [
+        `:root[data-theme='${mode}'] {\n${body}\n}`,
+        `@media (prefers-contrast: more) {\n  :root[data-theme='${mode}'] { --muted-fg: var(--fg); --faint-fg: var(--fg); }\n}`,
+      ];
     })
     .join('\n');
 }

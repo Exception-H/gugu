@@ -7,9 +7,9 @@
  *    读完就拆。
  */
 import { pickVariants, readVsix } from './theme-pack-vsix';
-import { modeOfBackground, OBSIDIAN_VARIABLES, paletteFromObsidian, type ThemeMode, type ThemePack } from './theme-packs';
+import { modeOfBackground, OBSIDIAN_VARIABLES, packModes, paletteFromObsidian, paletteIsReadable, type ThemeMode, type ThemePack } from './theme-packs';
 
-export type ThemeImportErrorCode = 'unsupported-url' | 'marketplace' | 'not-found' | 'no-themes' | 'network' | 'obsidian-incomplete';
+export type ThemeImportErrorCode = 'unsupported-url' | 'marketplace' | 'not-found' | 'no-themes' | 'unreadable' | 'network' | 'obsidian-incomplete';
 
 export class ThemeImportError extends Error {
   constructor(readonly code: ThemeImportErrorCode, detail?: string) {
@@ -169,5 +169,8 @@ async function importObsidian(link: Extract<ThemeLink, { kind: 'obsidian' }>, si
 
 export async function importThemeFromLink(input: string, signal?: AbortSignal): Promise<ThemePack> {
   const link = parseThemeLink(input);
-  return link.kind === 'vscode' ? importOpenVsx(link, signal) : importObsidian(link, signal);
+  const pack = await (link.kind === 'vscode' ? importOpenVsx(link, signal) : importObsidian(link, signal));
+  for (const mode of packModes(pack)) if (!paletteIsReadable(pack.modes[mode]!, mode)) delete pack.modes[mode];
+  if (packModes(pack).length === 0) throw new ThemeImportError('unreadable');
+  return pack;
 }
