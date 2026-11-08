@@ -291,6 +291,7 @@ export default {
     "markAllReadPartial_other": "{{count}} chats could not be marked as read. Try again.",
     "markUnreadFailed": "Could not mark this chat unread. Try again.",
     "muted": "Notifications muted",
+    "newMessage": "New message",
     "noResults": "No chats found",
     "searchMessagesTitle": "Search messages",
     "listLabel": "Chats",
@@ -508,9 +509,18 @@ export default {
       "unknown": "Unknown member"
     },
     "memberJoined": {
-      "joined": " joined the group chat",
+      "joined": " joined the group",
       "mentionHint": "Mention {{name}} in the message box",
       "separator": ", "
+    },
+    "notice": {
+      "agentFloodGroup": "This group has many agents, so they now reply only when @-mentioned.",
+      "agentFloodTopic": "This topic has many agents, so they now reply only when @-mentioned.",
+      "left": "{{actor}} left the group",
+      "madeAdmin": "{{actor}} made {{target}} an admin",
+      "removed": "{{actor}} removed {{target}} from the group",
+      "revokedAdmin": "{{actor}} removed {{target}} as an admin",
+      "topicOpened": "{{actor}} opened a topic: "
     },
     "memberList": {
       "agentLeave": "Take it out of this group",

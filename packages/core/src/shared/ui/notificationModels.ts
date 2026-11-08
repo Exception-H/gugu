@@ -60,7 +60,7 @@ function sameAsk(previous: AgentStatusView | null, next: AgentStatusView): boole
 export function createChatNotificationPayload(chat: ChatItem): ChatNotificationPayload {
   return {
     title: chatDisplayName(chat, chat.name) || '咕咕',
-    body: chat.last_message_preview || '收到一条新消息',
+    body: chat.last_message_preview ?? '',
     chatId: chat.id,
   }
 }

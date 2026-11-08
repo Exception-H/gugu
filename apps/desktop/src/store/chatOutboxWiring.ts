@@ -270,7 +270,7 @@ export function createOutboxWiring(io: OutboxWiringIo): OutboxWiring {
     }
     io.patchChat(chatId, {
       last_message_preview: record.payload.content.slice(0, 100),
-      last_message_failure: null,
+      last_message_notice: null,
       last_message_at: new Date().toISOString(),
     })
   }
