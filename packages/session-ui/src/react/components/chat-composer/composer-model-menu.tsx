@@ -573,7 +573,7 @@ export function ComposerModelMenu({
         <Combobox.Content ref={setPanelEl} className={styles.modelPanelContent}>
           {(settingNotice || menuNotice) && (
             <div role="status" className={styles.modelSettingNotice} data-testid="composer-model-setting-notice">
-              {settingNotice ?? menuNotice}
+              {settingNotice || menuNotice}
             </div>
           )}
           {panel.modelRow === 'list' ? (

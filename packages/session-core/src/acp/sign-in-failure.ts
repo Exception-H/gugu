@@ -39,13 +39,17 @@ const CLAUDE_SIGN_IN_ERROR_KINDS: ReadonlySet<string> = new Set(['authentication
  */
 const CODEX_UNCLASSIFIED_401 = /\bunauthorized \(401\)/i;
 
+const AUTH_ERROR_TYPE = /auth|credential|sign.?in|login/i;
+
 /**
  * The ACP code, unless the harness names another error in `data.errorType`: Kiro uses -32000 for its own typed failures
  * too (`ModelRegistryUnavailableError`, `McpServersNotReadyError`, ...), while its sign-in refusal carries no `data`.
+ * A type that names authentication is still a sign-in failure, whichever harness sent it.
  */
 export function isAcpAuthRequired(cause: { code?: unknown; data?: unknown }): boolean {
   if (cause.code !== ACP_AUTH_REQUIRED_CODE) return false;
-  return typeof (cause.data as { errorType?: unknown } | null | undefined)?.errorType !== 'string';
+  const errorType = (cause.data as { errorType?: unknown } | null | undefined)?.errorType;
+  return typeof errorType !== 'string' || AUTH_ERROR_TYPE.test(errorType);
 }
 
 /**

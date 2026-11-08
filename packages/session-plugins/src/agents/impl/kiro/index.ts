@@ -9,7 +9,7 @@ import { createNativeAcpBehavior } from '../../helpers/acp-stdio';
 import { KIRO_LOGIN_METHOD_ID, kiroAuthStatus } from './auth';
 import { icon } from './icon';
 import { kiroMcpAdapter } from './mcp';
-import { createKiroMcpNotices, preApproveGuguTool } from './notices';
+import { preApproveGuguTool } from './pre-approve';
 import { KIRO_PERMISSION_MODES } from './permission-modes';
 import { kiroSessionBundleDescriptor, materializeKiroSessionBundle } from './session-bundle';
 
@@ -156,7 +156,6 @@ export const provider = registerPluginBehavior(plugin, {
       // after the first session). The version that runs is the one Gugu installed; updates go through mise.
       env: { KIRO_NO_AUTO_UPDATE: '1' },
     }), {
-      observeWire: createKiroMcpNotices,
       preApprove: preApproveGuguTool,
       // Kiro sends `terminal/create` with the whole shell line in `command` and no `args`, which its own host runs
       // through the user's shell; Gugu's client terminal spawns `command` as a program. Measured on 3.0.0: every shell
@@ -164,5 +163,7 @@ export const provider = registerPluginBehavior(plugin, {
       ownTerminal: true,
     }),
     catalogModelsInConfigUpdate: true,
+    // Measured on 3.0.0: `<｜DSML｜function_calls` shows in the reply before each tool call; the call itself runs.
+    modelsLeakingToolCallMarkers: ['deepseek-3.2'],
   },
 });

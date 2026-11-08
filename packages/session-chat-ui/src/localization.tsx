@@ -287,6 +287,8 @@ const fallbackMessages = {
     'The reasoning level picked is not accepted by this model — running {running} instead',
   // #6396 会话起来时的名字在登记时已经用过(序号只增不减)⇒ 换成了下一个。行上只说「用过了」:
   // 多数是另一台设备先用了,但刚开 app 一秒内建的会话也可能撞上以前删掉的号,❌ 不断言是哪一种。
+  'transcript.sessionNotice.modelLeaksToolMarkers':
+    '{running} may show raw tool-call markers in its replies. The tools still run; another model avoids them',
   'transcript.sessionNotice.agentRenamed': '{previous} is now {running} — that name had already been used',
   'transcript.condition.harnessMissing': 'This engine is not installed yet',
   'transcript.condition.harnessUpdating': 'The engine is updating — it will be back in a few seconds',

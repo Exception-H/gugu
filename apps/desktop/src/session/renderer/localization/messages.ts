@@ -1016,6 +1016,8 @@ const enUSCoreMessages = {
   'transcript.sessionNotice.modelSubstitutedUnknown': 'The engine is not running the model picked',
   'transcript.sessionNotice.effortUnavailable':
     'The reasoning level picked is not accepted by this model — running {running} instead',
+  'transcript.sessionNotice.modelLeaksToolMarkers':
+    '{running} may show raw tool-call markers in its replies. The tools still run; another model avoids them',
   'transcript.sessionNotice.agentRenamed': '{previous} is now {running} — that name had already been used',
   'transcript.condition.harnessMissing': 'This engine is not installed yet',
   'transcript.condition.harnessUpdating': 'Engine updating…',
@@ -2078,6 +2080,7 @@ const zhCNCoreMessages: Record<CoreSessionMessageKey, string> = {
   'transcript.sessionNotice.modelUnavailableDefault': '这个会话原来选的模型这儿用不了 —— 已改用引擎的默认模型',
   'transcript.sessionNotice.modelSubstitutedUnknown': '引擎跑的不是选的那个模型',
   'transcript.sessionNotice.effortUnavailable': '选的推理档这个模型不接受 —— 现在用的是 {running}',
+  'transcript.sessionNotice.modelLeaksToolMarkers': '{running} 的回复里可能混进工具调用标记。工具照常执行，换个模型可以避免',
   'transcript.sessionNotice.agentRenamed': '{previous} 已改名为 {running}：这个名字已经用过了',
   'transcript.condition.harnessMissing': '这个引擎还没装',
   'transcript.condition.harnessUpdating': '引擎更新中…',

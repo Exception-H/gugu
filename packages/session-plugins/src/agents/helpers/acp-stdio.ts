@@ -25,12 +25,8 @@ const LEGACY_SESSION_UPDATES = new Set([
   'compaction_summary_chunk', 'notice',
 ]);
 
-/** Reads every inbound frame and may raise session updates of its own: vendor facts the ACP client does not model. */
-export type AcpWireObserver = (message: Record<string, unknown>) => SessionNotification[];
-
 export type NativeAcpOptions = {
   interruptAtToolBoundary?: boolean;
-  observeWire?: () => AcpWireObserver;
   /** Do not offer the ACP client terminal: this harness runs its own commands (see the plugin for why). */
   ownTerminal?: boolean;
   /**
@@ -43,7 +39,6 @@ export type NativeAcpOptions = {
 export function routeSessionUpdates(
   source: ReadableStream<Uint8Array>,
   deliver: (notification: SessionNotification) => void,
-  observeWire?: AcpWireObserver,
 ): ReadableStream<Uint8Array> {
   const decoder = new TextDecoder();
   const encoder = new TextEncoder();
@@ -51,7 +46,6 @@ export function routeSessionUpdates(
   const routeLine = (line: string): string | null => {
     let message: { method?: string; params?: SessionNotification };
     try { message = JSON.parse(line) as typeof message; } catch { return line; }
-    observeWire?.(message).forEach(deliver);
     const params = message.params;
     const update = params?.update as unknown as Record<string, unknown> | undefined;
     if (message.method !== 'session/update' || !params || !update) return line;
@@ -100,7 +94,7 @@ export function connectStdioAcp(io: AcpProcessIo, toClient: AcpClientFactory, op
   };
   const stream = ndJsonStream(
     Writable.toWeb(io.stdin) as WritableStream<Uint8Array>,
-    routeSessionUpdates(nodeReadableToWeb(io.stdout), deliver, options.observeWire?.()),
+    routeSessionUpdates(nodeReadableToWeb(io.stdout), deliver),
   );
   new ClientSideConnection((agent) => {
     boundary = createRequestActivity(agent as ClientSideConnection, params => client.sessionEvent(params), options);

@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import type { SessionCapabilityBundle, SessionMaterializationContext } from '@gugu/session-core/agents/plugins';
 import { pluginRegistry, listUserExposedPlugins } from '../../registry';
 import { kiroAuthStatus } from './auth';
-import { createKiroMcpNotices, preApproveGuguTool } from './notices';
+import { preApproveGuguTool } from './pre-approve';
 import { materializeKiroSessionBundle } from './session-bundle';
 
 const ctx = { surface: 'acp', cwd: '/w', lifecycle: 'new' } as unknown as SessionMaterializationContext;
@@ -60,44 +60,6 @@ describe('kiro sign-in status', () => {
       .resolves.toMatchObject({ kind: 'unauthenticated' });
     await expect(statusOf(async () => { throw Object.assign(new Error('timed out'), { killed: true }); }))
       .resolves.toMatchObject({ kind: 'unknown' });
-  });
-});
-
-describe('kiro MCP notices', () => {
-  const response = (id: number) => ({ id, result: {} });
-  const update = { method: 'session/update', params: { sessionId: 's', update: {} } };
-  const failed = { method: '_kiro/mcp/status', params: { sessionId: 's', servers: [{ name: 'gugu', status: 'failed', error: 'boom' }] } };
-
-  it('holds a notice raised before the session is routed, then raises it once', () => {
-    const observe = createKiroMcpNotices();
-    observe(response(1));
-    expect(observe(failed)).toEqual([]);
-    expect(observe(update)).toEqual([]);
-    observe(response(2));
-    const released = observe(update);
-    expect(released).toHaveLength(1);
-    expect(JSON.stringify(released[0])).toContain('boom');
-    expect(observe(failed)).toEqual([]);
-    expect(observe(update)).toEqual([]);
-  });
-
-  it('stays quiet while gugu connects, and for other servers', () => {
-    const observe = createKiroMcpNotices();
-    observe(response(1)); observe(response(2)); observe(update);
-    expect(observe({ method: '_kiro/mcp/status', params: { sessionId: 's', servers: [{ name: 'gugu', status: 'connecting' }] } })).toEqual([]);
-    expect(observe({ method: '_kiro/mcp/status', params: { sessionId: 's', servers: [{ name: 'other', status: 'failed' }] } })).toEqual([]);
-    expect(observe({ method: '_kiro/governance/state', params: { sessionId: 's', features: { mcpEnabled: true } } })).toEqual([]);
-  });
-
-  it('raises for an organization that disabled MCP and for an unreachable governance service', () => {
-    const off = createKiroMcpNotices();
-    off(response(1)); off(response(2)); off(update);
-    expect(JSON.stringify(off({ method: '_kiro/governance/state', params: { sessionId: 's', features: { mcpEnabled: false } } })))
-      .toContain('organization has disabled');
-    const down = createKiroMcpNotices();
-    down(response(1)); down(response(2)); down(update);
-    expect(JSON.stringify(down({ method: '_kiro/mcp/governance_disabled', params: { sessionId: 's', apiFailure: true } })))
-      .toContain('could not reach');
   });
 });
 

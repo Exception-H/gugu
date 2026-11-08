@@ -470,6 +470,9 @@ export interface IAcpBehavior {
    */
   catalogModelsInConfigUpdate?: boolean;
 
+  /** Model ids (as the catalog names them) whose raw tool-call markers show in replies here: a session opening on one gets one notice. */
+  modelsLeakingToolCallMarkers?: readonly string[];
+
   /**
    * Pure description of how to spawn the agent adapter process.
    * The APP spawns it and retains the ChildProcess handle for graceful cleanup.

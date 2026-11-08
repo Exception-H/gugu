@@ -125,6 +125,8 @@ const TRANSCRIPT_TICK_MS = 100;
 
 interface SessionRecordBase {
   closing?: boolean;
+  /** Set while the record is still starting: `onProcessClosed` has no route to it yet. */
+  startupProcessExit?: AdapterExit;
   idleCompaction?: IdleCompaction;
   input: AcpStartInput;
   cell: SessionCell;
@@ -1081,6 +1083,14 @@ export class SessionManager implements InboundRouter {
           return modelResult;
         }
         if (modelResult.data) startupNotices.push(modelResult.data);
+        const opening = record.cell.config.modelOptions?.selected;
+        if (opening && this.deps.agentHost.resolveAcp(input.providerId)?.behavior.modelsLeakingToolCallMarkers?.includes(opening)) {
+          startupNotices.push({
+            code: 'model-leaks-tool-markers',
+            detail: `${opening} may show raw tool-call markers in its replies`,
+            effectiveValue: opening,
+          });
+        }
         const effortResult = await this.applyInitialEffort(record, input);
         if (!effortResult.success) {
           this.removeRecord(input.sessionId, false);
@@ -1358,6 +1368,32 @@ export class SessionManager implements InboundRouter {
   }
 
   /**
+   * A harness that publishes its model option after `session/new` (`catalogModelsInConfigUpdate`) is not ready for a
+   * model or a first prompt until then: Kiro waits 5s for its model registry and fails the turn past that (measured over
+   * a slow proxy, where the list took 7.6s). The bound only stops a harness that never publishes from holding the session
+   * shut; the session then opens and whatever is still wrong surfaces as that harness's own error on the first turn.
+   * A process that dies meanwhile fails the start at once, and a start abandoned meanwhile stops waiting.
+   */
+  private async awaitLateModelDimension(record: SessionRecord, input: AcpStartInput): Promise<void> {
+    if (!this.deps.agentHost.resolveAcp(input.providerId)?.behavior.catalogModelsInConfigUpdate) return;
+    const deadline = Date.now() + LATE_MODEL_DIMENSION_WAIT_MS;
+    while (!record.cell.hasConfigTarget('model')) {
+      if (record.startupProcessExit) {
+        throw new Error(`The agent process exited during startup (code ${String(record.startupProcessExit.exitCode)})`);
+      }
+      if (record.closing || this.cells.get(input.sessionId) !== record) return;
+      if (Date.now() >= deadline) {
+        this.deps.logger.warn('SessionManager: harness did not publish its model option in time', {
+          sessionId: input.sessionId,
+          providerId: input.providerId,
+        });
+        return;
+      }
+      await new Promise((resolve) => setTimeout(resolve, 100));
+    }
+  }
+
+  /**
    * Assert the model the conversation record names on this session (spec provider-blocker, #5047;
    * spec capability-bundle, #6196). This is the **one** place a start makes the provider run the
    * recorded model; the host hands both halves of the record in:
@@ -1395,27 +1431,6 @@ export class SessionManager implements InboundRouter {
    * The provider's own reason travels in the error so the surface can show it verbatim and offer
    * the platform-model exit.
    */
-  /**
-   * A harness that publishes its model option after `session/new` (`catalogModelsInConfigUpdate`) is not ready for a
-   * model or a first prompt until then: Kiro waits 5s for its model registry and fails the turn past that (measured over
-   * a slow proxy, where the list took 7.6s). The bound only stops a harness that never publishes from holding the session
-   * shut; the session then opens and whatever is still wrong surfaces as that harness's own error on the first turn.
-   */
-  private async awaitLateModelDimension(record: SessionRecord, input: AcpStartInput): Promise<void> {
-    if (!this.deps.agentHost.resolveAcp(input.providerId)?.behavior.catalogModelsInConfigUpdate) return;
-    const deadline = Date.now() + LATE_MODEL_DIMENSION_WAIT_MS;
-    while (!record.cell.hasConfigTarget('model')) {
-      if (Date.now() >= deadline) {
-        this.deps.logger.warn('SessionManager: harness did not publish its model option in time', {
-          sessionId: input.sessionId,
-          providerId: input.providerId,
-        });
-        return;
-      }
-      await new Promise((resolve) => setTimeout(resolve, 100));
-    }
-  }
-
   private async applyInitialModel(
     record: SessionRecord,
     input: AcpStartInput,
@@ -2082,6 +2097,7 @@ export class SessionManager implements InboundRouter {
     this.intentionalProcessCloses.delete(processKey);
     const removed: string[] = [];
     for (const record of [...this.cells.values()]) {
+      if (record.phase === 'starting' && record.processKey === processKey) record.startupProcessExit = exit;
       if (record.phase !== 'ready' || record.processKey !== processKey) continue;
       const sessionId = record.input.sessionId;
       removed.push(sessionId);
