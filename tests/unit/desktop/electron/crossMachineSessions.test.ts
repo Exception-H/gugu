@@ -230,6 +230,20 @@ describe('reaching another machine', () => {
     expect(listDevices).toHaveBeenCalled()
   })
 
+  it('a page\'s call that changes something waits for the cloud computer\'s state, and is not sent to a paused one', async () => {
+    let answerState: (state: { state: string; deviceId: string; error: null; since: null } | null) => void = () => {}
+    const cloudComputerState = vi.fn(() => new Promise<{ state: string; deviceId: string; error: null; since: null } | null>((done) => { answerState = done }))
+    const { xm, call } = makeCrossMachine(undefined, { cloudComputerState: cloudComputerState as never })
+    const write = xm.appCall({ extensionId: 'app', extensionName: 'App' }, 'dev-b', {
+      action: 'app_call', call_id: 'w-1', session_id: 's', version: '1', method: 'filesWriteChunk', args: {},
+    })
+    await new Promise((done) => setTimeout(done, 0))
+    expect(call).not.toHaveBeenCalled()
+    answerState({ state: 'asleep', deviceId: 'dev-b', error: null, since: null })
+    await expect(write).rejects.toMatchObject({ code: 'SESSION_DEVICE_OFFLINE' })
+    expect(call).not.toHaveBeenCalled()
+  })
+
   it('a page\'s call does not wait for the cloud computer\'s state; a paused cloud computer still refuses it', async () => {
     let answerState: (state: { state: string; deviceId: string; error: null; since: null } | null) => void = () => {}
     const cloudComputerState = vi.fn(() => new Promise<{ state: string; deviceId: string; error: null; since: null } | null>((done) => { answerState = done }))

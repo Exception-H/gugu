@@ -30,6 +30,7 @@ import {
 import { SESSION_HOST_RPC } from '@shared/lib/ipc/session-host-device-frames'
 import { REMOTE_PROTOCOL_VERSION } from '@gugu/core/cloud/serverMachineHealth'
 import { dispatchCallOf } from '@shared/extensions/app-dispatch-core'
+import { verbFacts } from '@shared/extensions/bridge-protocol'
 import type { OtherMachines } from './session/main/core/sessions/session-family'
 import { DeviceRpcChannelError, DeviceRpcTimeoutError, type DeviceRpcRequester } from '@gugu/core/cloud/deviceRpcRequester'
 import type { UnifiedRecipientResult, UnifiedSessionMessageDeps } from './unified-session-message'
@@ -275,9 +276,12 @@ export function createCrossMachineSessions(deps: CrossMachineDeps) {
     const channel = action.action === 'spawn' && action.thinking !== undefined ? 'agentSession.spawnWithThinking'
       : action.action === 'spawn' && action.assistant_work ? 'assistantWork.prepare' : `agentSession.${action.action}`
     const appFacts = action.action === 'app_call' ? factsForAppCall() : null
-    const device = await reachable(deviceId, !!sessionCaller, signal, action.action === 'message' || action.action === 'spawn', appFacts ? async () => ({ ...(await appFacts.devices), cloud: null }) : reachFacts)
+    // A page's call that only reads goes out beside the cloud computer's state; one that changes something waits for it
+    // (refused after, it may have been done already).
+    const beside = !!appFacts && verbFacts(String(action.method))?.reads === true
+    const device = await reachable(deviceId, !!sessionCaller, signal, action.action === 'message' || action.action === 'spawn', appFacts ? async () => ({ ...(await appFacts.devices), cloud: beside ? null : await appFacts.cloud }) : reachFacts)
     const asked = request(device, channel, [caller, wire], remoteActionTimeoutMs(action), action.action, signal)
-    const result = await (appFacts
+    const result = await (beside && appFacts
       ? Promise.race([asked, appFacts.cloud.then((cloud) => pausedCloud(cloud, deviceId)
         ? Promise.reject(new CrossMachineError('SESSION_DEVICE_OFFLINE', `${describe(device)} is offline or paused; no wake was requested`))
         : asked)])

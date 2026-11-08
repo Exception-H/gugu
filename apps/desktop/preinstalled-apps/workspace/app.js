@@ -1083,7 +1083,7 @@ function renderList() {
   renderTools()
   // A folder not read yet, nothing of it known, is not empty: it says it is being read until its answer is drawn (what is
   // picked in it waits for that answer too).
-  if (!shown.length && !state.listError && !state.listed.has(state.folder ?? '')) {
+  if (!shown.length && canRead() && !state.listError && !state.listed.has(state.folder ?? '')) {
     list.replaceChildren()
     $('empty-upload').hidden = true
     empty.hidden = $('files-empty-progress').hidden = false
@@ -1139,8 +1139,9 @@ function renderList() {
   const count = folders.length + files.length
   empty.hidden = count > 0
   $('files-empty-progress').hidden = true
+  // A folder this App may not read is never read: it says so (a read is not on its way).
   $('files-empty-message').textContent = state.listError
-    ?? (needle ? fmt(t.noMatch, { q: state.filter.trim() }) : filtering && ofKind.length ? t.noFiltered
+    ?? (!canRead() ? t.denied : needle ? fmt(t.noMatch, { q: state.filter.trim() }) : filtering && ofKind.length ? t.noFiltered
       : state.kind !== 'all' && shown.length ? t.noKind : state.folder ? t.folderEmpty : t.noFiles)
   $('empty-upload').hidden = !canWriteHere() || !!needle || !!state.listError || (state.kind !== 'all' && shown.length > 0) || filtering
 }
