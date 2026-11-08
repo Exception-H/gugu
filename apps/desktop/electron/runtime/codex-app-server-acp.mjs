@@ -4,8 +4,9 @@ import { codexTerminalUpdate } from './codex-terminals.mjs'
 // Thin protocol adapter: preserve Gugu's ACP host contract while running the user's own Codex app-server.
 import { execFile } from '../../../../packages/core/src/local/childProcess.ts'
 import { randomUUID } from 'node:crypto'
-import { appendFileSync } from 'node:fs'
+import { appendFileSync, readFileSync, statSync } from 'node:fs'
 import { createInterface } from 'node:readline'
+import { fileURLToPath } from 'node:url'
 import { GUGU_MCP_CONFIG_KEY, normalizeGuguToolName } from '../mcp/gugu-mcp-name.mjs'
 import { joinPromptText, promptInputItems } from './codex-app-server-prompt.mjs'
 import { historyUnknownError, replayHistoryWithinBudget, resumeReplayRequest } from './codex-app-server-history.mjs'
@@ -14,6 +15,7 @@ import { memoizeSuccess, writeCodexModelCatalog } from './codex-model-catalog.mj
 // esbuild 把它打进 dist-electron/runtime;单测里 node 直接跑这份源码,所以写 `.ts` 全路径。
 import { spawnOwnedChild } from '../../../../packages/session-core/src/exec/owned-child.ts'
 import { codexReasoningText } from '../../../../packages/core/src/shared/reasoningText.mjs'
+import { isRenderableImage, mimeTypeFromName } from '../../../../packages/core/src/shared/imageMime.mjs'
 import { codexFilePatches } from '../../../../packages/session-core/src/acp/transport/codex-file-patches.ts'
 import { createCodexSubagents } from './codex-subagents.mjs'
 import { CODEX_AUTONOMY_BY_MODE, CODEX_PERMISSION_MODES } from '../../../../packages/session-plugins/src/agents/impl/codex/permission-modes.ts'
@@ -1045,8 +1047,41 @@ async function publishAvailableCommandsInner(cwd, extraRoots) {
   sessionUpdate({ sessionUpdate: 'available_commands_update', availableCommands })
 }
 
+/**
+ * Bigger files still get their row, just without the picture inline. The picture rides in the ACP stream as base64 and
+ * again on every history replay, so the cap is what a thumbnail and the viewer need, not what a file can be.
+ */
+const VIEWED_IMAGE_MAX_BYTES = 2 * 1024 * 1024
+
+/**
+ * The picture codex looked at, as an ACP image block. Its `imageView` item names only the file (`file://` URL in
+ * 0.167), so the bytes come from disk here, where codex read them; a file gone by the time history replays, too big,
+ * or one Chromium cannot draw leaves the row without a picture.
+ */
+function viewedImage(path) {
+  const mimeType = mimeTypeFromName(path)
+  if (!mimeType || !isRenderableImage(path, mimeType)) return null
+  try {
+    if (statSync(path).size > VIEWED_IMAGE_MAX_BYTES) return null
+    return { type: 'image', mimeType, data: readFileSync(path).toString('base64') }
+  } catch {
+    return null
+  }
+}
+
 function itemTool(item, terminalId = item?.id) {
   const type = String(item?.type ?? '')
+  if (type === 'imageView') {
+    // Code mode's `tools.view_image(…)` inside `exec` reaches the app-server only as this item: the `exec` call itself
+    // has none. The same row Claude's Read of a picture makes — a read of that file, with the picture as its content.
+    const raw = String(item.path ?? '')
+    const path = raw.startsWith('file:') ? fileURLToPath(raw) : raw
+    const image = viewedImage(path)
+    return {
+      title: 'View image', kind: 'read', rawInput: { path }, locations: [{ path }],
+      ...(image ? { content: [{ type: 'content', content: image }] } : {}),
+    }
+  }
   if (type === 'commandExecution') {
     const { type: _type, id: _id, status: _status, aggregatedOutput: _output, exitCode: _exit, durationMs, ...input } = item
     return {
