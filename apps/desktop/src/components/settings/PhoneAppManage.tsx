@@ -45,6 +45,7 @@ export const PhoneAppManage = observer(function PhoneAppManage({ extensionId, up
   const fromMarket = phoneApps.originOf(extensionId) === 'market'
   const autoUpdate = store.autoUpdates(extensionId)
   const main = store.mainTabOf(extensionId)
+  const builtIn = store.isPreinstalled(extensionId)
   const notice: InstalledRowNotice | undefined = updateVersion
     ? { kind: 'update', version: updateVersion, releaseNotes: '' }
     : gone ? { kind: 'gone' } : undefined
@@ -78,7 +79,7 @@ export const PhoneAppManage = observer(function PhoneAppManage({ extensionId, up
             iconDataUrl={store.appIcons[extensionId]}
             enabled={enabled}
             switching={busy}
-            lifecycle={appLifecycle({ installed, enabled, preinstalled: false, canOpen: Boolean(main) }, translate)}
+            lifecycle={appLifecycle({ installed, enabled, preinstalled: builtIn, canOpen: Boolean(main) && !builtIn }, translate)}
             locale={locale}
             translate={translate}
             api={phoneProductApi}
@@ -93,10 +94,10 @@ export const PhoneAppManage = observer(function PhoneAppManage({ extensionId, up
               else if (main) void followLink({ kind: 'app', extensionId, tab: main.kind.slice(extensionId.length + 1), path: '', query: {}, place: null })
             }}
             onInstallVersion={fromMarket ? (ref) => void run(translate('extensions.installFailed'), () => phoneApps.installFromMarket({ ref })) : undefined}
-            onToggleEnabled={(on) => void run(translate('extensions.switchFailed'), () => phoneApps.setEnabled(extensionId, on))}
+            onToggleEnabled={builtIn ? undefined : (on) => void run(translate('extensions.switchFailed'), () => phoneApps.setEnabled(extensionId, on))}
             onViewInMarket={fromMarket && !gone ? onViewInMarket : undefined}
             onOpenExternal={(url) => { window.open(url, '_blank', 'noopener,noreferrer') }}
-            onUninstall={() => setAsking(true)}
+            onUninstall={builtIn ? undefined : () => setAsking(true)}
           />
         </SessionUiTheme>
       </div>

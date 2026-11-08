@@ -76,7 +76,7 @@ import { marketDownloadProgressChannel, marketRefreshedChannel } from '@shared/e
 import type { MarketRefreshed } from '@shared/extensions/market-snapshot';
 import { marketHome } from '@shared/extensions/market-home';
 import { chatDb } from '@/lib/supabase';
-import { isOwnPage, type ExtensionManifest } from '@shared/extensions/manifest';
+import { declaredContexts, type ExtensionManifest } from '@shared/extensions/manifest';
 import { readCachedDevices } from '@/store/devicesCache';
 import { remoteHostsStore } from '@renderer/features/remote-hosts/remote-hosts-store';
 
@@ -199,6 +199,8 @@ export const ExtensionsSettingsCard = observer(function ExtensionsSettingsCard({
   // 页面画着的那份目录是哪一刻的:同一刻的「变了」(推送和 marketRefresh 的回答各报一次)只重读一回。
   const shelfFetchedAt = useRef<string | null>(null);
   const [detail, setDetail] = useState<AppDetail | null>(null);
+  const detailRef = useRef(detail);
+  detailRef.current = detail;
   // Boot may have filled the store already; then the page opens on that copy and
   // re-reads behind it (stale-while-revalidate) rather than flashing a skeleton
   // over rows it could show.
@@ -754,7 +756,7 @@ export const ExtensionsSettingsCard = observer(function ExtensionsSettingsCard({
       // What a task's「+」lists: the App's own page, by its name in this language (installedExtensionsStore.mainTabOf); an App
       // whose tabs only open files or come one per task has nothing there to put, and says nothing about it.
       const name = localizedManifestText(manifest, locale).name;
-      const hasPage = manifest.contributes.tabs.some((tab) => isOwnPage(manifest, tab) && !tab.perSession);
+      const hasPage = manifest.contributes.tabs.some((tab) => declaredContexts(tab).length === 0 && !tab.perSession);
       toast({
         title: translateRef.current('extensions.installed', { name }),
         ...(hasPage ? { description: translateRef.current('extensions.installedNext', { name }) } : {}),
@@ -908,14 +910,17 @@ export const ExtensionsSettingsCard = observer(function ExtensionsSettingsCard({
       if (!result.success) throw new Error(result.error ?? '');
       await refresh();
       void store.checkUpdates();
-      // 它的设置页随它一起没了,回清单;市场页还在,按钮回到「安装」。
-      setDetail((current) => (current?.page === 'manage' && current.extensionId === app.id ? null : current));
+      // 它的设置页随它一起没了:回到进来的地方(市场页还在,按钮回到「安装」);从别处直接进来的回「已安装」。
+      const leaving = detailRef.current;
+      if (leaving?.page === 'manage' && leaving.extensionId === app.id) {
+        if (!leaving.from) setTab('installed');
+        setDetail(leaving.from ?? null);
+      }
       setJustInstalled((current) => (current === app.id ? null : current));
       // Uninstall is the one irreversible action here. When the bundle is on the
       // shelf the way back is one click on the toast; a hand-picked folder has
       // no shelf copy, so the toast only reports.
       const onShelf = await shelfItemFor(app.id);
-      setTab('installed');
       toast({
         title: translate('extensions.uninstalled', { name: app.name }),
         tier: 'success',
@@ -1256,6 +1261,8 @@ export const ExtensionsSettingsCard = observer(function ExtensionsSettingsCard({
     const inMarket = (origin === 'market' || origin === 'fork') && !store.updates?.gone?.includes(managed.id);
     const enabled = store.isEnabled(managed.id);
     const menu = menuOf(managed);
+    // One gugu ships is where gugu puts it, and other Apps and every task lean on it: this page shows it and manages nothing that could break it.
+    const builtIn = store.isPreinstalled(managed.id);
     return (
       <div className="mk" data-testid="extensions-manage" ref={rootRef}>
         {notice && <DeviceScopeNoticeLine notice={notice} onRetry={() => void refresh()} />}
@@ -1280,8 +1287,8 @@ export const ExtensionsSettingsCard = observer(function ExtensionsSettingsCard({
           revoked={revoked[managed.id] ?? []}
           pendingPermissions={pendingPermissionsOf(managed.id)}
           agentStatus={agentStatus[managed.id]}
-          disclosure={store.disclosure[managed.id]}
-          givenApi={api}
+          disclosure={builtIn ? undefined : store.disclosure[managed.id]}
+          givenApi={builtIn ? undefined : api}
           docked={store.dock.includes(managed.id)}
           hiddenTabs={store.hiddenTabs[managed.id] ?? []}
           prompts={enabled && managed.contributes.prompts?.length ? <AppPromptsSection extensionId={managed.id} store={store} /> : undefined}
@@ -1303,12 +1310,12 @@ export const ExtensionsSettingsCard = observer(function ExtensionsSettingsCard({
           onToggleDock={menu.onToggleDock}
           onOpenInWindow={menu.onOpenInWindow}
           onForward={menu.onForward}
-          onSetTabHidden={(name, hidden) => void setTabHidden(managed, name, hidden)}
+          onSetTabHidden={builtIn ? undefined : (name, hidden) => void setTabHidden(managed, name, hidden)}
           onOpenTab={remote ? undefined : (name) => { openApp(managed.id, name); }}
-          onTogglePermission={(permission, granted) => void setPermissionGranted(managed, permission, granted)}
+          onTogglePermission={builtIn ? undefined : (permission, granted) => void setPermissionGranted(managed, permission, granted)}
           onDisclosureChange={(level) => void setDisclosure(managed, level)}
           onBrowseReplacement={browseReplacement}
-          onClearData={() => clearData(managed)}
+          onClearData={builtIn ? undefined : () => clearData(managed)}
           onViewInMarket={inMarket ? () => void viewInMarket(managed, detail) : undefined}
           onOpenExternal={confirmOpenExternalLink}
           onUninstall={menu.onUninstall}

@@ -113,6 +113,12 @@ describe('the chat on screen answers 「在本群打开」 (useChatOpener)', () 
     await act(async () => { await Promise.resolve() })
     expect(appChatFile).toHaveBeenCalledWith({ chatId: 'link-1', extensionId: 'board' })
     expect(panelTabsOf('link-1').map((tab) => tab.item.kind)).not.toContain('board.main')
+    // A tab the App does not have says so; it does not fall through to the file.
+    appChatFile.mockClear()
+    askNow('link-1', { app: 'board', tab: 'gone' })
+    await act(async () => { await Promise.resolve() })
+    expect(appChatFile).not.toHaveBeenCalled()
+    expect(panelTabsOf('link-1').map((tab) => tab.item.kind)).not.toContain('board.gone')
     // Naming another tab still opens that one.
     askNow('link-1', { app: 'board', tab: 'file' })
     expect(shownPanelTab('link-1')?.item).toMatchObject({ kind: 'board.file' })

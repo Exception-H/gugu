@@ -178,6 +178,15 @@ describe('Install from folder over a folder install (quiet upgrade)', () => {
       expect(rows).toContain('extension-row-notes');
       expect(rows).toContain('extension-row-searcher');
       expect(rows).toContain('extension-row-workspace');
+      // One gugu ships cannot be broken from here: no switch, page switch, revoke, clear, uninstall or agents editor.
+      const doc = dom.window.document;
+      await act(async () => void doc.querySelector('[data-testid="extension-row-workspace"] .mk-name')!.dispatchEvent(new dom.window.MouseEvent('click', { bubbles: true })));
+      await settle();
+      expect(doc.querySelector('[data-testid="app-manage-page"][data-extension-id="workspace"]')).not.toBeNull();
+      expect(doc.querySelector('[data-testid="app-manage-page"] [role="switch"]')).toBeNull();
+      for (const absent of ['app-manage-uninstall', 'app-manage-data', 'app-manage-pin']) expect(doc.querySelector(`[data-testid="${absent}"]`), absent).toBeNull();
+      expect(doc.querySelector('[data-testid="app-manage-permissions"]')?.textContent).not.toContain(translateSessionMessage('extensions.revoke'));
+      await act(async () => void doc.querySelector('[data-testid="app-manage-back"]')!.dispatchEvent(new dom.window.MouseEvent('click', { bubbles: true })));
     } finally {
       h.api.list.mockImplementation(listed!);
     }
@@ -762,6 +771,26 @@ describe('市场页 (#7059)', () => {
       expect(action === translateSessionMessage('extensions.updateTo', { version: '1.1.0' })).toBe(offered);
     });
   }
+
+  it('从市场页进设置页再卸载:回到市场页,按钮回到「安装」', async () => {
+    const listed = h.api.list.getMockImplementation();
+    const here = app('pomo', ['productivity']);
+    h.api.list.mockResolvedValue({ success: true, data: { extensions: [here.manifest], invalid: [], icons: {}, disabled: [], origins: { pomo: 'market' } } } as never);
+    try {
+      await render();
+      await press('[data-testid="extension-card-pomo"]');
+      await press('[data-testid="app-product-manage"]');
+      expect(dom.window.document.querySelector('[data-testid="app-manage-page"]')).not.toBeNull();
+      await press('[data-testid="app-manage-uninstall-action"]');
+      h.api.list.mockResolvedValue({ success: true, data: { extensions: [], invalid: [], icons: {}, disabled: [], origins: {} } } as never);
+      const { onSuccess } = h.showConfirm.mock.calls.at(-1)![0] as { onSuccess: () => void };
+      await act(async () => { onSuccess(); await new Promise((resolve) => setTimeout(resolve, 0)); });
+      await until('back on the market page', () => !!dom.window.document.querySelector('[data-testid="app-product-page"]'));
+      expect(dom.window.document.querySelector('[data-testid="extensions-installed-panel"]')).toBeNull();
+    } finally {
+      h.api.list.mockImplementation(listed!);
+    }
+  });
 
   it('点「类似 App」换到它的产品页', async () => {
     const twin = app('focus', ['productivity']);
