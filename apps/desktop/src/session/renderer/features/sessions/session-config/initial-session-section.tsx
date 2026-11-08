@@ -47,6 +47,7 @@ import { IntegrationIcon } from '@renderer/features/integrations/integration-ico
 import { useShowModal } from '@renderer/lib/modal/modal-provider';
 import { resolveLegLoginGate } from './vendor-login-prompt';
 import { usePromptLibrary } from '@renderer/features/library/prompts/use-prompt-library';
+import { promptSlashItems } from '@renderer/features/library/prompts/prompt-slash-items';
 import { AgentIcon } from '@renderer/lib/components/agent-icon';
 import {
   agentGroupLabel,
@@ -83,7 +84,6 @@ import { useAgentAuthStatus } from '@renderer/lib/stores/use-agent-auth-status';
 import { useAgents } from '@renderer/lib/stores/use-agents';
 import { useNavigate } from '@renderer/lib/layout/navigation-provider';
 import { Field } from '@renderer/lib/ui/field';
-import { cn } from '@renderer/utils/utils';
 import {
   agentOffersSessionView,
   agentReadingForLeg,
@@ -105,13 +105,11 @@ import {
 import type { LinkedIssue } from '@shared/core/linked-issue';
 import { DEFAULT_SESSION_AUTO_APPROVE } from '@shared/core/sessions/default-session-autonomy';
 import { buildIssueContextText } from '../context-bar/context-actions';
-import { appendInitialSessionText } from '../create-session-modal/initial-session-text';
-import { usePromptFileDrop } from '../create-session-modal/use-prompt-file-drop';
 import { rpcOn } from '@renderer/lib/ipc';
 import { toast } from '@renderer/lib/hooks/use-toast';
 import { asMounted, getProjectStore } from '@renderer/features/projects/stores/project-selectors';
 import { pushTaskDirectory, taskAttachmentUsesSsh } from '@/lib/taskAttachmentTarget';
-import { droppedDirectoryMention } from '@renderer/lib/drag-files';
+import { droppedDirectoryMention, pathMention } from '@renderer/lib/drag-files';
 import {
   createLocalSessionMentionProvider,
   localSessionMentionHiddenContext,
@@ -1287,12 +1285,6 @@ function useAgentCapabilities(providerId: AgentProviderId | null): AgentCapabili
   return agents?.find((agent) => agent.id === providerId)?.capabilities ?? null;
 }
 
-const SLASH_PROMPTS_SECTION = 'Prompts';
-
-function promptPreview(text: string): string {
-  return text.split(/\r?\n/, 1)[0] ?? '';
-}
-
 function toLinkedIssueMentionItem(issue: LinkedIssue): MentionItem {
   const token = issueMentionToken(issue.provider, issue.identifier);
   return {
@@ -1357,7 +1349,7 @@ export function InitialSessionField({
   const editorApiRef = useRef<PromptEditorRef | null>(null);
   const syncingEditorTextRef = useRef(false);
   const localMentionItemsRef = useRef<MentionItem[]>([]);
-  const { value: promptLibrary } = usePromptLibrary();
+  const { value: promptLibrary, overrides } = usePromptLibrary();
   const harnessModelOptions = useHarnessModelOptions(state.provider, sessionpageLegOfView(state.sessionView));
   const { data: agents, isLoading: agentsLoading } = useAgents();
   // #6264 名单要跨云问另一台机器时,那一格画「正在读取」,❌ 空着让人以为那台机器上什么都开不了。
@@ -1440,19 +1432,6 @@ export function InitialSessionField({
   const planModeSupported = agentSupportsPlanMode(capabilities, leg);
   const editModeOffered = agentOffersEditMode(capabilities, leg);
 
-  const { isDragOver, dropHandlers } = usePromptFileDrop({
-    // OS 文件拖拽**一律**交给 ChatComposer 自己的 drop(→ onFilesDropped → 附件 chip),
-    // 这一层只留「从任务的文件树里拖一行进来」那条(它走 workspace-file 通道,不受这个开关影响)。
-    // ⚠️ 这一层若也收,一次拖拽会被**两边都收**:
-    // composer 收成 chip,这一层同时把绝对路径写进正文 —— 屏幕上一个附件、正文里一段路径。
-    // composer 的 handleDrop 只 preventDefault、不 stopPropagation,所以事件照样冒泡到这里。
-    // (SSH 项目本来就不该收本地路径:远端不存在这个文件。那条理由现在被上面这条覆盖。)
-    disableLocalFiles: true,
-    workspaceId: state.projectId,
-    onDropText: (text) =>
-      state.setPrompt((current) => appendInitialSessionText(current, text)),
-  });
-
   useEffect(() => {
     const editor = editorApiRef.current;
     if (!editor || editor.getText() === state.prompt) return;
@@ -1509,6 +1488,12 @@ export function InitialSessionField({
   const { dataDropTypes, onDataDropped } = useSessionMentionDrop({
     provider: localSessionMentionProvider,
     editorApiRef,
+    // Defined below with the composer's other drop paths; called only when something is dropped.
+    attachFiles: enableAttachments ? (files) => handleFiles(files) : undefined,
+    dropFolder: (path) => {
+      if (remoteMachine) toast({ title: translate('chat.folderDropUnsupportedTitle'), variant: 'destructive' });
+      else editorApiRef.current?.insertMention(pathMention(path));
+    },
     onMentionResolved: useCallback((item: MentionItem) => {
       const known = new Map(localMentionItemsRef.current.map((entry) => [entry.label, entry]));
       known.set(item.label, item);
@@ -1541,25 +1526,9 @@ export function InitialSessionField({
 
   const querySlashItems = useCallback(
     async (query: string): Promise<CommandItem[]> => {
-      const normalized = query.trim().toLowerCase();
-      return promptLibrary
-        .filter((prompt) => {
-          if (!normalized) return true;
-          return [prompt.title, prompt.prompt].some((value) =>
-            value.toLowerCase().includes(normalized)
-          );
-        })
-        .map((prompt) => ({
-          id: `prompt:${prompt.id}`,
-          name: prompt.title,
-          label: prompt.title,
-          description: promptPreview(prompt.prompt),
-          behavior: 'insert-text' as const,
-          insertText: prompt.prompt,
-          section: SLASH_PROMPTS_SECTION,
-        }));
+      return promptSlashItems(promptLibrary, overrides, translate('chat.prompts'), query.trim().toLowerCase());
     },
-    [promptLibrary]
+    [promptLibrary, overrides, translate]
   );
 
   // @@@permission-independent-of-chat-ui — 权限选择与 Chat UI 开关是两件事,不该互相牵制。
@@ -1790,13 +1759,8 @@ export function InitialSessionField({
           `session.focusComposer` (⇧Esc) — a no-op on these pages until now — starts working too. */}
       <div
         data-region="composer"
-        className={cn(
-          nativeComposerAppearance,
-          'transition-colors',
-          isDragOver && 'rounded-lg bg-background-2 ring-2 ring-border-2 ring-inset'
-        )}
+        className={nativeComposerAppearance}
         onBlur={onPromptBlur}
-        {...dropHandlers}
       >
         <ChatComposer
           editorOptions={{ clearOnSubmit: false }}

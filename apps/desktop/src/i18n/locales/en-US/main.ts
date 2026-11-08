@@ -1,4 +1,27 @@
 export default {
+  "referralPreview": {
+    "contactCaption": "Scan to add me as a contact",
+    "contactFooter": "Connect your AI collaboration network with Gugu",
+    "noNumber": "A contact card is unavailable until a Gugu number is assigned.",
+    "proposal": "Proposal · pending review",
+    "invite": "Invite friends",
+    "summary": "Share an invitation code with friends. Codes are optional; anyone can register.",
+    "code": "My invitation code",
+    "disconnected": "Not connected yet",
+    "backendNote": "This version is for interface review. Code, link and statistics services are not connected; copying and sharing are unavailable.",
+    "copyCode": "Copy code",
+    "copyLink": "Copy invitation link",
+    "socialNote": "An invitation does not add contacts or join groups automatically. Each action requires its own confirmation.",
+    "sharePurpose": "Sharing purpose",
+    "myCard": "My contact card",
+    "inviteToGugu": "Invite friends to Gugu",
+    "view": "View",
+    "optionalCode": "Invitation code (optional)",
+    "placeholder": "Enter a code if you have one",
+    "clear": "Clear",
+    "draftNote": "Saved only as a local preview draft. No referral is submitted or confirmed; you can continue without a code.",
+    "storageError": "The local draft could not be saved. You can continue without a code; nothing will be submitted."
+},
   "imageAnnotate": {
     "title": "Edit image",
     "edit": "Edit image",
@@ -237,14 +260,7 @@ export default {
       "empty": "This task has no content yet.",
       "loadFailed": "Could not open the timeline",
       "reload": "Load again",
-      "reloaded": {
-        "epoch_changed": "The machine reopened this record, so the timeline was reloaded in full.",
-        "cursor_ahead": "This phone was ahead of the machine, so the timeline was reloaded in full.",
-        "source_replaced": "The task's record was replaced, so the timeline was reloaded in full.",
-        "source_unreadable": "The task's record could not be read, so the timeline was reloaded in full.",
-        "gap": "An update went missing on the way here, so the timeline was reloaded in full.",
-        "gap_too_large": "Too much was missed while disconnected, so the timeline was reloaded in full."
-      },
+
       "outcome": {
         "done": "Finished",
         "cancelled": "Cancelled",
@@ -296,8 +312,7 @@ export default {
       "permissionLabel": "Permission mode",
       "lastUsedDropped": "Last time's {{items}} is not available on this machine now, so the default is used.",
       "lastUsedJoiner": ", ",
-      "birthGroup": "Joins \"{{name}}\" once created",
-      "birthGroupSkip": "Don't join",
+      "taskGroup": "The task card goes to \"{{name}}\" and the agent joins it",
       "modelDefault": "Default",
       "modelDefaultHint": "Leave it to the harness's own default model",
       "modelLoading": "Asking that machine which models it has…",
@@ -489,7 +504,10 @@ export default {
       "trayBadgeAria": "Show the unread count on the tray icon",
       "trayBadgeEnabled": "Show the unread count on the tray icon",
       "system": "System",
-      "theme": "Theme",
+      "theme": "Appearance",
+      "themePack": "Theme",
+      "themePackDefault": "Gugu default",
+      "themePackValue": "Dark: {{dark}} · Light: {{light}}",
       "title": "General"
     },
     "guguNumber": "Gugu ID",

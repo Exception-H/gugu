@@ -1,4 +1,5 @@
-import type { ChatFileRef } from '@shared/extensions/app-files-core';
+import { getMainWindow } from '@main/app/window';
+import type { ChatFileRef, MemberChange } from '@shared/extensions/app-files-core';
 import * as fs from 'node:fs';
 import { app } from 'electron';
 import {
@@ -8,13 +9,14 @@ import {
 } from '@main/core/extensions/extension-session';
 import {
   chatMembersChanged,
+  chatsWithPages,
   bindExtensionSurface,
   retargetExtensionSurface,
   notifyGroupWorkspaceChanged,
   notifyWatchedChatsChanged,
   notifyInstalledAppsChanged,
   invokeExtensionCommand,
-  deliverToOpeningPage,
+  deliverToChatFilePage,
   deliverToSessionFilePage,
   setExtensionAppView,
   unbindExtensionSurfaces,
@@ -263,6 +265,8 @@ export const extensionsController = createRPCController({
     tabKind: string;
     /** The file of its workspace this tab was opened for (an extension claimed its type). */
     filePath?: string;
+    /** The host opened that file for an agent or an App, not a person: a file outside is not read through it (`@@@outside-file`). */
+    byHost?: boolean;
     /** The chat file it was opened for (L3). */
     itemId?: string;
   } & Partial<import('@shared/extensions/app-runtime-protocol').AppWhere>) => {
@@ -319,7 +323,7 @@ export const extensionsController = createRPCController({
       const target = await files.groupFile(chatId, String(args?.itemId ?? ''));
       const choice = files.openerChoice(target.typedName);
       const place = placeFor(choice, args?.at);
-      if (place) deliverToOpeningPage(place.candidate.extensionId, placeLink(place.candidate, place.at, target.itemId), { chat: chatId }, target.itemId);
+      if (place) deliverToChatFilePage(place.candidate.extensionId, placeLink(place.candidate, place.at, target.itemId), chatId, target.itemId);
       return { success: true as const, data: { ...target, choice } };
     } catch (error) {
       log.warn('Failed to resolve who opens a group file:', error);
@@ -421,6 +425,7 @@ export const extensionsController = createRPCController({
     webContentsId: number;
     tabId: string;
     filePath?: string;
+    byHost?: boolean;
     itemId?: string;
   } & Partial<import('@shared/extensions/app-runtime-protocol').AppWhere>) => {
     try {
@@ -440,12 +445,32 @@ export const extensionsController = createRPCController({
    * a menu item that silently does nothing is the same fake as a placeholder
    * button.
    */
-  /** 摩擦单 F36: the window saw rows of these chats' members change (who, left or not); the pages sitting in them are told when that moved who is there. */
-  chatMembersChanged: async (args: { changes: { chatId: string; memberId: string | null; left: boolean }[] }) => {
-    const byChat = new Map<string, { memberId: string | null; left: boolean }[]>();
+  /** A session's file on another machine, saved from the host's preview: an App's download, for the file that preview shows. */
+  downloadWorkingCopyFile: async (args: { sessionId: string; path: string }) => {
+    const { downloadAppFile } = await import('@main/core/extensions/app-files');
+    const { sessionWorkspace } = await import('@shared/extensions/app-runtime-protocol');
+    const ref = { workspace: sessionWorkspace(args.sessionId), id: args.path };
+    let target: string | null = null;
+    try {
+      await downloadAppFile({ pageId: 0, extensionId: 'workspace', handed: ref }, { ref }, getMainWindow()?.webContents ?? null, undefined, (filePath) => { target = filePath; });
+      return { success: true as const, target };
+    } catch (error) {
+      return { success: false as const, error: error instanceof Error ? error.message : String(error), code: (error as { code?: string }).code };
+    }
+  },
+  /**
+   * 摩擦单 F36: the window saw rows of these chats' members change (who, left or not), or these people renamed (`renamed`:
+   * no chat named, so every chat a page sits in hears it); the pages are told when that moved who is there.
+   */
+  chatMembersChanged: async (args: { changes?: { chatId: string; memberId: string | null; left: boolean }[]; renamed?: string[] }) => {
+    const byChat = new Map<string, MemberChange[]>();
     for (const change of Array.isArray(args?.changes) ? args.changes : []) {
       if (typeof change?.chatId !== 'string') continue;
       byChat.set(change.chatId, [...(byChat.get(change.chatId) ?? []), { memberId: typeof change.memberId === 'string' ? change.memberId : null, left: change.left === true }]);
+    }
+    const renamed = (Array.isArray(args?.renamed) ? args.renamed : []).filter((id): id is string => typeof id === 'string' && id !== '');
+    if (renamed.length > 0) {
+      for (const chatId of chatsWithPages()) byChat.set(chatId, [...(byChat.get(chatId) ?? []), ...renamed.map((memberId) => ({ memberId, left: false, renamed: true }))]);
     }
     await Promise.all([...byChat].map(([chatId, changes]) => chatMembersChanged(chatId, changes)));
     return { success: true as const };

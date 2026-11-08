@@ -56,8 +56,10 @@ import { sessionRegistry } from '@renderer/features/sessions/stores/session-regi
 import { IntegrationIcon } from '@renderer/features/integrations/integration-icon';
 import { useConnectedIssueProviders } from '@renderer/features/integrations/use-connected-issue-providers';
 import { usePromptLibrary } from '@renderer/features/library/prompts/use-prompt-library';
+import { promptSlashItems } from '@renderer/features/library/prompts/prompt-slash-items';
 import { asMounted, getProjectStore, getProjectViewStore } from '@renderer/features/projects/stores/project-selectors';
 import { composerLayerHoldsFocus, sessionNavigationFocus } from '@renderer/features/sidebar/session-navigation-focus';
+import { useComposerEntryFocus } from '@/lib/composerEntryFocus';
 import { usePaneContext } from '@renderer/features/tabs/pane-context';
 // TODO(conversations-extraction): Inject task editor/file-opening behavior into ACP chat.
 import {
@@ -104,7 +106,7 @@ import { openComposerImage, openImageViewer } from '@/lib/imageViewer';
 import { showModal, useShowModal } from '@renderer/lib/modal/modal-provider';
 import { resolveSignInTarget } from '@renderer/features/settings/agents-page/agent-account';
 import { pushTaskDirectory, taskAttachmentUsesSsh } from '@/lib/taskAttachmentTarget';
-import { droppedDirectoryMention } from '@renderer/lib/drag-files';
+import { droppedDirectoryMention, pathMention } from '@renderer/lib/drag-files';
 import { pathAttachmentTarget } from '@gugu/session-chat-ui/markdown-attachment-mentions';
 import { readMermaidTheme } from '@gugu/session-chat-ui/mermaid';
 import { SessionScheduleChip } from '../session-schedule-chip';
@@ -113,12 +115,11 @@ import { useSessionSchedules } from '@renderer/features/automations/use-session-
 import { toComposerPermission } from './composer-permission';
 import { useHostAskBand } from '@renderer/features/extensions/use-session-host-ask';
 import { SessionHostQuestion } from '@renderer/features/extensions/session-host-question';
-import { registerPastedScreenshot, screenshotQuality } from '@/lib/pastedScreenshot';
+import { registerPastedScreenshot } from '@/lib/pastedScreenshot';
 import { useComposerFileUploads } from './use-composer-file-uploads';
 import { shellPort } from '@renderer/lib/shell-port';
 import { getRendererSession } from '@/lib/sessionPublication';
 import { useAgents } from '@renderer/lib/stores/use-agents';
-import { ThreadScrollToBottom } from '@renderer/lib/ui/assistant-ui/thread-scroll-to-bottom';
 import {
   ThreadWelcome,
   type ThreadSuggestion,
@@ -212,10 +213,6 @@ const ISSUE_SEARCH_LIMIT = 20;
 /** 空态最多摆几个建议芯片 —— 再多就成了一堵墙,而空态要的是「开个头」。 */
 const WELCOME_SUGGESTION_LIMIT = 3;
 
-function promptPreview(text: string): string {
-  return text.split(/\r?\n/, 1)[0] ?? '';
-}
-
 function declaredMessageKey(key: string | null | undefined): SessionMessageKey | undefined {
   if (!key) return undefined;
   if (!Object.prototype.hasOwnProperty.call(enUSMessages, key)) {
@@ -242,15 +239,6 @@ function issueMatchesQuery(issue: LinkedIssue, query: string): boolean {
   return [issue.identifier, issue.displayIdentifier, issue.title]
     .filter((value): value is string => !!value)
     .some((value) => value.toLowerCase().includes(normalized));
-}
-
-function readFileAsDataUrl(file: File): Promise<string | undefined> {
-  return new Promise((resolve) => {
-    const reader = new FileReader();
-    reader.onload = () => resolve(typeof reader.result === 'string' ? reader.result : undefined);
-    reader.onerror = () => resolve(undefined);
-    reader.readAsDataURL(file);
-  });
 }
 
 function resolveAttachmentDataUrl(store: AcpChatStore, id: string): Promise<string | null> {
@@ -347,9 +335,10 @@ const ComposerForStore = observer(function ComposerForStore({
   // 发送等待的是上传 promise;账本必须在它 resolve 前更新,不能等 React 的下一次渲染。
   const setAttachments = useCallback((update: ComposerAttachment[] | ((prev: ComposerAttachment[]) => ComposerAttachment[])) => {
     const next = typeof update === 'function' ? update(attachmentsRef.current) : update;
+    if (next.length !== attachmentsRef.current.length || next.some((item, i) => item.id !== attachmentsRef.current[i]?.id)) store.renewDraftSubmission();
     attachmentsRef.current = next;
     setAttachmentState(next);
-  }, []);
+  }, [store]);
   // 图片与文件同一条:贴上来就放进这个 agent 私聊的文件夹,进度在 chip 上,这一轮带着引用发出去(P3)。
   const fileUploads = useComposerFileUploads({
     resumable: true,
@@ -367,11 +356,16 @@ const ComposerForStore = observer(function ComposerForStore({
   const [sendHold, setSendHold] = useState<'waiting' | 'blocked' | null>(null);
   const sendingRef = useRef(false);
   const promptEditor = useSessionPromptEditor(store, editorApiRef);
-  const { value: promptLibrary } = usePromptLibrary();
+  const { value: promptLibrary, overrides: promptOverrides } = usePromptLibrary();
 
   // Autofocus when the slot becomes available — only while the session page is on screen. 宿主把它常驻挂载在
   // 对话页后面(隐藏);启动时恢复会话在后台挂上这里,抢走对话页输入框的焦点,用户打的字进了看不见的这一格。
-  const shouldAutoFocus = sessionNavigationFocus.focusLayer !== 'nav';
+  const { isFocusedPane } = usePaneContext();
+  useComposerEntryFocus('session:' + store.runtimeSessionId, isFocusedPane && isEmbedVisible(), () => {
+    sessionNavigationFocus.setFocusLayer('composer');
+    editorApiRef.current?.focus();
+  });
+  const shouldAutoFocus = isFocusedPane && sessionNavigationFocus.focusLayer !== 'nav';
   useEffect(() => {
     if (!shouldAutoFocus || !isEmbedVisible() || composerLayerHoldsFocus()) return;
     editorApiRef.current?.focus();
@@ -393,7 +387,7 @@ const ComposerForStore = observer(function ComposerForStore({
       sendingRef.current = true;
       try {
         await sendComposerInput(value, {
-          unsettled: () => fileUploads.unsettled(),
+          started: onScrollToBottom, unsettled: () => fileUploads.unsettled(),
           waitForUploads: async () => { await fileUploads.waitForUploads(); },
           hasFailedAttachments: () => attachmentsRef.current.some(att => att.state === 'error'),
           files: () => fileUploads.files(attachmentsRef.current.map(att => att.id)),
@@ -405,17 +399,17 @@ const ComposerForStore = observer(function ComposerForStore({
             if (editorApiRef.current?.getText() === value) editorApiRef.current.clear();
           }),
         });
-        // 滚到哪由 store 定(发出即把这一句钉到顶):这里再滚一次到旧的底,会和那一钉抢,视图先滑回上一轮再跳回来。
+        // 只在本机发起时选择跟随；等待期间的上翻优先，提交完成不再改阅读位置。
       } finally {
         sendingRef.current = false;
       }
     },
-    [fileUploads, store]
+    [fileUploads, store, onScrollToBottom, editorApiRef, setAttachments]
   );
 
   const handleSubmit = useCallback(
     // The store's one send entry (custody; it toasts a failure); a send that cannot be kept goes back in the draft below.
-    (value: string) => sendWhenReady(value, (text, files) => store.submitPrompt(text, [], files)),
+    (value: string) => { const id = store.draftSubmissionId; return sendWhenReady(value, (text, files) => store.submitPrompt(text, [], files, id)); },
     [store, sendWhenReady]
   );
 
@@ -506,10 +500,7 @@ const ComposerForStore = observer(function ComposerForStore({
         };
         if (source === 'paste') registerPastedScreenshot(file);
         void fileUploads.add(chip, file);
-        if (isImage && !screenshotQuality(file)) {
-          const previewUrl = await readFileAsDataUrl(file);
-          if (previewUrl) setAttachments(current => current.map(att => att.id === chip.id ? { ...att, previewUrl } : att));
-        } else if (!isImage) {
+        if (!isImage) {
           // 文本类附件的内容在入列时读一份,chip 点开看的就是它(#5269)。
           const preview = await readAttachmentPreviewText(file);
           if (preview) {
@@ -645,6 +636,14 @@ const ComposerForStore = observer(function ComposerForStore({
     provider: localSessionMentionProvider,
     editorApiRef,
     selfSessionId: store.sessionId,
+    attachFiles: (files) => {
+      attachFiles(files).catch((error: unknown) => log.error('Failed to attach dropped files', { error }));
+    },
+    // A folder on this computer: the same pill a folder dropped from the system gets; a task on another machine cannot read it.
+    dropFolder: (path) => {
+      if (machineRegistry.machineOf(store.projectId)) toast({ title: translate('chat.folderDropUnsupportedTitle'), variant: 'destructive' });
+      else editorApiRef.current?.insertMention(pathMention(path));
+    },
   });
 
   // 落在这条会话的**正中**(聊天记录那一片)也算落在输入框上(behavior session-page「把会话拖成 @」):一块的上下左右边
@@ -1376,22 +1375,8 @@ const ComposerForStore = observer(function ComposerForStore({
           ...command,
           section: translate('chat.commands'),
         }));
-      const prompts = promptLibrary
-        .filter((prompt) => {
-          if (!normalized) return true;
-          return [prompt.title, prompt.prompt].some((value) =>
-            value.toLowerCase().includes(normalized)
-          );
-        })
-        .map((prompt) => ({
-          id: `prompt:${prompt.id}`,
-          name: prompt.title,
-          label: prompt.title,
-          description: promptPreview(prompt.prompt),
-          behavior: 'insert-text' as const,
-          insertText: prompt.prompt,
-          section: translate('chat.prompts'),
-        }));
+      // 提示词:我的一组,各 App 各一组(prompt-slash-items.ts,聊天输入框用的是同一份)。
+      const prompts = promptSlashItems(promptLibrary, promptOverrides, translate('chat.prompts'), normalized);
       // @@@gugu-client-commands —— `/mcp` 是**咕咕自己的**命令,不是 agent 报上来的:
       // 选中时被 `onCommand` 拦下来开面板,**一个字都不发给 agent**。
       // ⚠️ 它出现在这里的前提是 apply 那条路已经接通(面板 → 记录 → 重开)——
@@ -1411,7 +1396,7 @@ const ComposerForStore = observer(function ComposerForStore({
         : [];
       return [...clientCommands, ...commands, ...prompts];
     },
-    [store, promptLibrary, translate]
+    [store, promptLibrary, promptOverrides, translate]
   );
 
   const a = store.affordances;
@@ -1470,7 +1455,7 @@ const ComposerForStore = observer(function ComposerForStore({
         onApply={applyMcpSelection}
       />
       {schedules.length > 0 ? (
-        <div data-composer-band className={sessionComposerTrayClassName} style={sessionComposerTrayStyle}>
+        <div data-composer-band data-composer-top-band="schedule" className={sessionComposerTrayClassName} style={sessionComposerTrayStyle}>
           <SessionScheduleChip machine={scheduleMachine} schedules={schedules} />
         </div>
       ) : null}
@@ -1652,7 +1637,6 @@ export const AcpChatPanel = observer(function AcpChatPanel({
   const placementWasEmptyRef = useRef<boolean | null>(null);
   // True while the scroll viewport is at the tail. Defaults to true so the
   // button does not flash on mount before the first frame fires.
-  const [atBottom, setAtBottom] = useState(true);
   /** 「这个模型要会员」那一行:由输入框那一格判出来报上来(它手上有目录),面板只负责挂条件行(#7056)。 */
   const [membershipLock, setMembershipLock] = useState<{ modelName: string } | null>(null);
   const [modelMenuRequest, setModelMenuRequest] = useState(0);
@@ -2128,7 +2112,7 @@ export const AcpChatPanel = observer(function AcpChatPanel({
       // 与 #3500 同形）。composer 上那颗是另一条路，它一直是通的，于是这颗死按钮
       // 被它掩护着看不出来。⇒ 这里补上；同时 UserMessageCard 改成没接回调就不渲染。
       canRevertMessage: (itemId) => (store?.isRejectedInput(itemId) ?? false) || (historyActionsEnabled && (store?.canRevertMessage(itemId) ?? false)),
-      canDiscardSend: (itemId) => store?.isRejectedInput(itemId) ?? false,
+      canDiscardSend: (itemId) => store?.canDiscardSend(itemId) ?? false,
       onDiscardSend: (itemId) => store?.discardRejectedInput(itemId),
       onEditMessage: ({ itemId }) => store?.beginMessageEdit(itemId),
       onRetrySend: (itemId) => store?.retryPendingInput(itemId),
@@ -2319,7 +2303,7 @@ export const AcpChatPanel = observer(function AcpChatPanel({
             commands={transcriptCommands}
             shown={visibility.shown}
             onVisibleItems={reading.onVisibleItems}
-            onAtBottomChange={atBottom => { setAtBottom(atBottom); reading.onAtBottomChange(atBottom) }}
+            onAtBottomChange={reading.onAtBottomChange}
             onReachStart={handleReachStart}
             layout={{ ...chatLayout, agentConversation: true }}
             style={{ position: 'absolute', inset: 0 }}
@@ -2372,19 +2356,6 @@ export const AcpChatPanel = observer(function AcpChatPanel({
           onMembershipLockChange={setMembershipLock}
         />
       )}
-
-      {/* 贴底状态是**单向**从 transcript 的 onAtBottomChange 流进来的:这里只读 `atBottom`
-          并回调 scrollToBottom,不引入 assistant-ui 的 Viewport(那会变成第二个 scrollTop 写者)。 */}
-      {showComposer &&
-        composerSlot &&
-        createPortal(
-          <ThreadScrollToBottom
-            atBottom={atBottom}
-            label={translate('chat.scrollToBottom')}
-            onScrollToBottom={() => viewRef.current?.scrollToBottom({ behavior: 'smooth' })}
-          />,
-          composerSlot
-        )}
 
       <AttachmentViewerDialog
         open={!!viewer}

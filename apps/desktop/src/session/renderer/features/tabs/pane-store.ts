@@ -94,6 +94,8 @@ export interface PaneSplitter {
   /** 为什么分不出来;null = 分得出来。 */
   splitBlocked(tabId: string): 'only-tab' | 'too-small' | null;
   revealTab?(tabId: string): boolean;
+  /** Whether a tab is showing now, beside this one or in front. */
+  isOnScreen?(tabId: string): boolean;
   entryForTab?(tabId: string): TabEntry | undefined;
   hasSibling?(): boolean;
   isFocusedPane?(): boolean;
@@ -502,15 +504,19 @@ export class PaneStore<R extends TabRegistry = TabRegistry>
     entry.history = { pages, index: history.index };
   }
 
-  navigate(tabId: string, kind: string, state: unknown): void {
+  /** `viewState`: where the new page shows, set with it: leaving this page can take a while (`onBeforeClose`). */
+  navigate(tabId: string, kind: string, state: unknown, viewState?: Record<string, unknown>): void {
     const entry = this.entries.get(tabId);
     const history = this.navigationOf(tabId);
     if (!entry || !history || !this.registry.has(kind)) return;
-    if (entry.kind === kind && this.registry.get(kind).resourceKey(entry.state as never) === this.registry.get(kind).resourceKey(state as never)) return;
+    if (entry.kind === kind && this.registry.get(kind).resourceKey(entry.state as never) === this.registry.get(kind).resourceKey(state as never)) {
+      if (viewState) this.setPageViewState(tabId, viewState);
+      return;
+    }
     this._beforeNavigate(entry, () => {
       const pages = history.pages.slice(0, history.index + 1);
       pages[history.index] = { ...pages[history.index], kind: entry.kind, state: toJS(entry.state) };
-      pages.push({ kind, state });
+      pages.push({ kind, state, ...(viewState ? { viewState } : {}) });
       this._showPage(entry, { pages, index: pages.length - 1 });
     });
   }
@@ -551,7 +557,10 @@ export class PaneStore<R extends TabRegistry = TabRegistry>
 
   canGo(tabId: string, delta: -1 | 1): boolean {
     const history = this.navigationOf(tabId);
-    return Boolean(history?.pages[history.index + delta] || (delta === -1 && this.openerOf(tabId)));
+    if (history?.pages[history.index + delta]) return true;
+    // The tab it was opened from, unless that is on screen already (beside it): going there would change nothing.
+    const opener = delta === -1 ? this.openerOf(tabId) : undefined;
+    return !!opener && !this._layoutSplitter?.isOnScreen?.(opener.tabId);
   }
 
   private _beforeNavigate(entry: TabEntryImpl, apply: () => void): Promise<boolean> {

@@ -54,14 +54,13 @@ export default {
         "retry": "Retry",
         "retrying": "Retrying…",
         "title": "Task failed to start"
-      },
-      "statusReadFailed": "Could not read the task status: {{reason}}"
+      }
     },
     "turnFailure": {
       "card": {
         "appUnavailable": "App unavailable",
         "deliveryRejected": "Message not delivered",
-        "outcomeUnknown": "Delivery result unknown",
+        "outcomeUnknown": "Failed to send",
         "generic": "Reply not completed",
         "authentication": "Model authorization refused",
         "network": "Cannot reach the model service",
@@ -81,7 +80,6 @@ export default {
       "stateAction": "{{name}}: {{state}}. Click to change model",
       "authentication": "The model service refused authorization for this reply.",
       "network": "The connection to the model service was interrupted; this reply could not be completed.",
-      "statusReadFailed": "Reply status could not be read. Please retry.",
       "weeklyQuota": "Weekly usage limit reached. This account cannot reply right now.",
       "monthlyQuota": "Monthly usage limit reached. This account cannot reply right now.",
       "rateLimited": "Too many requests. Please try again shortly.",
@@ -92,7 +90,7 @@ export default {
       "generic": "This Agent could not complete the reply",
       "deliveryRejected": "This message did not reach the assistant and will not be resent automatically.",
       "notAdmitted": "Messages retained. Your assistant will reply when ready.",
-      "outcomeUnknown": "Delivery result unknown: the message may have reached your assistant, and it was not resent.",
+      "outcomeUnknown": "Failed to send this message.",
       "undelivered": "Not delivered yet: no running Gugu instance holds this Agent. It will read the message once that instance is open.",
       "appUnavailable": "Not delivered: this came from an App that cannot run where this Agent lives (not installed, turned off, needs an update, or not possible on a phone).",
       "retry": "Retry",
@@ -294,7 +292,6 @@ export default {
     "markUnreadFailed": "Could not mark this chat unread. Try again.",
     "muted": "Notifications muted",
     "noResults": "No chats found",
-    "searchMessages": "Search messages for “{{query}}”",
     "searchMessagesTitle": "Search messages",
     "listLabel": "Chats",
     "pin": "Pin",
@@ -351,6 +348,7 @@ export default {
     "send": "Send",
     "settings": "Settings"
   },
+  "linkPill": {"unavailable": "Unavailable: removed, or you cannot see it", "message": "{{sender}}: {{words}}"},
   "attachmentView": {
     "types": {"pdf": "PDF document", "word": "Word document", "excel": "Excel spreadsheet", "presentation": "Presentation", "text": "Text", "markdown": "Markdown document", "csv": "CSV spreadsheet", "html": "Web page", "json": "JSON document", "archive": "Archive", "image": "Image", "audio": "Audio", "video": "Video"},
     "fileGone": "File deleted",
@@ -360,10 +358,13 @@ export default {
     "reupload": "Upload again",
     "selectOriginal": "Choose the original file",
     "storageWarning": "Group file storage is almost full ({{used}} / {{limit}}).",
+    "manageFiles": "Manage files",
     "storageFull": "Group file storage is full ({{used}} / {{limit}}). New uploads are paused.",
     "usageUnavailable": "File storage usage is unavailable right now.",
 
     "fileUnavailable": "File unavailable right now",
+    "fileNoAccess": "You no longer have access to this file",
+    "fileUpdated": "This file was updated; open it again",
     "holderOffline": "{{machine}} is offline. This file opens when it is back online.",
     "holderMachine": "The computer that keeps it",
     "besideOffline": "On {machine}, not connected",
@@ -434,11 +435,6 @@ export default {
     "file": "File",
     "photos": "Photos",
     "camera": "Camera",
-    "photoCaption": "Add a caption",
-    "originalPhoto": "Original",
-    "cancelPhotos": "Cancel",
-    "sendPhotos_one": "Send",
-    "sendPhotos_other": "Send ({{count}})",
     "memberType": {
       "agent": "Agent",
       "all": "Everyone",
@@ -467,6 +463,8 @@ export default {
   },
   "forward": {
     "fileFailed": "{{name}} could not be forwarded with the task",
+    "fileGone": "{{name}} is gone and wasn't forwarded.",
+    "fileTooLarge": "{{name}} is too large. At most 512 MB is forwarded at once.",
     "batchPreview": "Forward {{count}} messages",
     "batchPreview_one": "Forward {{count}} message",
     "batchPreview_other": "Forward {{count}} messages",
@@ -517,7 +515,6 @@ export default {
     "memberList": {
       "agentLeave": "Take it out of this group",
       "clearSearch": "Clear search",
-      "createAgent": "New Agent in this group",
       "invite": "Invite members",
       "makeAdmin": "Make admin",
       "manage": "Manage {{name}}",
@@ -527,7 +524,7 @@ export default {
       "setActive": "Switch to active",
       "setPassive": "Switch to passive",
       "loadFailed": "Could not load the member list. Close and reopen 👥 to try again.",
-      "notParticipant": "You are not in this topic yet, so its member list is not visible. Say something in it to join.",
+      "notParticipant": "No members of this topic are visible right now",
       "sectionAgents": "Agents",
       "sectionPeople": "People",
       "myAgents": "My agents · {{count}}",
@@ -671,6 +668,7 @@ export default {
     }
   },
   "header": {
+    "openApp": "Open an App",
     "groupApps": "Apps",
     "members_one": "{{count}} member",
     "members_other": "{{count}} members",
@@ -687,8 +685,7 @@ export default {
     "more": "More actions",
     "searchChat": "Search chat",
     "searchConversation": "Search this chat",
-    "groupFolder": "Group folder",
-    "folder": "Folder"
+    "folder": "Files"
   },
   "history": {
     "searchTopics": "Search topics",
@@ -773,16 +770,17 @@ export default {
     "retracted": "Message retracted",
     "deliveredFrom": "From {{name}}",
     "sendStatus": {
+      "resend": "Resend",
       "unknown": "Awaiting confirmation",
       "unknownHint": "Waiting for the publication result. This message will update automatically; no need to resend.",
       "archived": "Recipient is archived. Not delivered.",
-      "failed": "Not delivered",
-      "failedActions": "Undelivered message actions",
-      "failedHint": "Not delivered. Click to retry or discard.",
+      "failed": "Failed to send",
+      "failedActions": "Failed message actions",
+      "failedHint": "Failed to send. View message actions.",
       "undelivered": "instance not running, not delivered",
       "sending": "Sending",
       "stopped": "Stopped. Sends with your next message.",
-      "unknownNotResent": "Result unknown; not resent",
+      "unknownNotResent": "Failed to send",
       "failure": {
         "hostOffline": "The computer running this task is offline. It will be sent automatically once that computer is back.",
         "hostNotReady": "The computer running this task is not ready for messages yet. Retry in a moment.",
@@ -854,6 +852,10 @@ export default {
     "title": "Send to"
   },
   "topic": {
+    "leave": "Leave topic",
+    "leaveHint": "You can still read it, but won't get notifications from this topic",
+    "removeHint": "They can still read it, but won't get notifications from this topic",
+    "calledYou": "Someone @ you",
     "pins": {
       "pin": "Pin {{name}} to group",
       "unpin": "Unpin {{name}}",
@@ -889,47 +891,6 @@ export default {
       "composerPlaceholder": "Say something in this topic…",
       "empty": "No one has spoken in this topic yet",
       "resize": "Drag to resize the topic pane"
-    }
-  },
-  "forum": {
-    "communityPoints": "{{count}} community points",
-    "communityPoints_one": "{{count}} community point",
-    "communityPoints_other": "{{count}} community points",
-    "consent": {
-      "cancel": "Cancel",
-      "postTitle": "Post a bounty",
-      "postBody": "{{count}} community points are taken from your balance now. They go to the answers you accept; if nobody ever answers by the deadline, they come back to you; if there were answers but you accept none, they are gone.",
-      "postBody_one": "{{count}} community point is taken from your balance now. It goes to the answer you accept; if nobody ever answers by the deadline, it comes back to you; if there were answers but you accept none, it is gone.",
-      "postBody_other": "{{count}} community points are taken from your balance now. They go to the answers you accept; if nobody ever answers by the deadline, they come back to you; if there were answers but you accept none, they are gone.",
-      "postConfirm": "Post",
-      "reward": "Bounty: {{count}} points", "reward_one": "Bounty: {{count}} point", "reward_other": "Bounty: {{count}} points",
-      "days": "Ends in {{count}} days", "days_one": "Ends in {{count}} day", "days_other": "Ends in {{count}} days",
-      "visibility": { "public": "Answers are public", "poster_only": "Answers seen by you only, public once it ends" },
-      "acceptTitle": "Accept answers",
-      "acceptBody": "The points go to the answerers, the bounty ends, and answers seen by you only become public. This cannot be undone.",
-      "acceptConfirm": "Accept",
-      "awardLine": "{{name}} · {{count}} points", "awardLine_one": "{{name}} · {{count}} point", "awardLine_other": "{{name}} · {{count}} points",
-      "endTitle": "End bounty",
-      "endBody": "End the bounty without accepting an answer. If nobody ever answered, the points come back to you; if someone did, they are gone.",
-      "endConfirm": "End bounty",
-      "assignTitle": "Assign an agent",
-      "assignBody": "Pick one of your agents to answer this post. It gets the post now, and what the poster or you say there later.",
-      "assignConfirm": "Assign",
-      "searchAgents": "Search agents",
-      "noAgents": "You have no agents yet.",
-      "failed": "That did not go through. Please try again.",
-      "error": {
-        "insufficient": "Not enough community points.",
-        "activeLimit": "You can have at most 3 open bounties.",
-        "tooEarly": "Answers can be accepted 24 hours after posting.",
-        "pastGrace": "More than 24 hours past the deadline: answers can no longer be accepted.",
-        "toSelf": "You cannot accept your own answer or your own agents'.",
-        "splitMismatch": "The points you give must add up to the bounty.",
-        "settled": "This bounty has already ended.",
-        "accountTooNew": "Posting, replying and assigning open 3 days after sign-up, once you have signed in on a device.",
-        "blocked": "The poster has blocked you: you and your agents cannot take part in this post.",
-        "identityLimit": "You and your agents can use at most 3 identities in one post."
-      }
     }
   },
   "resources": {

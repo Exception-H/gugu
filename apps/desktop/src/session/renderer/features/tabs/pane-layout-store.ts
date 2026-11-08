@@ -11,6 +11,7 @@ import type {
 } from './core/tab-provider-registry';
 import type { TabPersistenceAdapter } from './persistence';
 import { accountTabPlacementMemory, type TabPlacementMemory } from './tab-placement-memory';
+import { declaredShare } from './side-width';
 import {
   equalizeSplit,
   evenSizes,
@@ -223,7 +224,15 @@ export class PaneLayoutStore<R extends TabRegistry = TabRegistry> {
 
   get isPairVisible(): boolean {
     const pair = this.pair;
-    return !!pair && this.mainGroup.pane.resolvedActiveTabId === pair.pinned && this.sideGroup?.pane.resolvedActiveTabId === pair.side;
+    const shown = this._shownPair;
+    return !!pair && shown?.pinned === pair.pinned && shown.side === pair.side;
+  }
+
+  /** The two pages on screen side by side, whichever pair is recorded. */
+  private get _shownPair(): { pinned: string; side: string } | null {
+    const side = this.sideGroup?.pane.resolvedActiveTabId;
+    const pinned = this.mainGroup.pane.resolvedActiveTabId;
+    return side && pinned ? { pinned, side } : null;
   }
 
   /** The one strip, left to right: the main pane's tabs, the side pane's right after the pinned one (side in front first). */
@@ -373,7 +382,9 @@ export class PaneLayoutStore<R extends TabRegistry = TabRegistry> {
   pairWith(pinned: string, side: string, opts: { edge?: PairEdge; focus?: boolean; activate?: boolean; by?: 'push' | 'user' | 'restore' } = {}): void {
     if (pinned === side || !this._groupOf(pinned) || !this._groupOf(side)) return;
     const before = this.pair;
+    const extent = this._pairExtent();
     const main = this.mainGroup;
+    const shownBefore = this._shownPair;
     const focusedBefore = this.focusedPane.resolvedActiveTabId;
     const focusedPaneBefore = this.activePaneId;
     const activate = opts.activate ?? true;
@@ -395,6 +406,13 @@ export class PaneLayoutStore<R extends TabRegistry = TabRegistry> {
       }
       main.pane.activeTabId = pinned;
       sideGroup.pane.activeTabId = side;
+      // A new pair, or a new page on the side, starts at the declared width (`side-width.ts`). Between two peers the
+      // dragged shares stay; a side that declared its width hands back half and half.
+      if (!shownBefore || shownBefore.side !== side) {
+        const declared = this._declaredSizes(pinned, side, extent);
+        if (this.layout.type === 'split' && declared) this.layout = { ...this.layout, sizes: declared };
+        else if (this.layout.type === 'split' && shownBefore && this._sideWidthOf(shownBefore.side) !== undefined) this.layout = equalizeSplit(this.layout, this.layout.id);
+      }
       if (opts.focus ?? true) this.activePaneId = sideGroup.paneId;
       else if (focusedBefore === pinned) this.activePaneId = main.paneId;
       else if (focusedBefore === side) this.activePaneId = sideGroup.paneId;
@@ -571,9 +589,36 @@ export class PaneLayoutStore<R extends TabRegistry = TabRegistry> {
     this.layout = setSplitSizes(this.layout, splitId, sizes);
   }
 
-  /** A divider double-clicked: that cut back to even shares. */
+  /** A divider double-clicked: that cut back to the declared width (`side-width.ts`), or even shares. */
   equalizeSplit(splitId: string): void {
-    this.layout = equalizeSplit(this.layout, splitId);
+    const pair = this._shownPair;
+    const declared = pair && this.layout.type === 'split' && this.layout.id === splitId ? this._declaredSizes(pair.pinned, pair.side, this._pairExtent()) : null;
+    this.layout = declared && this.layout.type === 'split' ? { ...this.layout, sizes: declared } : equalizeSplit(this.layout, splitId);
+  }
+
+  /** How wide the pair's panes are together, as measured (null until each one has been). */
+  private _pairExtent(): number | null {
+    const widths = this.groups.map(({ paneId, pane }) => (this.paneSizer?.(paneId) ?? pane.dimensions)?.width ?? 0);
+    return widths.every((width) => width > 0) ? widths.reduce((sum, width) => sum + width, 0) : null;
+  }
+
+  private _sideWidthOf(tabId: string): number | undefined {
+    const entry = this._groupOf(tabId)?.pane.entries.get(tabId);
+    return entry && this._registry.has(entry.kind) ? this._registry.get(entry.kind).sideWidth?.(entry.state as never) : undefined;
+  }
+
+  /**
+   * The pair's cut (the outermost, two panes across) with the page that declares its width (the side first) at that width,
+   * in exact shares (`setSplitSizes` rounds to whole percent: 14px off at 1920); null: peers.
+   */
+  private _declaredSizes(pinned: string, side: string, extent: number | null): number[] | null {
+    const layout = this.layout;
+    if (!extent || layout.type !== 'split' || layout.orientation !== 'horizontal' || layout.children.length !== 2) return null;
+    const declared = [side, pinned].map((tabId) => ({ tabId, px: this._sideWidthOf(tabId) })).find(({ px }) => px !== undefined);
+    if (!declared) return null;
+    const share = declaredShare(declared.px!, extent);
+    const paneId = this._groupOf(declared.tabId)?.paneId;
+    return layout.children.map((child) => (child.type === 'pane' && child.paneId === paneId ? share : 100 - share));
   }
 
   /** All opens name their source. No cardinality lookup, anchor inference or tab moving happens here. */
@@ -616,16 +661,20 @@ export class PaneLayoutStore<R extends TabRegistry = TabRegistry> {
     const intent = config.intent ?? 'navigate';
     const activate = config.activate ?? true;
     const conversation = from && this._registry.has(from.kind) && this._registry.get(from.kind).conversation === true;
-    // How this page was last shown (owner 11-03: separate stays separate, beside stays beside).
-    const remembered = intent !== 'newTab' ? this._placementMemory.read(this._resourceId(kind, state)) : undefined;
+    // How this page was last shown (owner 11-03: separate stays separate, beside stays beside). `inPlace`: a way into this
+    // tab's own place, which beside would take the conversation out of the pair for.
+    const shownBefore = intent !== 'newTab' ? this._placementMemory.read(this._resourceId(kind, state)) : undefined;
+    const remembered = config.inPlace && shownBefore === 'beside' ? undefined : shownBefore;
     // Already open = that tab is shown (spec 「同一页已经开着」, owner 10-24: one resource, one tab); an explicit new tab
     // is a context of its own.
     const key = this._registry.get(kind).resourceKey(state as never);
     const open = intent === 'newTab' ? undefined : this.groups.flatMap(({ pane }) => [...pane.entries.values()])
       .find((entry) => entry.kind === kind && this._registry.get(kind).resourceKey(entry.state as never) === key);
 
-    if (intent === 'navigate' && from && !conversation && !remembered && (!open || open === from)) {
-      source!.pane.navigate(from.tabId, kind, state);
+    // A page this tab already went through is the tab's own (a file's 阅读 and 编辑): where it was last shown does not move it.
+    const own = from && source!.pane.navigationOf(from.tabId)!.pages.some((page) => page.kind === kind && this._registry.get(kind).resourceKey(page.state as never) === key);
+    if (intent === 'navigate' && from && !conversation && (own || !remembered) && (!open || open === from)) {
+      source!.pane.navigate(from.tabId, kind, state, config.viewState);
       if (activate) {
         if (this.groups.includes(source as Pane<R>)) this.activePaneId = source!.paneId;
         source!.pane.activeTabId = from.tabId;
@@ -655,6 +704,7 @@ export class PaneLayoutStore<R extends TabRegistry = TabRegistry> {
     } else if (activate) {
       this._groupOf(tabId)?.pane.setActiveTab(tabId);
     }
+    if (config.viewState) this._groupOf(tabId)?.pane.setPageViewState(tabId, config.viewState);
     if (activate) this._groupOf(tabId)?.pane.focusActiveContent();
     return tabId;
   }
@@ -874,6 +924,7 @@ export class PaneLayoutStore<R extends TabRegistry = TabRegistry> {
         split: (tabId) => { this.splitPane(paneId, 'right', tabId); },
         splitBlocked: (tabId) => this.splitBlocked(paneId, tabId, 'right'),
         entryForTab: (tabId) => this.groups.map(({ pane }) => pane.entries.get(tabId)).find(Boolean),
+        isOnScreen: (tabId) => !this.narrow && (this._shownPair?.pinned === tabId || this._shownPair?.side === tabId),
         revealTab: (tabId) => {
           const group = this._groupOf(tabId);
           if (!group) return false;

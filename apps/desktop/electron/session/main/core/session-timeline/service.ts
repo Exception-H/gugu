@@ -335,7 +335,7 @@ function pinnedConnectionId(row: SessionRow): string | undefined {
   return undefined;
 }
 
-function locateRow(row: SessionRow): SessionRecordLocation {
+export function locateRow(row: SessionRow): SessionRecordLocation {
   const managed = managedConfigRootFor(row.provider);
   if (managed.problem) return { supported: false, reason: managed.problem };
   const legacy = connectionRootFor(row);
@@ -939,14 +939,16 @@ function optionsFailure(error: unknown): SessionTimelineResult<never> {
 /** 往前翻更早的轮（懒加载）。 */
 export function older(input: {
   conversationId: string;
-  beforeTurnId: string;
+  beforeTurnId?: string;
   limit?: number;
 }): Promise<SessionTimelineResult<TimelineOlderResult>> {
+  const beforeTurnId = input.beforeTurnId;
+  if (!beforeTurnId) return Promise.resolve(fail('invalid_cursor', '历史分页游标无效'));
   return withTimeline(input.conversationId, (timeline) =>
     timeline.getOlder(
       input.limit === undefined
-        ? { beforeTurnId: input.beforeTurnId }
-        : { beforeTurnId: input.beforeTurnId, limit: input.limit }
+        ? { beforeTurnId }
+        : { beforeTurnId, limit: input.limit }
     )
   );
 }
@@ -1062,7 +1064,7 @@ export async function pickRecordTurns(
   conversationId: string,
   pick: (turns: TranscriptTurns) => Promise<TranscriptTurns | null>,
   options: { images: boolean; committedOnly?: boolean; includeArchived?: boolean; afterForkOf?: string } = { images: true },
-): Promise<{ ok: true; turns: TranscriptTurns | null; complete: boolean } | { ok: false; reason?: 'diverged' }> {
+): Promise<{ ok: true; turns: TranscriptTurns | null; complete: boolean } | { ok: false; reason?: 'diverged' | 'too_large' }> {
   const opened: SessionTimeline[] = [];
   let provingParent = !!options.afterForkOf;
   try {
@@ -1084,9 +1086,14 @@ export async function pickRecordTurns(
     const complete = prefix.length === all.length;
     const picked = await pick(prefix);
     if (!picked || !options.images) return { ok: true, turns: picked, complete };
-    return { ok: true, turns: await Promise.all(picked.map((turn) => withImagesReadBack(timeline, turn))), complete };
+    const budget = { chars: READ_BACK_MAX_CHARS };
+    const turns: TranscriptTurns = [];
+    for (const turn of picked) turns.push(await withImagesReadBack(timeline, turn, budget));
+    if (budget.chars < 0) log.warn('[session-timeline] pictures over the read-back budget keep only their size', { conversationId });
+    return { ok: true, turns, complete };
   } catch (error) {
     log.warn('[session-timeline] record unreadable', { conversationId, error: (error as Error)?.message ?? String(error) });
+    if ((error as Error)?.name === 'SessionRecordTooLargeError') return { ok: false, reason: 'too_large' };
     return { ok: false, ...(provingParent || (error as Error)?.name === 'SessionRecordForkDivergedError' ? { reason: 'diverged' as const } : {}) };
   } finally {
     for (const timeline of opened.reverse()) timeline.dispose();
@@ -1119,21 +1126,33 @@ export async function watchRecordSettled(conversationId: string, signal: AbortSi
 
 type ImageNode = { id: string; images?: unknown[]; imageRefs?: unknown[]; children?: ImageNode[] };
 
-async function withImagesReadBack<T extends TranscriptTurns[number]>(timeline: SessionTimeline, turn: T): Promise<T> {
+/** Pictures being copied into the store are all on the heap until the copy ends. Past this they keep only their size. */
+const READ_BACK_MAX_CHARS = 256 * 1024 * 1024;
+
+async function withImagesReadBack<T extends TranscriptTurns[number]>(timeline: SessionTimeline, turn: T, budget: { chars: number }): Promise<T> {
   const readBack = async (node: ImageNode): Promise<ImageNode> => {
     let next = node;
-    if (!node.images && node.imageRefs?.length && timeline.toolImage) {
-      const found = await Promise.all(node.imageRefs.map((_, index) =>
-        timeline.toolImage!({ itemId: node.id, index, maxChars: Number.POSITIVE_INFINITY })));
+    const refs = (node.imageRefs ?? []) as Array<{ chars: number }>;
+    const chars = refs.reduce((sum, ref) => sum + ref.chars, 0);
+    if (!node.images && refs.length && timeline.toolImage && (budget.chars -= chars) >= 0) {
+      const found = [];
+      for (let index = 0; index < refs.length; index += 1) {
+        found.push(await timeline.toolImage({ itemId: node.id, index, maxChars: Number.POSITIVE_INFINITY }));
+      }
       if (found.every((one) => one.ok)) {
         const { imageRefs: _refs, ...rest } = node;
         next = { ...rest, images: found.map((one) => (one as Extract<typeof one, { ok: true }>).image) };
       }
     }
-    if (next.children?.length) next = { ...next, children: await Promise.all(next.children.map(readBack)) };
+    if (next.children?.length) {
+      const children: ImageNode[] = [];
+      for (const child of next.children) children.push(await readBack(child));
+      next = { ...next, children };
+    }
     return next;
   };
-  const items = await Promise.all(turn.items.map((item) => readBack(item as unknown as ImageNode)));
+  const items: ImageNode[] = [];
+  for (const item of turn.items) items.push(await readBack(item as unknown as ImageNode));
   return { ...turn, items: items as unknown as T['items'] };
 }
 

@@ -23,6 +23,7 @@ vi.mock('../../../../apps/desktop/src/components/appSlot/appsHere', () => ({
 const card = vi.hoisted(() => ({ manifest: null as unknown }))
 vi.mock('../../../../apps/desktop/src/components/extensionBundle/sharedPackages', () => ({
   summaryOf: async () => ({ ok: true, manifest: card.manifest }),
+  watchReading: () => () => {},
   packageKey: (card: { source: { kind: string; url?: string }; messageId: string }) => (card.source.kind === 'url' ? `url:${card.source.url}` : `msg:${card.messageId}`),
   installPackageOf: (card: { messageId: string }) => ({ messageId: card.messageId }),
   showPackage: () => () => {},
@@ -99,6 +100,19 @@ describe('the chat on screen answers 「在本群打开」 (useChatOpener)', () 
     const tab = shownPanelTab('source-1')
     expect(tab?.item).toMatchObject({ kind: 'board.main' })
     expect(chatPaneOf('source-1', tab!.tabId)?.navigationOf(tab!.tabId)?.index).toBe(0)
+  })
+
+  it('keeps an App page placement failure in the chat instead of rejecting without a handler', async () => {
+    install(app([OWN_PAGE]))
+    const refused = vi.fn().mockRejectedValue(new Error('native resource host unavailable'))
+    function RefusedPage() { return useChatOpener('refused-page', refused).overlay }
+    await harness.render(createElement(RefusedPage))
+    await act(async () => {
+      askChat('refused-page', { app: 'board' })
+      window.dispatchEvent(new CustomEvent(UI_EVENTS.chatAsked))
+    })
+    expect(refused).toHaveBeenCalledOnce()
+    expect(harness.container.querySelector('[data-testid="group-app-slot-unopened"]')).not.toBeNull()
   })
 
   it('a page beside the chat asked: the tab on screen is the 上一页 of what it opens; an App asked there has none (owner 10-24)', async () => {

@@ -20,6 +20,60 @@ export default {
   "payment": {
     "windowTitle": "Gugu Pay"
   },
+  "loginMethods": {
+    "title": "Sign-in methods",
+    "intro": "Use email and Google for the same account, so you can recover access if one becomes unavailable.",
+    "email": "Sign-in email",
+    "changeEmail": "Change email",
+    "unlinked": "Not linked",
+    "linkGoogle": "Link Google",
+    "unlinkGoogle": "Unlink Google",
+    "sameEmailNote": "Your sign-in email matches Google. Change your email before unlinking Google.",
+    "loading": "Loading sign-in methods…",
+    "working": "Working…",
+    "retry": "Retry",
+    "verifyTitle": "Verify again",
+    "verifyNote": "Verify with an existing sign-in method. Verification is valid for 10 minutes.",
+    "byEmail": "Email code",
+    "byGoogle": "Authorize Google again",
+    "sendCode": "Send code",
+    "resend": "Resend code",
+    "code": "Verification code",
+    "verify": "Verify and continue",
+    "newEmail": "New sign-in email",
+    "confirmEmail": "Confirm email",
+    "codeSource": "Code received at",
+    "newEmailSource": "New email: {{email}}",
+    "currentEmailSource": "Current email: {{email}}",
+    "confirmEmailNote": "Enter the code sent to {{email}}. If your old email also receives a confirmation code, enter both codes one at a time.",
+    "secondCode": "One email confirmed. Enter the code from the other email.",
+    "unlinkNote": "All devices must sign in again after unlinking. Make sure you can access your sign-in email.",
+    "confirmUnlink": "Unlink and sign out all devices",
+    "retrySignOut": "Retry signing out all devices",
+    "cancel": "Cancel",
+    "cancelGoogle": "Cancel Google authorization",
+    "saved": "Sign-in methods updated",
+    "noticeFailed": "Sign-in methods updated, but the account notice could not be synced.",
+    "notices": {
+      "google-linked": "Google was linked to your account. You can sign in with email or Google.",
+      "google-unlinked": "Google was unlinked. All devices must sign in again with email."
+    },
+    "errors": {
+      "occupied": "This email or Google identity belongs to another account. Accounts cannot be merged.",
+      "linkingUnavailable": "Account linking is not enabled by this service. Try again later.",
+      "googleCancelled": "Google authorization was cancelled. Verify again.",
+      "googleFailed": "Google authorization did not complete. Verify again.",
+      "googleEmailUnavailable": "The Google address is unavailable. Reopen account settings before unlinking.",
+      "ownerChanged": "Verification returned a different account. Your current account has not changed. Verify again.",
+      "verifyRequired": "Verify again. Verification is valid for 10 minutes.",
+      "sameEmail": "Change to a different sign-in email first.",
+      "alreadyLinked": "A Google identity is already linked.",
+      "missingGoogle": "No Google identity is available to unlink. Reopen account settings.",
+      "invalidEmail": "Enter a valid email address.",
+      "unsupportedIdentities": "This account has multiple Google identities and cannot be changed here.",
+      "signOutFailed": "Google was unlinked, but signing out all devices is incomplete. Retry."
+    }
+  },
   "account": {
     "occupation": "Occupation",
     "occupationRequired": "If you pick Other, say in a few words what you do",
@@ -319,7 +373,8 @@ export default {
         "alarm": "Alarms",
         "dnd": "Do Not Disturb",
         "timer": "Timer",
-        "health": "Health"
+        "health": "Health",
+        "perf": "Performance readings"
       },
       "groupDesc": {
         "calendar": "Used to view and manage calendars and events on this computer.",
@@ -341,7 +396,8 @@ export default {
         "shell": "Used to run local terminal and automation commands on this computer (asks you every time).",
         "notification": "Used to show system notifications on this computer.",
         "url": "Used to open web pages in this computer's default browser.",
-        "shortcuts": "Used to list and run your Shortcuts (asks you before every run)."
+        "shortcuts": "Used to list and run your Shortcuts (asks you before every run).",
+        "perf": "Used to read Gugu's own resource monitor (numbers only, no titles or content); asks you before recording a stretch."
       }
     },
     "cloud": {
@@ -874,9 +930,9 @@ export default {
     "temporaryRetentionHint": "Project files stay on the machine. When someone opens one, a copy is uploaded to the cloud for a while. This is how long that copy stays.",
     "settingsTitle": "Settings",
     "kept": "Images and files marked “Temporary”",
-    "keptHint": "How long files marked “Temporary”, and images sent in project groups, stay in the cloud before they are deleted. Files marked “Keep” are not deleted on a schedule; when a large unopened one is removed is shown beside “Kept” above. Applies to files sent from now on.",
+    "keptHint": "How long files marked “Temporary”, and images sent from a phone in project groups, stay in the cloud before they are deleted. Files marked “Keep” are not deleted on a schedule; when a large unopened one is removed is shown beside “Kept” above. Applies to files sent from now on.",
     "keptDiffer": "Images now stay {{images}} and temporary files {{temporary}}; one change aligns them.",
-    "dashboard": {"title": "Cloud usage", "total": "of files you uploaded to the cloud · {{count}} files", "files_one": "{{count}} file", "files_other": "{{count}} files", "classes": {"temporary": "Temporary", "image": "Images", "kept": "Kept"}, "keptRuleLabel": "How kept files are kept", "keptRule": "Kept files are not deleted on a schedule. A file or image over {{size}} that nobody has opened for {{days}} days is deleted from the cloud; copies on your machines are not affected. Files in project groups are not affected by this rule. Files marked “Temporary” and images sent in project groups are deleted after the period set below.", "keptRuleNoExpiry": "Kept files are not deleted from the cloud. Files marked “Temporary” and images sent in project groups are deleted after the period set below.", "clean": "Delete from cloud…", "cleanTitle": "Delete these files from the cloud?", "cleanNote": "Only the cloud copy is deleted. Files on your machines stay. This cannot be undone.", "confirmClean": "Delete {{size}}", "cancel": "Cancel", "soonTitle": "Expiring soon", "columns": {"name": "Name", "group": "Group", "size": "Size", "expires": "Deleted in"}, "daysLeft_one": "{{count}} day", "daysLeft_other": "{{count}} days", "today": "Today", "showAll": "Show all {{count}}", "showLess": "Show fewer", "machinesTitle": "On your machines", "machinesNote": "Stored on your machines, not in the cloud", "machineHint": "{{count}} project files, {{size}} · {{copies}} uploaded to the cloud while others open them", "machineHintNone": "{{count}} project files, {{size}} · nothing uploaded to the cloud"},
+    "dashboard": {"title": "Cloud usage", "total": "of files you uploaded to the cloud · {{count}} files", "files_one": "{{count}} file", "files_other": "{{count}} files", "classes": {"temporary": "Temporary", "image": "Images", "kept": "Kept"}, "keptRuleLabel": "How kept files are kept", "keptRule": "Kept files are not deleted on a schedule. A file or image over {{size}} that nobody has opened for {{days}} days is deleted from the cloud; copies on your machines are not affected. Files in project groups are not affected by this rule. Files marked “Temporary”, and images sent from a phone in project groups, are deleted after the period set below.", "keptRuleNoExpiry": "Kept files are not deleted from the cloud. Files marked “Temporary”, and images sent from a phone in project groups, are deleted after the period set below.", "clean": "Delete from cloud…", "cleanTitle": "Delete these files from the cloud?", "cleanNote": "Only the cloud copy is deleted. Files on your machines stay. This cannot be undone.", "confirmClean": "Delete {{size}}", "cancel": "Cancel", "soonTitle": "Expiring soon", "columns": {"name": "Name", "group": "Group", "size": "Size", "expires": "Deleted in"}, "daysLeft_one": "{{count}} day", "daysLeft_other": "{{count}} days", "today": "Today", "showAll": "Show all {{count}}", "showLess": "Show fewer", "machinesTitle": "On your machines", "machinesNote": "Stored on your machines, not in the cloud", "machineHint": "{{count}} project files, {{size}} · {{copies}} uploaded to the cloud while others open them", "machineHintNone": "{{count}} project files, {{size}} · nothing uploaded to the cloud"},
     "title": "File storage",
     "entryHint": "How project groups on your machines keep images and other files, and for how long; next to ordinary groups.",
     "projectTitle": "Project groups",

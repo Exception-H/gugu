@@ -310,10 +310,10 @@ describe('local read fence and verified snapshot', () => {
     expect(await readdir(tempRoot)).toEqual([])
   })
   it('anchors current metadata, then detects modification, unbinding and account changes', async () => {
+    // A part asked once the file has changed is refused (parts asked before are of the anchored version, and run ahead).
     const source = await openProjectFileSource(revision, request => reader()(request, 'owner'))
-    expect(await source.read(0, 1)).toEqual(new Uint8Array([83]))
     await writeFile(join(root, 'file.bin'), Buffer.alloc(bytes.length, 9))
-    await expect(source.read(1, 1)).rejects.toThrow('changed during read')
+    await expect(source.read(0, 1)).rejects.toThrow('changed during read')
     await forgetProjectGroupId('project', 'owner', env)
     await expect(reader()({ ref, offset: 0, length: 0 }, 'owner')).rejects.toThrow('unavailable')
     accountId = 'other'
@@ -337,18 +337,64 @@ describe('local read fence and verified snapshot', () => {
 describe('the owner’s already-held SSH link', () => {
   it('uses the real requester envelope and host read core, without opening or closing the window connection', async () => {
     let tap: { onMessage(message: unknown): void; onClosed(reason: string): void } | undefined
-    const untap = vi.fn(), open = vi.fn(), close = vi.fn()
+    const untap = vi.fn(), open = vi.fn(), close = vi.fn(), asked: number[] = [], spans: [number, number][] = []
+    let pending = 0, most = 0
     const links = { ownedOpen: vi.fn(async () => true), open, close, tap: vi.fn((_device: string, handlers: typeof tap) => { tap = handlers; return untap }), send: vi.fn((_device: string, message: unknown) => {
       const envelope = (message as { payload: { request_id: string; user_id: string; payload: Parameters<ReturnType<typeof createProjectFileReader>>[0] } }).payload
-      void reader()(envelope.payload, envelope.user_id).then(result => tap!.onMessage({ payload: { type: 'file.read:reply', request_id: envelope.request_id, result } }))
+      asked.push(envelope.payload.length); spans.push([envelope.payload.offset, envelope.payload.offset + envelope.payload.length]); most = Math.max(most, ++pending)
+      void reader()(envelope.payload, envelope.user_id).then(result => { pending--; tap!.onMessage({ payload: { type: 'file.read:reply', request_id: envelope.request_id, result } }) })
       return true
     }) }
     const file = await ownSshFileProvider(links, tempRoot)(revision, { ref, actor })
     expect(file).not.toBeNull()
     expect(await file!.read(0, 4)).toEqual(new Uint8Array([83, 83, 83, 83]))
-    expect(links.send).toHaveBeenCalledTimes(3) // One metadata anchor, two bounded source reads.
+    // One metadata anchor, then the source from the smallest part, growing while each is quick; once the line has shown
+    // it is quick, the next part is already asked for while one is on it.
+    expect(asked.slice(0, 3)).toEqual([0, 64 * 1024, 128 * 1024])
+    expect(most).toBe(2)
+    // The parts run ahead of the 512 KB reads that verify the file: one is asked across the first read's end.
+    expect(spans.some(([from, to]) => from < 524_288 && to > 524_288)).toBe(true)
     expect(open).not.toHaveBeenCalled(); expect(close).not.toHaveBeenCalled(); expect(untap).toHaveBeenCalledTimes(1)
     await file!.dispose()
+  })
+  it('reads a few-MB HTML over a slow link in parts that stay short, saying how far it has come', async () => {
+    // The design page that would not open: 14 inline screenshots, about 4 MB.
+    const html = Buffer.from(`<!doctype html><html><body>${`<img src="data:image/png;base64,${'A'.repeat(290_000)}">`.repeat(14)}</body></html>`)
+    await writeFile(join(root, 'design.html'), html)
+    const page: FileRevision = { ...revision, item_id: 'design', file_name: 'design.html', content_type: 'text/html', size_bytes: html.length, sha256: digest(html), relative_path: 'design.html' }
+    await rememberProjectFile(page, 'owner', env)
+    // A line that carries one reply at a time, each taking two seconds whatever it holds: a part must shrink to the
+    // smallest, not hold the line. Replies leave in the order asked, each two seconds after the line is free.
+    let now = 0, lineFree = 0, line = Promise.resolve()
+    const clock = vi.spyOn(Date, 'now').mockImplementation(() => now)
+    const asked: number[] = []
+    let open = 0, most = 0
+    let tap: { onMessage(message: unknown): void; onClosed(reason: string): void } | undefined
+    const links = { ownedOpen: vi.fn(async () => true), tap: vi.fn((_device: string, handlers: typeof tap) => { tap = handlers; return vi.fn() }), send: vi.fn((_device: string, message: unknown) => {
+      const envelope = (message as { payload: { request_id: string; user_id: string; payload: Parameters<ReturnType<typeof createProjectFileReader>>[0] } }).payload
+      asked.push(envelope.payload.length); most = Math.max(most, ++open)
+      const arrives = lineFree = Math.max(lineFree, now) + 2_000, reply = reader()(envelope.payload, envelope.user_id)
+      line = line.then(async () => {
+        const result = await reply
+        await new Promise(resolve => setTimeout(resolve, 0)) // the reader takes in the reply before it, as a line would
+        now = arrives; open--
+        tap!.onMessage({ payload: { type: 'file.read:reply', request_id: envelope.request_id, result } })
+      })
+      return true
+    }) }
+    const seen: [number, number][] = []
+    try {
+      const file = await ownSshFileProvider(links, tempRoot)(page, { ref: { item_id: 'design', version: 1 }, actor, progress: (done, total) => seen.push([done, total]) })
+      const parts: Uint8Array[] = []
+      for (let at = 0; at < html.length; at += 524_288) parts.push(await file!.read(at, Math.min(524_288, html.length - at)))
+      expect(digest(Buffer.concat(parts))).toBe(page.sha256)
+      await file!.dispose()
+    } finally { clock.mockRestore() }
+    expect(Math.max(...asked)).toBe(64 * 1024)
+    // Two of these parts would hold the line past its budget: whatever else it carries must get through, so one at a time.
+    expect(most).toBe(1)
+    expect(seen.at(-1)).toEqual([html.length, html.length])
+    expect(seen.every(([done], index) => index === 0 || done > seen[index - 1]![0])).toBe(true)
   })
   it.each(['absent', 'other-account', 'agent'])('does not attach when %s', async kind => {
     const links = { ownedOpen: vi.fn(async () => kind !== 'absent'), tap: vi.fn(), send: vi.fn() }
@@ -359,7 +405,7 @@ describe('the owner’s already-held SSH link', () => {
 })
 
 describe('the host’s on-demand client-encrypted transfer', () => {
-  function fixture(options: { denied?: boolean; changed?: boolean } = {}) {
+  function fixture(options: { denied?: boolean; changed?: boolean; late?: boolean; bothFail?: boolean } = {}) {
     const calls: string[] = [], commitBodies: Record<string, unknown>[] = []
     let uploaded: Uint8Array | undefined
     const read = vi.fn(async (request: Parameters<ReturnType<typeof createProjectFileReader>>[0]) => reader()(request, 'owner'))
@@ -367,14 +413,20 @@ describe('the host’s on-demand client-encrypted transfer', () => {
       const route = String(input).split('/').at(-1)!
       calls.push(route)
       const body = route === 'object' ? null : JSON.parse(init!.body as string)
-      if (route === 'file-pending') return Response.json({ transfers: [{ ...revision, id: 'transfer', state: 'requested', ...(options.changed ? { sha256: '0'.repeat(64) } : {}) }] })
+      if (route === 'file-pending') {
+        const first = { ...revision, id: 'transfer', state: 'requested', ...(options.changed ? { sha256: '0'.repeat(64) } : {}) }
+        // late: another reader's request lands while the first upload runs; the list read before it does not hold it.
+        const pending = calls.filter(call => call === 'file-pending').length
+        return Response.json({ transfers: options.late && pending > 1 ? [{ ...first, state: 'uploading' }, { ...revision, id: 'late', state: 'requested' }] : [first] })
+      }
       if (route === 'file-accept') {
-        if (options.denied) return Response.json({ error: 'quota', message: 'Quota exhausted' }, { status: 403 })
+        if (options.denied || options.bothFail && body.transfer_id === 'late') return Response.json({ error: 'quota', message: 'Quota exhausted' }, { status: 403 })
         expect(body.ciphertext_bytes).toBe(ciphertextSize(bytes.length))
-        expect(read).not.toHaveBeenCalled()
+        if (body.transfer_id === 'transfer') expect(read).not.toHaveBeenCalled()
         return Response.json({ url: 'https://objects.invalid/object', fields: { key: 'random-object' }, max_bytes: ciphertextSize(bytes.length) })
       }
       if (route === 'object') {
+        if (options.late && !late) late = drain()
         const form = init!.body as FormData
         expect([...form.keys()]).toEqual(['key', 'file'])
         uploaded = new Uint8Array(await (form.get('file') as Blob).arrayBuffer())
@@ -385,18 +437,21 @@ describe('the host’s on-demand client-encrypted transfer', () => {
       if (route === 'file-commit') {
         expect(body.ciphertext_sha256).toBe(digest(uploaded!))
         expect(Buffer.from(body.key, 'base64').length).toBe(32)
+        if (options.bothFail) return Response.json({ error: 'unavailable', message: 'Storage is down' }, { status: 503 })
         commitBodies.push(body)
         return Response.json({ status: 'ready' })
       }
       throw Error(`Unexpected fake route ${route}`)
     })
+    let late: Promise<void> | undefined
     const drain = createProjectTransferHost({ identity, read, tempRoot, env, endpoint: async () => ({ supabaseUrl: 'https://api.invalid', anonKey: 'test-anon', token: 'test-token', fetch: fetcher as typeof fetch }) })
-    return { drain, calls, read, commitBodies, uploaded: () => uploaded }
+    return { drain, calls, read, commitBodies, uploaded: () => uploaded, late: () => late }
   }
   it('reserves before disk/bytes, uses one upload executor, transfers the key only in commit and removes staging', async () => {
     const f = fixture()
     await Promise.all([f.drain(), f.drain()])
-    expect(f.calls).toEqual(['file-pending', 'file-accept', 'object', 'file-commit'])
+    // The second event reads the list once more after the first drain; the transfer already taken is not taken again.
+    expect(f.calls).toEqual(['file-pending', 'file-accept', 'object', 'file-commit', 'file-pending'])
     expect(await readdir(tempRoot)).toEqual([])
     const cipher = f.uploaded()!
     const source = { size: cipher.length, dispose: async () => {}, read: async (offset: number, length: number) => cipher.slice(offset, offset + length) }
@@ -411,10 +466,30 @@ describe('the host’s on-demand client-encrypted transfer', () => {
     await f.drain() // A repeated event does not generate another key or overwrite an accepted object.
     expect(f.calls.filter(value => value === 'object')).toHaveLength(1)
   })
+  it('serves a request that lands while a drain is uploading, from a second read of the list', async () => {
+    const f = fixture({ late: true })
+    await f.drain()
+    await f.late()
+    expect(f.commitBodies.map(body => body.transfer_id)).toEqual(['transfer', 'late'])
+    expect(f.calls.filter(call => call === 'file-pending')).toHaveLength(2)
+  })
+  it('reports the failures of every round, not only the last', async () => {
+    const f = fixture({ late: true, bothFail: true })
+    const both = '2 project file transfer(s) failed; no unverified bytes were committed (transfer: file-commit 503 unavailable; late: file-accept 403 quota)'
+    await expect(f.drain()).rejects.toThrow(both)
+    await expect(f.late()).rejects.toThrow(both) // the event during the round joined it and hears the same outcome
+  })
+  it('names a failed transfer by id and a fixed reason, never a local path', async () => {
+    const f = fixture()
+    await rm(join(root, 'file.bin'))
+    const failure = await f.drain().then(() => null, (error: Error) => error.message)
+    expect(failure).toMatch(/^1 project file transfer\(s\) failed; .*\(transfer: \w+\)$/)
+    expect(failure).not.toContain(root)
+  })
   it.each(['quota', 'revision', 'source-sha'])('does not upload or commit when %s fails', async failure => {
     const f = fixture({ denied: failure === 'quota', changed: failure === 'revision' })
     if (failure === 'source-sha') await writeFile(join(root, 'file.bin'), Buffer.alloc(bytes.length, 9))
-    await expect(f.drain()).rejects.toThrow('project file transfer(s) failed')
+    await expect(f.drain()).rejects.toThrow(failure === 'quota' ? '(transfer: file-accept 403 quota)' : failure === 'revision' ? '(transfer: Transfer revision changed)' : '(transfer: File SHA-256 mismatch)')
     expect(f.calls).not.toContain('object'); expect(f.calls).not.toContain('file-commit')
     if (failure !== 'source-sha') expect(f.read).not.toHaveBeenCalled()
     expect(await readdir(tempRoot).catch(() => [])).toEqual([])

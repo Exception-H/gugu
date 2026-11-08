@@ -165,6 +165,7 @@ export class ExtensionsService {
   private readonly originsFile: JsonFile<Record<string, ExtensionOrigin>>;
   private readonly publishersFile: JsonFile<Record<string, ExtensionPublisher>>;
   private readonly openWithFile: JsonFile<Record<string, string>>;
+  private readonly readings = new Map<string, { stamps: { file: string; stamp: FileStamp | null }[]; installed: InstalledExtension }>();
 
   constructor(private readonly rootDir: string) {
     this.variantsFile = jsonFile(rootDir, '.variants.json', '{}', (value) => Object.assign(Object.create(null) as Record<string, AppVariants>, z.record(z.string(), appVariantsSchema).parse(value)));
@@ -814,8 +815,19 @@ export class ExtensionsService {
   }
 
   private readExtensionDir(dirName: string): InstalledExtension {
+    // @@@bundle-reading - Every bridge call asks through here (grantedCapabilities), so a parse per call is main-thread
+    // work per call. A reading holds while the files it read are the same files: an install lands by rename and an edit
+    // moves mtime or size, so nothing has to remember to invalidate it, and a bundle gone bad is still reported at once.
+    // Only while the files have settled: see SETTLED_MS.
+    const known = this.readings.get(dirName);
+    if (known && known.stamps.every(({ file, stamp }) => fileStamp(file)?.id === stamp?.id)) return known.installed;
+    this.readings.delete(dirName);
+    const readAt = Date.now();
     const bundleDir = path.join(this.rootDir, dirName);
-    const parsed = safeParseExtensionManifest(readManifestJson(bundleDir));
+    const manifestFile = path.join(bundleDir, EXTENSION_MANIFEST_FILENAME);
+    const manifestStamp = fileStamp(manifestFile);
+    const text = readManifestText(bundleDir);
+    const parsed = safeParseExtensionManifest(parseManifestJson(text, bundleDir));
     if (!parsed.ok) {
       throw new Error(`Invalid manifest:\n- ${parsed.issues.join('\n- ')}`);
     }
@@ -824,11 +836,37 @@ export class ExtensionsService {
         `Directory name "${dirName}" does not match manifest id "${parsed.manifest.id}"`
       );
     }
-    if (parsed.manifest.entry) resolveExistingBundleFile(bundleDir, parsed.manifest.entry, 'entry');
-    for (const tab of parsed.manifest.contributes.tabs) if (tab.entry) resolveExistingBundleFile(bundleDir, tab.entry, `tab ${tab.name}`);
-    const manifestDigest = createHash('sha256').update(readManifestText(bundleDir)).digest('hex');
-    return { manifest: parsed.manifest, rootDir: bundleDir, manifestDigest };
+    const stamps = [{ file: manifestFile, stamp: manifestStamp }];
+    const entries = [
+      ...(parsed.manifest.entry ? [{ entry: parsed.manifest.entry, label: 'entry' }] : []),
+      ...parsed.manifest.contributes.tabs.flatMap((tab) => (tab.entry ? [{ entry: tab.entry, label: `tab ${tab.name}` }] : [])),
+    ];
+    for (const { entry, label } of entries) {
+      const file = path.resolve(bundleDir, entry);
+      stamps.push({ file, stamp: fileStamp(file) });
+      resolveExistingBundleFile(bundleDir, entry, label);
+    }
+    const manifestDigest = createHash('sha256').update(text).digest('hex');
+    const installed = { manifest: parsed.manifest, rootDir: bundleDir, manifestDigest };
+    // A link is read anew every time: what it points at can change without the link changing.
+    if (stamps.every(({ stamp }) => stamp !== null && readAt - stamp.mtimeMs > SETTLED_MS)) this.readings.set(dirName, { stamps, installed });
+    return installed;
   }
+}
+
+/**
+ * A stamp only identifies contents once the file has settled. File timestamps are coarse — a kernel tick on Linux
+ * (measured: 1978 of 2000 back-to-back same-size rewrites on tmpfs kept the same `mtimeMs`), whole seconds on HFS+ and
+ * ext3, two on FAT — so a file changed within that window of a reading can change again without its stamp moving.
+ * Such a reading is not kept (git's "racily clean" rule); the next call reads again.
+ */
+const SETTLED_MS = 2_000;
+
+/** Identifies one regular file's contents as a reading saw them (`id`), with the mtime it was taken at; null for anything else. */
+type FileStamp = { id: string; mtimeMs: number };
+function fileStamp(file: string): FileStamp | null {
+  const stat = fs.lstatSync(file, { throwIfNoEntry: false });
+  return stat?.isFile() ? { id: `${stat.ino}:${stat.size}:${stat.mtimeMs}`, mtimeMs: stat.mtimeMs } : null;
 }
 
 /**
