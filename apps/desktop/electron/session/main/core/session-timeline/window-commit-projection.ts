@@ -51,7 +51,7 @@ async function load(c: Context, publication: boolean, budget: WindowBudget) {
 const rebuild = (c: Context) => ({ kind: 'rebuild' as const, anchor: { sourceId: c.receipt.sourceId, start: 0, end: c.receipt.source.bytes } });
 async function proof(c: Context, signal?: AbortSignal) {
   signal?.throwIfAborted(); snapshot(c);
-  await assertWindowCommitSource(c.directory, c.receipt.binding, c.receipt.source); signal?.throwIfAborted();
+  await assertWindowCommitSource(c.directory, c.receipt.binding, c.receipt.source); signal?.throwIfAborted(); snapshot(c);
 }
 async function indexed(c: Context, facts: CommitRootFacts, budget: WindowBudget, signal?: AbortSignal) {
   for (const part of ['root', 'items', 'terminals'] as const) {

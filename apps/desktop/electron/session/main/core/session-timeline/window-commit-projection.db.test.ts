@@ -12,6 +12,7 @@ import { windowFrameName } from '@gugu/session-core/session-record/window-cache/
 import { createWindowCommitReceipts, type WindowCommitReceipt } from './window-commit-receipt';
 import { advanceWindowCommitProjection as advance, readWindowCommitProjection as read } from './window-commit-projection';
 import { readIndexedCommitContainerPage } from './window-commit-container-index';
+import * as source from './window-commit-source';
 
 const state = vi.hoisted(() => ({ db: undefined as AppDb | undefined, sqlite: undefined as Database.Database | undefined }));
 vi.mock('@main/db/client', () => ({ get db() { return state.db; }, get sqlite() { return state.sqlite; } }));
@@ -122,5 +123,31 @@ describe('recoverable committed structural projection publication', () => {
     // Select this receipt's source even though the fixture also contains a legacy row.
     await expect(finish(c)).rejects.toThrow('source changed'); injected.mockRestore();
     await expect(read(c, createWindowBudget())).rejects.toThrow('source changed');
+  });
+
+  it.each(['publish', 'read'])('rechecks the transactional receipt after the final awaited source check during %s', async mode => {
+    const c = context(await captured('small'));
+    let finalCheck = 0;
+    if (mode === 'read') {
+      await finish(c);
+      const counted = vi.spyOn(source, 'assertWindowCommitSource'); await read(c, createWindowBudget());
+      finalCheck = counted.mock.calls.length; counted.mockRestore();
+    } else for (let i = 0; i < 100; i++) {
+      const result = await advance(c, createWindowBudget());
+      if (result.kind === 'progress' && result.stage === 'publish') break;
+      if (i === 99) throw new Error('Missing publish stage');
+    }
+    let published = false, checks = 0;
+    const write = disk.writeWindowFrame, validate = source.assertWindowCommitSource;
+    vi.spyOn(disk, 'writeWindowFrame').mockImplementation(async (dir, key, bytes) => {
+      await write(dir, key, bytes); if (key.cursor.endsWith(':publication')) published = true;
+    });
+    vi.spyOn(source, 'assertWindowCommitSource').mockImplementation(async (...args) => {
+      await validate(...args); checks++;
+      if (mode === 'publish' ? published : checks === finalCheck)
+        fixture.sqlite.prepare('DELETE FROM session_turns WHERE id=?').run(c.receipt.rowId);
+    });
+    await expect(mode === 'publish' ? advance(c, createWindowBudget()) : read(c, createWindowBudget())).rejects.toThrow('committed receipt');
+    expect(createWindowCommitReceipts(fixture.sqlite).bySource(c.receipt.sourceId)).toBeNull();
   });
 });
