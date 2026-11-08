@@ -43,8 +43,8 @@ describe('locateSessionRecord · opencode 族', () => {
   });
 
   it('表里没有的家不支持,也不按名字形状推', () => {
-    expect(sessionRecordHarnessForProvider('kilocode')).toBeNull();
-    expect(locateSessionRecord({ provider: 'kilocode', providerSessionId: 'ses_1' }).supported).toBe(false);
+    expect(sessionRecordHarnessForProvider('kiro')).toBeNull();
+    expect(locateSessionRecord({ provider: 'kiro', providerSessionId: 'ses_1' }).supported).toBe(false);
   });
 });
 

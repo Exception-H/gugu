@@ -1091,6 +1091,7 @@ export const MODEL_CONFIG_DIALECTS = [
   'kimi-model-env',
   'qoder-byok-settings',
   'mimocode-config-content',
+  'kilocode-config-content',
   'copilot-provider-env',
   'zcode-provider-table',
   'codebuddy-settings-env',
@@ -1099,7 +1100,7 @@ export const MODEL_CONFIG_DIALECTS = [
 
 export type ModelConfigDialect = (typeof MODEL_CONFIG_DIALECTS)[number];
 
-export const MODEL_CONFIG_DIALECT = { requiresContextWindow: new Set<ModelConfigDialect>(['opencode-config-content', 'mimocode-config-content']) };
+export const MODEL_CONFIG_DIALECT = { requiresContextWindow: new Set<ModelConfigDialect>(['opencode-config-content', 'mimocode-config-content', 'kilocode-config-content']) };
 
 /**
  * 签发响应的 `callable_routes`(#6921):网关路由原文(`/v1/images/generations`)→ 这枚会话令牌在那条路由上能调的模型。
