@@ -8,6 +8,8 @@ export type SessionInputNotice = Pick<Notice, 'title' | 'description' | 'tier' |
   /** A concrete creation result can be more precise than a cached catalog warning. */
   priority?: number;
   inheritAction?: boolean;
+  /** The failure being reported. A dismissal holds only for it: a different one after a retry shows again. */
+  attempt?: unknown;
 };
 
 /** Lifetime bookkeeping for the existing outlet, shared by composers reading the same resource. */
@@ -60,6 +62,7 @@ export function createSessionInputNotices(outlet: {
     update(key: string, owner: symbol, spec: SessionInputNotice | null | undefined) {
       if (spec === undefined) return; // A refresh in flight does not prove recovery.
       const value = entry(key);
+      if (spec?.attempt !== undefined && spec.attempt !== value.owners.get(owner)?.attempt) value.closed = false;
       value.owners.set(owner, spec);
       if (!spec && ![...value.owners.values()].some(Boolean)) {
         outlet.dismiss(key);

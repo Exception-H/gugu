@@ -16,7 +16,7 @@ export function CreateDeliveryError({ failure, noticeKey = 'session-create' }: {
     : previousKey.current;
   if (failure) previousKey.current = key;
   useSessionInputNotice(key, failure ? {
-    title: creationFailureCopy(failure, translate), diagnostic: failure,
+    title: creationFailureCopy(failure, translate), diagnostic: failure, attempt: failure,
     ...(failure.kind === 'harness-unavailable' ? { priority: 1, inheritAction: failure.reason !== 'updating' } : {}),
   } : null);
   return null;

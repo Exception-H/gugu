@@ -356,7 +356,7 @@ const ComposerForStore = observer(function ComposerForStore({
   });
   /** 发送时附件还没传完:在等(发送键禁用、输入框上方一句话);有一件没成:不发,说一句。 */
   const [inputFailure, setInputFailure] = useState<SessionInputNotice | null>(null);
-  useSessionInputNotice(`session-settings:${store.sessionId}`, inputFailure);
+  useSessionInputNotice(`session-settings:${store.sessionId}`, inputFailure && { ...inputFailure, attempt: inputFailure });
   const reportInputFailure = useCallback((title: string, diagnostic?: unknown, description?: string) => {
     setInputFailure({ title, description: description ?? translate('taskError.settingFailedRetry'), diagnostic });
   }, [translate]);

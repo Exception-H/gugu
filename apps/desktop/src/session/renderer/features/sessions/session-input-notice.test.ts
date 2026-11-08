@@ -45,6 +45,20 @@ describe('session input failure notices', () => {
     expect(h.notify).toHaveBeenCalledTimes(2);
   });
 
+  it('holds a dismissal only for its own failure: dismiss, retry, fail again shows the notice again', () => {
+    const h = setup(), owner = Symbol();
+    const first = { kind: 'raw', detail: raw }, second = { kind: 'raw', detail: raw };
+    h.notices.attach('create', owner);
+    h.notices.update('create', owner, { title: 'The task could not be created. Send it again.', attempt: first });
+    h.notify.mock.calls[0]![0].onDismiss!();
+    // The retry is in flight: the producer still reports the same failure.
+    h.notices.update('create', owner, { title: 'The task could not be created. Send it again.', attempt: first });
+    expect(h.notify).toHaveBeenCalledTimes(1);
+    h.notices.update('create', owner, { title: 'The task could not be created. Send it again.', attempt: second });
+    expect(h.notify).toHaveBeenCalledTimes(2);
+    expect(h.notify.mock.calls[1]![0]).toMatchObject({ key: 'create', title: 'The task could not be created. Send it again.' });
+  });
+
   it('keeps the shared failure when one of two composers recovers and executes a current live action', () => {
     const h = setup(), a = Symbol(), b = Symbol(), runA = vi.fn(), runB = vi.fn();
     const detach = h.notices.attach('catalog', a);
