@@ -12,6 +12,7 @@ vi.mock('../../../../apps/desktop/src/i18n', async (importOriginal) => {
 import { deviceFileCopy } from '../../../../apps/desktop/src/lib/forwardDeviceFile'
 import { forwardingDeviceFiles } from '../../../../apps/desktop/src/store/chatOutboxWiring'
 import { FORWARD_MAX_BYTES } from '../../../../apps/desktop/src/session/shared/extensions/app-runtime-protocol'
+import { attachmentEnvelope } from '@gugu/core/shared/ui/attachmentModels'
 
 const file = { itemId: 'i', version: 2, name: 'a.png', document: false }
 const local = (over = {}) => ({ status: 'ready', revision: { source: 'local', file_name: 'a.png', content_type: 'image/png', size_bytes: 3, host_online: true, host_label: 'box', ...over } })
@@ -71,11 +72,26 @@ describe('deviceFileCopy', () => {
     metadata.mockResolvedValue(local())
     bytes.mockResolvedValue({ status: 'ready', blob: new Blob(['abc']) })
     await forward(file, 'target')
-    expect(send).toHaveBeenCalledWith('target', [expect.objectContaining({ name: 'a.png' })])
+    expect(send).toHaveBeenCalledWith('target', [expect.objectContaining({ name: 'a.png' })], undefined)
     expect(forwardMessage).not.toHaveBeenCalled()
     metadata.mockResolvedValue({ status: 'ready', revision: { source: 'managed-object' } })
     await forward(file, 'target')
     expect(forwardMessage).toHaveBeenCalledWith(file, 'target')
     expect(send).toHaveBeenCalledOnce()
+  })
+
+  it('sends a captioned message as its file with the same caption, and each message of a batch as its own file', async () => {
+    const forwardMessage = vi.fn(async (_source: unknown, _targetChatId: string) => undefined), send = vi.fn(async (_chatId: string, _files: File[], _opts?: { caption?: string }) => undefined)
+    const { forwardMessage: forward } = forwardingDeviceFiles({ forwardMessage }, send)
+    const message = (id: string, name: string, caption?: string) => ({ id, content_type: 'attachment', file_item_id: id, file_version: 1,
+      content: `${attachmentEnvelope(name, 3, 'image/png')}${caption ? `\n[Caption]\n${caption}` : ''}` }) as never
+    metadata.mockImplementation(async ({ messageId }: { messageId: string }) => local({ file_name: `${messageId}.png` }))
+    bytes.mockResolvedValue({ status: 'ready', blob: new Blob(['abc']) })
+    // A batch forward is one forward per message: three files, the last with the caption they were sent with.
+    for (const source of [message('a', 'a.png'), message('b', 'b.png'), message('c', 'c.png', 'the **three** shots')]) await forward(source, 'target')
+    expect(send.mock.calls.map(([chat, files, opts]) => [chat, files.map((file) => file.name), opts])).toEqual([
+      ['target', ['a.png'], undefined], ['target', ['b.png'], undefined], ['target', ['c.png'], { caption: 'the **three** shots' }]])
+    expect(bytes.mock.calls.map(([source]) => source)).toEqual(['a', 'b', 'c'].map((messageId) => ({ kind: 'message', messageId })))
+    expect(forwardMessage).not.toHaveBeenCalled()
   })
 })

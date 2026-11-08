@@ -68,7 +68,7 @@ function InlineImage({ meta, messageId, chatId, isMine }: { meta: ParsedAttachme
   const view = useAttachmentObjectUrl(meta.source, 'thumb', near, meta.fileMetadata)
   const img = useRef<HTMLImageElement>(null)
   const holder = view.status === 'failed' ? view.holder : null
-  useHolderBack(holder?.deviceId ?? null, view.retry)
+  useHolderBack(holder, view.retry)
   const dimensions = meta.fileMetadata?.status === 'ready' ? meta.fileMetadata.revision : meta.imageDimensions ?? ('link' in view ? view.link : undefined)
   const imageStyle = inlineImageStyle(dimensions)
   const ready = view.status === 'ready'
