@@ -3,6 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { mkdtemp, rm } from 'node:fs/promises';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
+import * as frames from '@gugu/session-core/session-record/window-cache/disk-frame';
 import type Database from 'better-sqlite3';
 import type { AppDb } from '@main/db/client';
 import type { TranscriptTurn } from '@gugu/session-core/acp';
@@ -40,6 +41,17 @@ describe('complete durable canonical commit publisher', () => {
   afterEach(async () => { vi.restoreAllMocks(); fixture?.close(); state.db = undefined; state.sqlite = undefined;
     if (directory) await rm(directory, { recursive: true, force: true }); });
   const context = () => ({ directory, receipt, receipts: createWindowCommitReceipts(fixture.sqlite) });
+
+  it('persists only changed outer recovery cursors while inner structural checkpoints progress', async () => {
+    const write = frames.writeWindowFrame, heads: Buffer[] = [];
+    vi.spyOn(frames, 'writeWindowFrame').mockImplementation(async (...args) => {
+      if (args[1].cursor === 'publisher:job') heads.push(Buffer.from(args[2]));
+      return write(...args);
+    });
+    await createWindowCommitPublisher(directory, context().receipts).publish(receipt);
+    expect(heads.length).toBeGreaterThan(2);
+    expect(heads.slice(1).every((bytes, index) => !bytes.equals(heads[index]))).toBe(true);
+  }, 30000);
 
   it('publishes a complete ordered tree and terminal with seekable genuine body/parent positions', async () => {
     const c = context(), io: { indexBytes: number; sourceBytes: number }[] = [], phase = vi.fn();

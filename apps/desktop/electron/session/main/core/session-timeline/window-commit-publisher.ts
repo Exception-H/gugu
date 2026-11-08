@@ -149,6 +149,7 @@ export function createWindowCommitPublisher(directory: string, receipts: Receipt
           stage: 'structure', count: 0, nodes: 0, task: null };
         if (!loaded) await writeWindowFrame(directory, key(c, 'job', true), encode(h));
         while (h.stage !== 'complete') {
+          const previous = encode(h);
           await advance(c, h, signal); signal?.throwIfAborted(); committed(c);
           if (h.stage === 'entities' && !h.task) {
             const p = publication(c, { version: 1, sourceId: h.sourceId, buildId: h.buildId,
@@ -157,7 +158,10 @@ export function createWindowCommitPublisher(directory: string, receipts: Receipt
             try { ports.phase?.('projection_durable', p); } catch (error) { report(error); }
             h.stage = 'complete';
           }
-          await writeWindowFrame(directory, key(c, 'job', true), encode(h));
+          const next = encode(h);
+          // Structural steps persist their own bounded checkpoint. Rewriting
+          // this unchanged outer cursor adds no recovery progress.
+          if (!previous.equals(next)) await writeWindowFrame(directory, key(c, 'job', true), next);
           await setImmediate(undefined, { signal });
         }
         const p = publication(c, await step(b => load(c, `${h.buildId}:publication`, b)));

@@ -21,7 +21,7 @@ export async function prepareWindowCommitWrite(connection: WindowReceiptDatabase
   const current = { workerEpoch: capture.cursor.workerEpoch, storeEpoch: capture.cursor.storeEpoch, sequence: capture.cursor.sequence };
   const previous = createWindowCommitReceipts(connection).byRow(input.rowId), sourceId = randomUUID();
   const binding = { scope: capture.scope, sourceLineage: createHash('sha256').update(sourceId).digest('hex'), decoderVersion: 1 };
-  const source = await writeWindowCommitSource(capture.directory, binding, input.serialized);
+  const source = await writeWindowCommitSource(capture.directory, binding, input.serialized, undefined, true);
   const prior = previous?.firstCommitCursor;
   const first = input.insert ? current : prior?.workerEpoch === current.workerEpoch && prior.storeEpoch === current.storeEpoch ? prior : null;
   const receipt: WindowCommitReceipt = { version: 1, sourceId, sessionId: input.sessionId, referenceId: input.referenceId,

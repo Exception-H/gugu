@@ -41,7 +41,7 @@ export async function assertWindowCommitSource(directory: string, binding: Bindi
  * adds bounded encoding buffers, not a second full stringify/Buffer. The
  * writer's existing full serialization cost is deliberately not hidden. */
 export async function writeWindowCommitSource(directory: string, binding: Binding, serialized: string,
-  signal?: AbortSignal): Promise<WindowCommitSourceManifest> {
+  signal?: AbortSignal, receiptOwnsManifest = false): Promise<WindowCommitSourceManifest> {
   if (!serialized.length) throw new Error('Commit source must not be empty');
   const path = sourcePath(directory, binding), temporary = `${path}.${randomUUID()}.tmp`;
   const width = stride(binding), buffer = Buffer.alloc(CHUNK), digest = createHash('sha256');
@@ -85,7 +85,10 @@ export async function writeWindowCommitSource(directory: string, binding: Bindin
       sha256: digest.digest('hex'), physical: physical(observed) };
     if (observed.size !== BigInt(fileBytes(manifest))) throw new Error('Commit source size changed before publication');
     signal?.throwIfAborted();
-    await writeWindowFrame(directory, rootKey(binding), Buffer.from(JSON.stringify(manifest), 'utf8'));
+    // Production commits this exact manifest in the canonical row's receipt
+    // transaction. A second cache head would add another file+directory fsync
+    // without adding a canonical ownership proof. Standalone sources keep it.
+    if (!receiptOwnsManifest) await writeWindowFrame(directory, rootKey(binding), Buffer.from(JSON.stringify(manifest), 'utf8'));
     return manifest;
   } finally { await rm(temporary, { force: true }); }
 }
