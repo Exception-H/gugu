@@ -523,7 +523,7 @@ process.stdin.on('end', () => process.exit(0));
     expect((await extensionsController.list()).data?.dock).toEqual([]);
     const refused = await extensionsController.setDock({ ids: [EXTENSION_ID] });
     expect(refused.success).toBe(false);
-    expect(refused.error).toMatch(/only opens files/);
+    expect(refused.error).toMatch(/no page of its own/);
   });
 
   it('hands the session what is granted, not what the manifest declared', async () => {

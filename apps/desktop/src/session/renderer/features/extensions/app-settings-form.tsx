@@ -45,7 +45,6 @@ export function AppSettingsForm({ manifest, active, read, save: write, id, hidde
       setValues((previous) => previous ?? loaded);
     }).catch((cause: unknown) => { if (!disposed) setError(cause instanceof Error ? cause.message : String(cause)); });
     return () => { disposed = true; };
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- `read` is a new closure every render; the App and `active` decide.
   }, [manifest.id, active, t]);
 
   const save = async () => {

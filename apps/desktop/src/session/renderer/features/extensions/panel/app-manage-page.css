@@ -137,7 +137,7 @@
 .mg .tool-app-fields {
   padding: 4px 0;
 }
-.mg > .mg-main > .mk-banner {
+.mg-main > .mk-banner {
   margin-top: 20px;
 }
 @container (max-width: 760px) {

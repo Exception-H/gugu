@@ -106,7 +106,7 @@ describe('the chat on screen answers 「在本群打开」 (useChatOpener)', () 
     const { appsHere } = await import('../../../../apps/desktop/src/components/appSlot/appsHere')
     const appChatFile = vi.fn(async () => ({ success: false, error: 'read the file it names' }))
     Object.assign(appsHere!, { appChatFile })
-    const withChatFile = { ...app([OWN_PAGE, { ...GROUP_FILES, name: 'file', chatFile: 'x.board.json' } as Tab]) }
+    const withChatFile = app([OWN_PAGE, { ...GROUP_FILES, name: 'file', chatFile: 'x.board.json' } as Tab])
     install(withChatFile)
     await harness.render(createElement(Chat, { id: 'link-1' }))
     askNow('link-1', { app: 'board', tab: 'main' })

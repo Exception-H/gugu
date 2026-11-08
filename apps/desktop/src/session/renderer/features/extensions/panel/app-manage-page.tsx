@@ -417,7 +417,9 @@ export function AppManagePage({
   }, [anchors]);
 
   return (
-    <div className="mk mg" data-testid="app-manage-page" data-extension-id={manifest.id}>
+    // Two boxes: `.mk` is the size container, and a container query reads an ancestor, never the element itself.
+    <div className="mk" data-testid="app-manage-page" data-extension-id={manifest.id}>
+      <div className="mg">
       <nav className="mg-anchors" aria-label={translate('extensions.appSettings')}>
         {sections.map((section) => (
           <button type="button" key={section.id} className={cn(current === section.id && 'is-on')} onClick={() => document.querySelector(`[data-manage-section="${section.id}"]`)?.scrollIntoView({ block: 'start' })}>
@@ -464,6 +466,7 @@ export function AppManagePage({
             <div className="mg-group">{section.body}</div>
           </section>
         ))}
+      </div>
       </div>
     </div>
   );

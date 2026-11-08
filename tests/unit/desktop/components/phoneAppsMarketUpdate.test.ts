@@ -61,7 +61,8 @@ vi.mock('../../../../apps/desktop/src/session/renderer/features/extensions/insta
 })
 const { followLink } = vi.hoisted(() => ({ followLink: vi.fn(() => true) }))
 vi.mock('../../../../apps/desktop/src/lib/guguLinks', () => ({ followLink }))
-const { AppsSection, useOfferedVersions } = await import('../../../../apps/desktop/src/components/settings/AppsSection')
+const { AppsSection } = await import('../../../../apps/desktop/src/components/settings/AppsSection')
+const { useOfferedVersions } = await import('../../../../apps/desktop/src/components/settings/phoneMarketPage')
 const { PhoneAppManage } = await import('../../../../apps/desktop/src/components/settings/PhoneAppManage')
 const { installedExtensionsStore: store } = (await import('../../../../apps/desktop/src/session/renderer/features/extensions/installed-extensions-store')) as unknown as {
   installedExtensionsStore: { disabled: string[]; autoUpdateOff: string[] }
