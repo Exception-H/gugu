@@ -150,6 +150,21 @@ describe('codex rollout 记录源', () => {
     }
   });
 
+  it('keeps an archive\'s pictures inline, never as a position, and never writes a timeline archive from it', async () => {
+    const picture = Buffer.from('archived'.repeat(500)).toString('base64');
+    const { root, file } = await stage(pictureRollout([picture]));
+    await writeFile(`${file}.zst`, zstdCompressSync(await readFile(file)));
+    await rm(file);
+    const timeline = await createSessionTimeline(createCodexJsonlSource({ harness: 'codex', providerSessionId: THREAD_ID, roots: [root] }, { readMode: 'snapshot' }), { sessionId: 'archived-pictures' });
+    disposers.push(() => timeline.dispose());
+    const [tool] = toolsOf(timeline);
+    expect(tool.images).toEqual([{ mimeType: 'image/png', data: picture }]);
+    expect(tool).not.toHaveProperty('imageRefs');
+    await expect(timeline.archive!()).resolves.toBeNull();
+    await expect(timeline.toolImage!({ itemId: tool.id, index: 0, maxChars: Number.POSITIVE_INFINITY }))
+      .resolves.toEqual({ ok: true, image: { mimeType: 'image/png', data: picture } });
+  });
+
   it('accounts a snapshot before the fold can exhaust V8', () => {
     const picture = 'A'.repeat(1000);
     const entry = (): RecordEntry => ({ key: 'k', event: { kind: 'tool_update', toolCallId: 't', images: [{ mimeType: 'image/png', data: picture }] } });
@@ -161,6 +176,7 @@ describe('codex rollout 记录源', () => {
     retain(archived.slice(1), line, 0, '/x.jsonl.zst');
     expect(archived[1].event).toMatchObject({ imageRefs: [{ mimeType: 'image/png', chars: 1000 }] });
     expect(archived[1].event).not.toHaveProperty('images');
+    expect(archived.every((one) => !one.imageOrigins)).toBe(true);
     expect(() => snapshotRetainer({ kept: 100, seen: 3000, archivePictures: 0 })([], 'x'.repeat(101), 0, '/x.jsonl')).toThrow(SessionRecordTooLargeError);
     expect(() => snapshotRetainer({ kept: 100, seen: 3000, archivePictures: 0 })([entry()], `${line}${'x'.repeat(3000)}`, 0, '/x.jsonl')).toThrow(SessionRecordTooLargeError);
   });

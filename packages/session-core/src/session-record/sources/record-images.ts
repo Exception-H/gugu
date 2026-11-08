@@ -61,15 +61,17 @@ export function snapshotRetainer(limits = { kept: SNAPSHOT_MAX_KEPT_CHARS, seen:
   let seen = 0;
   let archivePictures = limits.archivePictures;
   return (entries, line, lineStart, path) => {
-    if (lineStart !== undefined) locateImages(entries, line, lineStart, path);
+    // A position in an archive would be in its decoded stream, which `readRecordImage` cannot address.
+    const archive = path.endsWith('.zst');
+    if (lineStart !== undefined && !archive) locateImages(entries, line, lineStart, path);
     let released = 0;
     for (const entry of entries) {
       const event = entry.event;
       if (event?.kind !== 'tool_update' || !event.images?.length) continue;
       const images = event.images;
-      if (!entry.imageOrigins?.every(Boolean)) continue;
+      if (!archive && !entry.imageOrigins?.every(Boolean)) continue;
       const chars = images.reduce((sum, { data }) => sum + data.length, 0);
-      if (path.endsWith('.zst') && chars <= archivePictures) { archivePictures -= chars; continue; }
+      if (archive && chars <= archivePictures) { archivePictures -= chars; continue; }
       if (event.rawOutput) event.rawOutput = payloadWithoutImages(event.rawOutput, images);
       if (event.outputText) event.outputText = payloadWithoutImages(event.outputText, images);
       event.imageRefs = images.map(({ mimeType, data }) => ({ mimeType, chars: data.length }));
