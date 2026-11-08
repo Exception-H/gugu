@@ -291,6 +291,7 @@ export default {
     "markAllReadPartial_other": "{{count}} chats could not be marked as read. Try again.",
     "markUnreadFailed": "Could not mark this chat unread. Try again.",
     "muted": "Notifications muted",
+    "newMessage": "New message",
     "noResults": "No chats found",
     "searchMessagesTitle": "Search messages",
     "listLabel": "Chats",
@@ -447,8 +448,21 @@ export default {
     "mobilePlaceholder": "Message",
     "projectGroupPlaceholder": "Message {{name}}… @ an agent to call it",
     "removeAttachment": "Remove {{fileName}}",
-    "sendFailedRetry": "This message was not sent. Send it again.",
-    "sendFailed": "Could not send: {{reason}}",
+    "sendFailed": "Message was not sent: {{guidance}}",
+    "failedFileLabel": "{{kind}} {{name}}",
+    "failedFileKind": { "image": "Image", "video": "Video", "audio": "Audio", "file": "File" },
+    "fileSendFailed": "{{file}} was not sent: {{guidance}}",
+    "filesSendFailed_one": "{{count}} file was not sent: {{guidance}}",
+    "filesSendFailed_other": "{{count}} files were not sent: {{guidance}}",
+    "failureReason": {
+      "tooLarge": "The file is too large. Reduce its size and send it again.",
+      "signIn": "Your sign-in expired. Sign in and send again.",
+      "denied": "You do not have permission to send. Check the conversation permissions before sending again.",
+      "busy": "Too many sends. Wait a moment and send again.",
+      "chatUnavailable": "The conversation is unavailable. Return to the message list to check it.",
+      "timeout": "The send timed out. Try sending again later.",
+      "unavailable": "The send did not finish. Try sending again later."
+    },
     "verb": {
       "task": "New task"
     },
@@ -509,9 +523,18 @@ export default {
       "unknown": "Unknown member"
     },
     "memberJoined": {
-      "joined": " joined the group chat",
+      "joined": " joined the group",
       "mentionHint": "Mention {{name}} in the message box",
       "separator": ", "
+    },
+    "notice": {
+      "agentFloodGroup": "This group has many agents, so they now reply only when @-mentioned.",
+      "agentFloodTopic": "This topic has many agents, so they now reply only when @-mentioned.",
+      "left": "{{actor}} left the group",
+      "madeAdmin": "{{actor}} made {{target}} an admin",
+      "removed": "{{actor}} removed {{target}} from the group",
+      "revokedAdmin": "{{actor}} removed {{target}} as an admin",
+      "topicOpened": "{{actor}} opened a topic: "
     },
     "memberList": {
       "agentLeave": "Take it out of this group",
@@ -833,7 +856,8 @@ export default {
     "sourceDiscarded": "The original message was discarded before it was sent",
     "deliveryTimeout": "Delivery timed out after {{seconds}}s because the network stopped responding",
     "discarded": "Discarded",
-    "offscreenFailure": "A message was not delivered. Return to its chat to retry or discard it.",
+    "offscreenFailure": "A message in “{{chatName}}” was not delivered. Return to that conversation to retry or discard it.",
+    "chatById": "Conversation {{id}}",
     "recipientMissing": "The recipient is no longer available. The message was not sent.",
     "sendFailed": "Could not send"
   },

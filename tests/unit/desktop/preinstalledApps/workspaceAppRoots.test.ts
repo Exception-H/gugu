@@ -78,7 +78,7 @@ describe('a session\'s tab: one folder, two roots', () => {
   test('the two buttons stay above the chat files, with no roots page to enter', () => {
     expect(names()).toEqual(['plan.md'])
     expect(listed()).toEqual([{ chat: 'dm-1', folder: '' }, { chat: 'dm-1', folder: '附件' }])
-    expect([...$('place-switch').querySelectorAll('button')].map((button) => button.textContent)).toEqual(['聊天文件', '电脑文件'])
+    expect([...$('place-switch').querySelectorAll('button')].map((button) => button.title)).toEqual(['聊天文件', '电脑文件'])
     expect($('place-switch').querySelector('[aria-pressed="true"]')?.getAttribute('data-root')).toBe('chat')
     expect(crumbs()).toBeNull()
   })
@@ -87,7 +87,8 @@ describe('a session\'s tab: one folder, two roots', () => {
     switchRoot('workspace')
     await until('the top listed', () => names().includes('README.md'))
     expect(names()).toEqual(['src', 'README.md'])
-    expect(crumbs()).toBeNull()
+    expect(crumbs(), 'a computer\'s folder always says which one it is').toEqual(['电脑文件'])
+    expect(($('crumbs').querySelector('.back') as HTMLButtonElement).disabled, 'nowhere up from the top').toBe(true)
     press('src')
     await until('src listed', () => names().includes('main.md'))
     expect(names()).toEqual(['lib', 'main.md'])
@@ -162,11 +163,88 @@ describe('a session\'s tab: one folder, two roots', () => {
     await until('previous choice restored', () => names().includes('README.md'))
     contextChanged!({ ...context, workspace: undefined })
     await until('missing computer falls back to chat files', () => names().includes('plan.md'))
-    const button = document.querySelector('#place-switch [data-root="workspace"]') as HTMLButtonElement
-    expect(button.getAttribute('aria-disabled')).toBe('true')
-    button.click()
-    expect($('list-banner').textContent).toBe('这个群没有绑电脑。项目群才有。')
-    expect(names()).toEqual(['plan.md'])
+    expect($('place-switch').hidden, 'one place: no switch to press').toBe(true)
+    contextChanged!({ ...context, chat: { ...context.chat, id: 'dm-2' } })
+    await until('the computer back, the switch back', () => !$('place-switch').hidden)
+    expect(names()).toEqual(['src', 'README.md'])
+    contextChanged!({ ...context, workspace: undefined })
+    await until('the computer gone, the switch gone', () => $('place-switch').hidden === true)
+  })
+
+  test('the path says where a computer\'s folder is: its whole path, or the machine when that is another one', async () => {
+    contextChanged!({ ...context, chat: { ...context.chat, id: 'paths' }, workspace: { ...context.workspace, root: '/Users/me/proj' } })
+    switchRoot('workspace')
+    await until('its top', () => names().includes('README.md'))
+    expect(crumbs()).toEqual(['/Users/me/proj'])
+    press('src')
+    await until('src', () => names().includes('main.md'))
+    expect(crumbs()).toEqual(['/Users/me/proj', 'src'])
+    crumb(0)
+    expect(names()).toEqual(['src', 'README.md'])
+    contextChanged!({ ...context, chat: { ...context.chat, id: 'paths' }, workspace: { ...context.workspace, deviceLabel: 'Studio' } })
+    await until('the machine', () => crumbs()?.[0] === 'Studio · 电脑文件')
+    switchRoot('chat')
+  })
+
+  test('the folder tasks without a project share says what it is', async () => {
+    const top = TREE['']!
+    TREE[''] = []
+    try {
+      contextChanged!({ ...context, chat: { ...context.chat, id: 'home' }, workspace: { id: 'session:home', sessionId: 'home', projectId: '00000000-0000-4000-8000-000000000001', root: '/data/task-home' } })
+      switchRoot('workspace')
+      await until('its top read', () => crumbs()?.[0] === '/data/task-home' && !$('files-empty').hidden)
+      expect($('files-empty-detail').textContent).toContain('没选项目的任务都在这个文件夹工作')
+    } finally {
+      TREE[''] = top
+    }
+    switchRoot('chat')
+    contextChanged!(context)
+    await until('back', () => names().includes('plan.md') || names().includes('README.md'))
+  })
+
+  test('a read of the other root still on its way has no say in the list now shown', async () => {
+    contextChanged!({ ...context, chat: { ...context.chat, id: 'late' } })
+    switchRoot('chat')
+    await until('settled on the chat', () => names().includes('plan.md'))
+    let fail: (e: Error) => void = () => {}
+    gugu.files.list.mockImplementationOnce(() => new Promise((_, reject) => { fail = reject }))
+    contextChanged!({ ...context, chat: { ...context.chat, id: 'late-2' } })
+    await until('its read asked', () => gugu.files.list.mock.calls.some(([place]) => place.chat === 'late-2'))
+    switchRoot('workspace')
+    await until('the computer listed', () => names().includes('README.md'))
+    fail(new Error('fetch failed'))
+    await new Promise((resolve) => setTimeout(resolve, 0))
+    expect(names()).toContain('README.md')
+    expect($('files-empty').hidden).toBe(true)
+    switchRoot('chat')
+    await until('the chat again', () => names().includes('plan.md'))
+  })
+
+  test('and the other way: the computer\'s late failure says nothing on the chat\'s list', async () => {
+    const place = 'session:late-3'
+    const real = gugu.files.list.getMockImplementation()!
+    let fail: (e: Error) => void = () => {}
+    // An empty chat: what the list says of itself is on screen, so a word from the other root would show.
+    gugu.files.list.mockImplementation((asked: { chat?: string; workspace?: string; folder?: string }) =>
+      asked.workspace === place ? new Promise((_, reject) => { fail = reject })
+        : asked.chat === 'late-3' ? Promise.resolve([]) : real(asked))
+    try {
+      contextChanged!({ ...context, chat: { ...context.chat, id: 'late-3' }, workspace: { ...context.workspace, id: place } })
+      await until('the chat read', () => !$('files-empty').hidden && $('files-empty-progress').hidden === true)
+      switchRoot('workspace')
+      await until('its read asked', () => gugu.files.list.mock.calls.some(([asked]) => asked.workspace === place))
+      switchRoot('chat')
+      await until('back on the chat', () => $('files-empty-progress').hidden === true)
+      const said = $('files-empty-message').textContent
+      fail(new Error('fetch failed'))
+      await new Promise((resolve) => setTimeout(resolve, 0))
+      expect($('files-empty-message').textContent).toBe(said)
+    } finally {
+      gugu.files.list.mockImplementation(real)
+    }
+    contextChanged!(context)
+    switchRoot('chat')
+    await until('settled on the chat', () => names().includes('plan.md'))
   })
 
   test('phone computer files stay read-only, with no desktop navigation or draggable rows', async () => {
