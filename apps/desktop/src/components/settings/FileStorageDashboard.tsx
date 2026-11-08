@@ -9,7 +9,6 @@ import { Popover } from '../ui/Popover'
 import { InfoTooltip } from '@renderer/lib/ui/info-tooltip'
 import { useTheme } from '@/store/theme'
 import { SessionUiTheme } from '../sessionpage/SessionUiTheme'
-import '../sessionpage/SessionSettingsSection.css'
 import { SettingsGroup, SettingsNote, SettingsRow } from './SettingsPrimitives'
 import '../usage/usage.css'
 

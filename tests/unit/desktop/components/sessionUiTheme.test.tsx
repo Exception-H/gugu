@@ -69,7 +69,7 @@ describe('session-page components drawn by the shell keep the session theme off 
 
     expect(rootThemeClasses()).toEqual([])
     const wrapper = host!.querySelector('[data-probe]')!.parentElement!
-    expect([...wrapper.classList]).toEqual(['emlight', 'gugu-skin'])
+    expect([...wrapper.classList]).toEqual(['emlight'])
     expect(wrapper.style.display).toBe('contents')
     expect(popupContainer?.parentElement).toBe(wrapper)
     expect(popupContainer?.className).toBe('emlight gugu-skin gg-session-settings-layer')
