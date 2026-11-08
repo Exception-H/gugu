@@ -422,7 +422,19 @@ export function ChatRoot(props: ChatRootProps) {
 
   // Only the activity pin's backdrop reads this. A custom property on the root would restyle every row on each width change.
   const [pinFrame, setPinFrame] = createSignal({ left: 0, width: 0 }, { equals: (a, b) => a.left === b.left && a.width === b.width });
-  const updateContentColumnGeometry = () => syncContentColumnGeometry(widthProbeEl, scrollEl, setContainerWidth, setPinFrame);
+  // @@@width-keeps-the-reading-spot — an anchor is a row plus pixels into it. New width rewraps that row, so the same pixels
+  // are a different part of it; a long reply makes that many sections. The spot is the same share of the row.
+  const setColumnWidth = (width: number) => {
+    if (width === containerWidth()) return;
+    const m = anchor();
+    const i = m.kind === 'anchor' && m.edge === 'top' ? unitIndexOf(m.itemId, m.edge) : -1;
+    if (m.kind !== 'anchor' || i < 0) return void setContainerWidth(width);
+    const before = virt.size(i);
+    setContainerWidth(width);
+    measureUnitAt(i);
+    if (before > 0 && virt.size(i) !== before) setAnchor({ ...m, offset: (m.offset * virt.size(i)) / before });
+  };
+  const updateContentColumnGeometry = () => syncContentColumnGeometry(widthProbeEl, scrollEl, setColumnWidth, setPinFrame);
 
   const updateSlotPadBottom = () => {
     if (props.composer !== 'slot' || effectiveComposerPlacement() === 'center') {
