@@ -132,7 +132,8 @@ export interface MessageItem {
   reply_to_content?: string | null
   retracted_at: string | null
   created_at: string
-  reactions: ReactionGroup[]
+  /** Absent = a body-only row (messages_view has no reactions); it does not speak for the reactions already known. */
+  reactions?: ReactionGroup[]
   is_mine: boolean
   delivered: boolean
   delivery_status: MessageDeliveryStatus | null
@@ -371,7 +372,7 @@ export interface DeviceCapabilities extends Partial<DeviceHostInfo> {
   actions?: DeviceActionsSummary
 }
 
-export type GuguSettingsScope = 'user' | `device:${string}` | `chat:${string}`
+export type GuguSettingsScope = 'user' | 'prompts' | `device:${string}` | `chat:${string}`
 
 export interface GuguSettingsRow {
   scope: GuguSettingsScope
