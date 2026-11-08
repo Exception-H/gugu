@@ -70,12 +70,15 @@ const STRINGS = {
     dropNew: '不要新传的',
     done: '好',
     workingCopy: '电脑文件',
+    workingCopyShort: '电脑',
     chatFolder: '聊天文件',
-    noComputer: '这个群没有绑电脑。项目群才有。',
+    chatFolderShort: '聊天',
     sendToChat: '发到群里',
     noWorkspace: '这里没有文件。在聊天或任务里打开「文件」，或者从聊天里的文件「用文件打开」。',
-    noFiles: '{folder}还是空的。',
+    noFiles: '这里还没有文件。',
     folderEmpty: '这个文件夹还是空的。',
+    taskHomeNote: '没选项目的任务都在这个文件夹工作',
+    taskHomeEmptyDetail: '没选项目的任务都在这个文件夹工作，agent 写的文件会出现在这里。',
     listing: '正在读取…',
     noMatch: '没有文件名含「{q}」的文件。',
     denied: '这个 App 没有读取{folder}的权限。',
@@ -303,12 +306,15 @@ const STRINGS = {
     dropNew: 'Drop the new one',
     done: 'OK',
     workingCopy: 'Computer files',
+    workingCopyShort: 'Computer',
     chatFolder: 'Chat files',
-    noComputer: 'This chat has no computer attached. Only project groups do.',
+    chatFolderShort: 'Chat',
     sendToChat: 'Send to chat',
     noWorkspace: 'There are no files here. Open Files in a chat or task, or use it to open a file from a chat.',
     noFiles: 'No files here yet.',
     folderEmpty: 'This folder is empty.',
+    taskHomeNote: 'Tasks without a project work in this folder',
+    taskHomeEmptyDetail: 'Tasks without a project work in this folder; what their agents write shows up here.',
     listing: 'Loading…',
     noMatch: 'No file name contains “{q}”.',
     denied: 'This App may not read this folder.',
@@ -570,6 +576,10 @@ function can(capability) {
 const canRead = () => can('files:read') || can('files:read:all-machines') || can('files:write')
 const canWrite = () => can('files:write')
 const inWorkspace = () => state.root === 'workspace'
+// A task with no project works in the folder all of them share (the app's own project, session-home-project.ts; from another
+// machine its id carries that machine's name): what that folder is gets said, it is nobody's project.
+const TASK_HOME_PROJECT = '00000000-0000-4000-8000-000000000001'
+const inTaskHome = () => inWorkspace() && !!state.ctx?.workspace?.projectId?.startsWith(TASK_HOME_PROJECT)
 const canWriteHere = (entry) => canWrite() && (!(entry ? inCopy(entry) : inWorkspace()) || !touchPane?.matches)
 // A file or folder of a working copy: named by its path there, read one folder at a time.
 const inCopy = (entry) => 'workspace' in entry
@@ -685,7 +695,11 @@ async function applyContext(ctx) {
       await refreshList(!restored)
       if (restored && Number.isFinite(restored.scrollTop)) $('file-list').scrollTop = restored.scrollTop
     }
-  } else if (restored && inWorkspace() && !ctx.file) void listDownTo(state.folder ?? '')
+  } else {
+    // The same place, more said of it (its path, its machine): the line that says where it is says so.
+    renderCrumbs()
+    if (restored && inWorkspace() && !ctx.file) void listDownTo(state.folder ?? '')
+  }
   // The host hands this page a file when it picked this App for it (真源 §2.6: a click goes to the host,
   // which picks the most specific claim; .md and plain .json are this App's). The host's header then has
   // the way back, so this page's own Back is not drawn; going back takes the file away again.
@@ -1143,7 +1157,8 @@ function renderList() {
   // A folder this App may not read is never read: it says so (a read is not on its way).
   $('files-empty-message').textContent = state.listError
     ?? (!canRead() ? t.denied : needle ? fmt(t.noMatch, { q: state.filter.trim() }) : filtering && ofKind.length ? t.noFiltered
-      : state.kind !== 'all' && shown.length ? t.noKind : state.folder ? t.folderEmpty : t.noFiles)
+      : state.kind !== 'all' && shown.length ? t.noKind : state.folder || inWorkspace() ? t.folderEmpty : t.noFiles)
+  $('files-empty-detail').textContent = !state.folder && inTaskHome() && !needle && !state.listError ? t.taskHomeEmptyDetail : ''
   $('empty-upload').hidden = !canWriteHere() || !!needle || !!state.listError || (state.kind !== 'all' && shown.length > 0) || filtering
 }
 
@@ -1239,17 +1254,15 @@ function renderTools() {
   $('new-doc').hidden = !canWriteHere()
   $('upload').hidden = !canWriteHere()
   $('place-switch').setAttribute('aria-label', t.title)
-  const roots = rootsOf(state.ctx)
+  // Only one place here (a chat with no computer): nothing to switch between, so no switch.
+  $('place-switch').hidden = rootsOf(state.ctx).length < 2
   for (const button of $('place-switch').children) {
     const root = button.dataset.root
-    const available = roots.includes(root)
-    button.querySelector('span').textContent = root === 'chat' ? t.chatFolder : t.workingCopy
+    const [name, short] = button.querySelectorAll('span')
+    name.textContent = button.title = root === 'chat' ? t.chatFolder : t.workingCopy
+    short.textContent = root === 'chat' ? t.chatFolderShort : t.workingCopyShort
     button.setAttribute('aria-pressed', String(state.root === root))
-    button.setAttribute('aria-disabled', String(!available))
-    // An unavailable computer still explains why when pressed, rather than silently doing nothing.
-    button.disabled = !available && root === 'chat'
-    button.title = !available && root === 'workspace' ? t.noComputer : ''
-    button.onclick = () => available ? enterRoot(root) : showBanner(t.noComputer, 'info')
+    button.onclick = () => enterRoot(root)
   }
   const kinds = $('kinds')
   if (kinds.childElementCount !== KINDS.length) {
@@ -1343,12 +1356,14 @@ function sortMenu() {
   })), ...(filters.length ? [{ separator: true }, ...filters] : [])])
 }
 
-// The way up and each folder from the top (子文件夹): a press goes there, a dropped file moves there. Not drawn at the top.
+// Where the list is: the way up and each folder from the top; a press goes there, a dropped file moves there. A computer's
+// folder always says which folder it is (its path when this machine can tell, else the machine); a chat's folder has nothing
+// to say at its top. Up stops at the top: a working copy is all a page may read of its computer (working-copy-files.ts).
 function renderCrumbs() {
   const nav = $('crumbs')
   const t = state.t
   holdBack(backStepWanted())
-  if (!state.folder || state.filter.trim()) {
+  if (!inWorkspace() && !state.folder) {
     nav.hidden = true
     nav.replaceChildren()
     return
@@ -1360,24 +1375,40 @@ function renderCrumbs() {
   up.className = 'back'
   up.innerHTML = '<gugu-icon name="chevron-left"></gugu-icon>'
   up.append(Object.assign(document.createElement('span'), { textContent: t.up }))
+  up.disabled = !state.folder
   up.onclick = goUp
   const crumb = (text, folderId, current) => {
     const button = document.createElement('button')
     button.type = 'button'
     button.className = 'crumb'
     button.textContent = text
+    button.title = text
     if (current) button.setAttribute('aria-current', 'page')
     else button.onclick = () => enterFolder(folderId)
     dropOnto(button, folderId)
     return button
   }
-  const parts = [up, crumb(inWorkspace() ? t.workingCopy : t.chatFolder, null, false)]
+  const home = crumb(rootName(), null, !state.folder)
+  if (inWorkspace() && state.ctx.workspace.root) {
+    home.classList.add('crumb-root')
+    home.replaceChildren(Object.assign(document.createElement('bdi'), { textContent: state.ctx.workspace.root }))
+  }
+  const parts = [up, home]
   trail.forEach((folder, i) => {
     parts.push(Object.assign(document.createElement('span'), { className: 'crumb-sep', textContent: '/' }))
     parts.push(crumb(shownName(folder), folder.id, i === trail.length - 1))
   })
+  if (inTaskHome() && state.entries.length) parts.push(Object.assign(document.createElement('span'), { className: 'crumbs-note', textContent: t.taskHomeNote }))
   nav.replaceChildren(...parts)
   nav.hidden = false
+  nav.scrollLeft = nav.scrollWidth
+}
+
+// What the top of this root is called: a working copy by its path, or on another machine by that machine.
+function rootName() {
+  if (!inWorkspace()) return state.t.chatFolder
+  const { root, deviceLabel } = state.ctx.workspace
+  return root ?? (deviceLabel ? `${deviceLabel} · ${state.t.workingCopy}` : state.t.workingCopy)
 }
 
 // 按名称筛选 opens in the bar (see style.css); Esc, 取消 or 🔍 again empties it and puts the bar back as it was.
@@ -1387,10 +1418,11 @@ function showSearch(open, focus = open) {
   if (focus) $('filter').focus()
 }
 
-function closeSearch() {
+// A press of 🔍 itself leaves no focus ring on it; Esc and 取消 hand the keyboard back with one.
+function closeSearch(pressed = false) {
   if (state.filter) setFilterText('')
   showSearch(false)
-  $('search-toggle').focus()
+  $('search-toggle').focus({ focusVisible: !pressed })
 }
 
 function setFilterText(text) {
@@ -1772,7 +1804,8 @@ function metaOf(entry, now) {
   const cells = []
   if (isFolder(entry)) {
     // Both roots are read one folder at a time: one not entered yet has no count to say (never a 0).
-    if (state.listed.has(entry.id)) cells.push(['size', fmt(t.items, { n: inside(entry.id).filter(visibleEntry).length })])
+    // A computer's folders are read one at a time: a count only for those already entered would come and go.
+    if (state.listed.has(entry.id) && !inCopy(entry)) cells.push(['size', fmt(t.items, { n: inside(entry.id).filter(visibleEntry).length })])
   } else {
     const when = whenOf(changedAt(entry), now)
     if (when) cells.push(['when', when])
@@ -4329,7 +4362,7 @@ function start() {
       renderList()
     }
   }
-  $('search-toggle').onclick = () => ($('search').hidden ? showSearch(true) : closeSearch())
+  $('search-toggle').onclick = (event) => ($('search').hidden ? showSearch(true) : closeSearch(event.detail > 0))
   $('page-back').onclick = () => navigate(-1)
   $('new-doc').onclick = () => toggleMenu($('new-doc'), inWorkspace()
     ? [[state.t.newFile, () => startCreate('file')], [state.t.newFolder, () => startCreate('folder')]]
