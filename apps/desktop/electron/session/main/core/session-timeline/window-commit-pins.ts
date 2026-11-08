@@ -73,6 +73,9 @@ export async function openWindowCommitPins(input: {
   async function save(receipt: Receipt, s: State) {
     proof(); await writeWindowFrame(directory, key(receipt), Buffer.from(JSON.stringify(s))); proof();
   }
+  async function confirmDirectory(abort?: AbortSignal) {
+    proof(); abort?.throwIfAborted(); await syncWindowDirectory(directory); proof(); abort?.throwIfAborted();
+  }
   function owner(object: object) {
     let selected = owners.get(object);
     if (!selected) { selected = { id: randomUUID(), closed: false, versions: new Map() }; owners.set(object, selected); }
@@ -141,7 +144,7 @@ export async function openWindowCommitPins(input: {
         await current(b, abort); const s = await load(receipt, b);
         if (s.holders.length) return 'pinned' as const;
         if (input.receipts.byRow(receipt.rowId)?.sourceId === receipt.sourceId) return 'current' as const;
-        if (s.stage !== 'active') return s.stage;
+        if (s.stage !== 'active') { await confirmDirectory(abort); return s.stage; }
         if (!await input.canCollect(selected, b, abort)) return 'protected' as const;
         abort?.throwIfAborted(); s.stage = 'collecting'; await save(receipt, s); return 'collecting' as const;
       });
@@ -150,7 +153,8 @@ export async function openWindowCommitPins(input: {
       const receipt = snapshotWindowCommitReceipt(version.receipt);
       return serial(namespace, async () => {
         await current(b, abort); const s = await load(receipt, b);
-        if (s.stage !== 'collecting' || s.holders.length) throw fault('version_not_collecting');
+        if (s.holders.length || (s.stage !== 'collecting' && s.stage !== 'collected')) throw fault('version_not_collecting');
+        if (s.stage === 'collected') { await confirmDirectory(abort); return; }
         abort?.throwIfAborted(); s.stage = 'collected'; await save(receipt, s);
       });
     },
@@ -162,6 +166,7 @@ export async function openWindowCommitPins(input: {
         await current(b, abort); const s = await load(receipt, b);
         if (s.stage !== 'collecting' || s.holders.length || input.receipts.byRow(receipt.rowId)?.sourceId === receipt.sourceId)
           throw fault('version_not_collecting');
+        await confirmDirectory(abort); // A visible claim may still await its failed post-rename sync.
         const held = () => { proof(); abort?.throwIfAborted(); }; held();
         try { return await remove(held); } finally { proof(); }
       });
@@ -173,10 +178,10 @@ export async function openWindowCommitPins(input: {
       return serial(namespace, async () => {
         await current(b, abort); const loaded = await readState(receipt, b);
         if (input.receipts.bySource(receipt.sourceId)) throw fault('commit_receipt_retained');
-        if (!loaded.found) return;
+        if (!loaded.found) { await confirmDirectory(abort); return; }
         if (loaded.state.stage !== 'collected' || loaded.state.holders.length) throw fault('version_not_collected');
         abort?.throwIfAborted(); proof(); await rm(join(directory, windowFrameName(key(receipt))), { force: true });
-        proof(); await syncWindowDirectory(directory); proof();
+        await confirmDirectory(abort);
       });
     },
   };

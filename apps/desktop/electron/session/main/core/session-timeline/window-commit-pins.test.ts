@@ -40,6 +40,21 @@ async function failSyncOnce(path: string, phase: 'before' | 'after') {
 }
 
 describe('durable version pins under an exclusive gateway incarnation', () => {
+  it.each(['begin', 'batch', 'finish', 'forget'] as const)('confirms directory durability after a published %s operation fails sync', async phase => {
+    const f = await fixture(), pins = await openWindowCommitPins(f.input), v = await f.version();
+    if (phase === 'finish' || phase === 'forget') await pins.beginCollection(v, createWindowBudget());
+    if (phase === 'forget') { await pins.finishCollection(v, createWindowBudget()); f.receipts.delete(v.receipt.sourceId); }
+    const run = () => phase === 'finish' ? pins.finishCollection(v, createWindowBudget())
+      : phase === 'forget' ? pins.forgetCollected(v, createWindowBudget()) : pins.beginCollection(v, createWindowBudget());
+    const directories = await failSyncOnce(f.directory, 'after');
+    await expect(run()).rejects.toThrow('injected sync failure'); expect(directories()).toBe(1);
+    const remove = vi.fn(() => { expect(directories()).toBe(2); });
+    if (phase === 'batch') await pins.withCollection(v, createWindowBudget(), async () => remove());
+    else await run();
+    expect(directories()).toBe(2);
+    if (phase === 'batch') expect(remove).toHaveBeenCalledOnce();
+  });
+
   it.each(['before', 'after'] as const)('keeps the other live reference when release retries a %s-publication sync failure', async phase => {
     const f = await fixture(), pins = await openWindowCommitPins(f.input), v = await f.version(), owner = {};
     const first = await pins.acquire(owner, v, createWindowBudget()), second = await pins.acquire(owner, v, createWindowBudget());
