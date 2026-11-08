@@ -102,6 +102,9 @@ import { PlatformError } from '../platform/errors'
 import { CameraPermissionSheet } from '../components/CameraPermissionSheet'
 import { RemoteMachinesHost } from '../components/sessionpage/RemoteMachinesHost'
 import type { ContactGroupChat, ContactUser } from '@gugu/core/shared/types/contacts'
+import { IconButton } from '../components/ui/IconButton'
+import { Settings } from '@/lib/icons'
+import { parseExtensionTabKind } from '../session/shared/extensions/manifest'
 import { followLink, openLink } from '../lib/guguLinks'
 import { useMobileShell, readMobileShell } from '../hooks/useMobileShell'
 import { useMobileChatOpenNonce } from '../hooks/useMobileChatOpenNonce'
@@ -1185,7 +1188,25 @@ function InnerLayout({
       <AgentShareHost />
       {openedPhoneApp && (
         <Sheet fullScreenMobile onClose={() => setOpenedPhoneApp(null)} testId="app-link-page" ariaLabel={openedPhoneApp.name}>
-          <PaneHeader mobile divider title={openedPhoneApp.name} leading={<RightPanelBackButton onBack={() => setOpenedPhoneApp(null)} />} />
+          <PaneHeader
+            mobile
+            divider
+            title={openedPhoneApp.name}
+            leading={<RightPanelBackButton onBack={() => setOpenedPhoneApp(null)} />}
+            actions={(
+              <IconButton
+                size="lg"
+                data-testid="app-link-page-settings"
+                aria-label={translateSessionMessage('extensions.appSettings')}
+                onClick={() => {
+                  setOpenedPhoneApp(null)
+                  void followLink({ kind: 'app-detail', extensionId: parseExtensionTabKind(openedPhoneApp.kind)!.extensionId })
+                }}
+              >
+                <Settings />
+              </IconButton>
+            )}
+          />
           <SessionAppFrame kind={openedPhoneApp.kind} />
         </Sheet>
       )}

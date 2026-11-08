@@ -30,7 +30,7 @@
   color: var(--foreground);
 }
 .mg-anchors > button.is-on {
-  background: color-mix(in oklab, var(--foreground) 7%, transparent);
+  background: var(--xp-hover);
   color: var(--foreground);
   font-weight: var(--font-weight-medium);
 }
@@ -86,7 +86,7 @@
   color: var(--foreground-muted);
 }
 .mg-group {
-  border: 1px solid color-mix(in oklab, var(--foreground) 14%, transparent);
+  border: 1px solid var(--neutral-7, var(--border));
   border-radius: 12px;
 }
 .mg-row {

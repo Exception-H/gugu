@@ -69,7 +69,7 @@
   display: grid;
   border-radius: 20%;
   /* 深色图标放在深色底上也有边。 */
-  box-shadow: 0 0 0 1px color-mix(in oklab, var(--foreground) 10%, transparent);
+  box-shadow: 0 0 0 1px var(--border);
 }
 .mk-icon > img,
 .mk-icon > span {
