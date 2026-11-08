@@ -187,7 +187,7 @@ export class InstalledExtensionsStore {
    * it can be pinned. A page per task is in many places at once, so it has no one place for the rail to go to.
    */
   mainTabOf(extensionId: string): ExtensionTabContributionEntry | null {
-    return this.allTabContributions.find((entry) => entry.extensionId === extensionId && entry.ownPage && !entry.perSession) ?? null;
+    return this.allTabContributions.find((entry) => entry.extensionId === extensionId && !entry.forFiles && !entry.perSession && !entry.hidden) ?? null;
   }
 
   /** What the rail shows: the pinned Apps that are installed, on, and have a page of their own, in the person's order. */
@@ -222,7 +222,7 @@ export class InstalledExtensionsStore {
     const main = this.mainTabOf(extensionId);
     // A preinstalled App is where the host puts it (a chat's folder entry, a task's tabs, 「用 X 打开」), not an App of
     // the rail or a chat's App list besides — decided by origin, not manifest (统筹 09-29, L3).
-    if (!main || !main.enabled || main.preinstalled || main.hidden) return null;
+    if (!main || !main.enabled || main.preinstalled) return null;
     return { extensionId, name: main.extensionName, kind: main.kind, iconDataUrl: this.appIcons[extensionId] ?? null };
   }
 

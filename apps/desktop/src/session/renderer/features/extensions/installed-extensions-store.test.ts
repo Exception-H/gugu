@@ -93,8 +93,21 @@ describe('which Apps are a task session tab (L6-8, 摩擦单 F3 / F95 / F98)', (
     ]);
     await store.load();
     expect(store.enabledTabContributions.map((entry) => entry.kind)).toEqual(['board.board', 'poll.poll']);
-    expect(store.mainTabOf('lens')).toBeNull();
+    // Only those lists: a published App keeps its place on the rail and what an open with no tab reaches.
+    expect(store.mainTabOf('lens')?.kind).toBe('lens.card');
     expect(store.residentTabContributions.map((entry) => entry.kind)).toContain('board.fleet');
+  });
+
+  it('a page taken out of the menus: the next one is the App\'s main page; with none left the App leaves the rail', async () => {
+    const two = { id: 'two', name: 'Two', version: '1.0.0', apiVersion: EXTENSION_API_VERSION, defaultLocale: 'en', contributes: { tabs: [{ name: 'a', title: 'A', entry: 'a.html' }, { name: 'b', title: 'B', entry: 'b.html' }] } };
+    const store = storeListing([two], { dock: ['two'], hiddenTabs: { two: ['a'] } });
+    await store.load();
+    expect(store.mainTabOf('two')?.kind).toBe('two.b');
+    expect(store.dockedApps.map((app) => app.kind)).toEqual(['two.b']);
+    expect(store.enabledTabContributions.map((entry) => entry.kind)).toEqual(['two.b']);
+    store.applyHiddenTabs({ two: ['a', 'b'] });
+    expect(store.mainTabOf('two')).toBeNull();
+    expect(store.dockedApps).toEqual([]);
   });
 
   it('keeps an App-owned per-task HTML page separate from its settings page', async () => {

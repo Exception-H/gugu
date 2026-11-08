@@ -689,7 +689,7 @@ export const extensionManifestSchema = z
       if (manifest.apiVersion < 35) ctx.addIssue({ code: 'custom', path: ['contributes', 'settingsTab'], message: 'settingsTab requires apiVersion 35' });
       const tab = manifest.contributes.tabs.find((candidate) => candidate.name === settingsTab);
       if (!tab) ctx.addIssue({ code: 'custom', path: ['contributes', 'settingsTab'], message: `this App has no tab named ${settingsTab}` });
-      else if (!isOwnPage(manifest, tab) || tab.hostPage || tab.perSession) ctx.addIssue({ code: 'custom', path: ['contributes', 'settingsTab'], message: 'settingsTab must name a page of its own, not a host page, a card, a file opener or a per-task tab' });
+      else if (!isOwnPage(manifest, tab) || tab.widget || tab.hostPage || tab.perSession) ctx.addIssue({ code: 'custom', path: ['contributes', 'settingsTab'], message: 'settingsTab must name a page of its own, not a host page, a card, a file opener or a per-task tab' });
     }
     const prompts = manifest.contributes.prompts ?? [];
     if (prompts.length > 0 && manifest.apiVersion < 34) ctx.addIssue({ code: 'custom', path: ['contributes', 'prompts'], message: 'prompts require apiVersion 34' });
@@ -930,8 +930,9 @@ export function declaredContexts(tab: Parameters<typeof claimedSuffixes>[0]): Fi
 }
 
 /**
- * Whether a tab stands alone as a page: what the rail, a task's 「+」 and the command list offer. A tab that opens files has
- * nothing to show without one. A tab with `widget` is the App's card in a message, unless it is all the App has.
+ * Whether a task's 「+」 and the command list offer a tab as a page. A tab that opens files has nothing to show without one. A
+ * tab with `widget` is the App's card in a message, unless it is all the App has. Only those lists: the rail and every open
+ * read the App's main tab (`mainTabOf`), so a published App keeps its place there.
  */
 export function isOwnPage(manifest: Pick<ExtensionManifest, 'contributes'>, tab: ExtensionManifest['contributes']['tabs'][number]): boolean {
   return declaredContexts(tab).length === 0 && (!tab.widget || manifest.contributes.tabs.length === 1);

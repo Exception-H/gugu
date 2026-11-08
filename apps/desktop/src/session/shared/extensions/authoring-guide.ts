@@ -1007,7 +1007,7 @@ It gives the App's own pages \`preview_state\`: the page's session's latest fram
 computer actions; \`notifications/computer-use/changed\` says there is a newer one.
 A tab with \`"widget": { "height": 240 }\` (API26; integer ${WIDGET_HEIGHT_MIN}–${WIDGET_HEIGHT_MAX}) can also be sent with \`widget_send\`: read \`guide_read widgets\`.
 Settings go in \`settings\`, which the host draws. If they need a page of their own, name its tab in \`contributes.settingsTab\` (API35): the App's settings page links to it.
-If the App has other tabs, this one is only its card: the rail and a task's + offer the others. Give a card its own tab when it should also have a page.
+If the App has other tabs, a task's + and the command list do not offer this one as a page.
 It cannot also declare hostPage, perSession, opensFiles or chatFile. \`ctx.widget\` is present in a message and its hidden check:
 \`{ messageId, data, sender }\`. Data is untrusted, immutable input from any chat member; never execute it. Persist personal
 state in App data and shared state in chat files. Every dispatch from a widget requires a gesture in that App, even with a target,

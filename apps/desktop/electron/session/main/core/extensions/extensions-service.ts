@@ -3,7 +3,7 @@ import { activitySignal } from '../activity/signals';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import {
-  isOwnPage,
+  declaredContexts,
   EXTENSION_API_VERSION_MIN_SUPPORTED,
   isValidExtensionId,
   parseExtensionManifest,
@@ -393,7 +393,7 @@ export class ExtensionsService {
       }
       // Owner 10-06「装之后应该自动 pin 吧」: an App with a page of its own goes on the rail (`setDock`'s rule), whoever
       // installed it — a preinstalled one too. The workspace only opens files, so the same rule leaves it off.
-      const ownPage = manifest.contributes.tabs.some((tab) => isOwnPage(manifest, tab));
+      const ownPage = manifest.contributes.tabs.some((tab) => declaredContexts(tab).length === 0);
       if (ownPage && !firstInstall.dock.includes(manifest.id)) {
         this.dockFile.write([...firstInstall.dock, manifest.id]);
       }
@@ -644,6 +644,7 @@ export class ExtensionsService {
   }
 
   setTabHidden(extensionId: string, tab: string, hidden: boolean): Record<string, string[]> {
+    if (this.origins()[extensionId] === 'preinstalled') throw new Error(`"${extensionId}" comes with gugu; its pages stay where gugu puts them`);
     if (!this.get(extensionId).manifest.contributes.tabs.some((candidate) => candidate.name === tab)) throw new Error(`"${extensionId}" has no tab named ${tab}`);
     const { [extensionId]: current = [], ...others } = this.hiddenTabsFile.read();
     const tabs = hidden ? [...new Set([...current, tab])] : current.filter((name) => name !== tab);
@@ -659,17 +660,15 @@ export class ExtensionsService {
 
   /**
    * The whole dock at once: pinning, taking off and reordering are one write of the list. Only installed Apps with a
-   * page of their own (`isOwnPage`); an App that only opens files or sends cards has nothing to show from the rail.
+   * page of their own — a tab that opens no file; an App that only opens files has nothing to show from the rail.
    */
   setDock(ids: readonly string[]): string[] {
-    const pinned = this.dock();
-    const dock = [...new Set(ids)].filter((id) => {
-      const { manifest } = this.get(id);
-      if (manifest.contributes.tabs.some((tab) => isOwnPage(manifest, tab))) return true;
-      // Pinned before this App's only page became its card in a message: it leaves with this write.
-      if (pinned.includes(id)) return false;
-      throw new Error(`"${id}" has no page of its own to pin`);
-    });
+    const dock = [...new Set(ids)];
+    for (const id of dock) {
+      if (!this.get(id).manifest.contributes.tabs.some((tab) => declaredContexts(tab).length === 0)) {
+        throw new Error(`"${id}" only opens files; it has no page of its own to pin`);
+      }
+    }
     this.dockFile.write(dock);
     return dock;
   }
