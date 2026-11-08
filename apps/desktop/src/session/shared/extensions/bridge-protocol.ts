@@ -125,6 +125,13 @@ export interface ExtensionChat {
   folders?: ExtensionChatFolder[];
 }
 
+/** A chat as a page sees it: a project's folders (paths, machines) only for a page that may read files. */
+export function chatForCapabilities<T extends ExtensionChat>(chat: T, capabilities: readonly string[]): T {
+  if (!chat.folders || capabilities.some((capability) => capability.startsWith('files:'))) return chat;
+  const { folders: _folders, ...rest } = chat;
+  return rest as T;
+}
+
 /** One folder of a project group, as the account records it. Its machine may be offline, or no longer have it. */
 export interface ExtensionChatFolder {
   /** `folder:<device>/<workspace>`: the place `gugu.files.list({ workspace })` lists, on that machine. */

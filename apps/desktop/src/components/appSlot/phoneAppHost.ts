@@ -44,6 +44,7 @@ import {
   type PeekTarget,
 } from '../../session/shared/extensions/app-runtime-protocol'
 import {
+  chatForCapabilities,
   bridgeFailure,
   callRefusal,
   EXTENSION_API_VERSION,
@@ -71,7 +72,7 @@ import { subscribeDeviceSessions } from '../../session/shared/remote-sessions/se
 import { callOnComputer } from './phoneProgramCall'
 import { isImplicitSessionHomeProjectId } from '../../session/shared/core/projects/session-home-project'
 import { openPhoneWorkingCopyFile, type ReadWorkingCopyChunk } from './phone-working-copy-file'
-import { appDeviceId, followsSessionMachine, notOnSessionMachine } from '../../session/shared/extensions/machine-call'
+import { appDeviceId, folderElsewhereRefusal, followsSessionMachine, notOnSessionMachine } from '../../session/shared/extensions/machine-call'
 import { HOSTED_PROGRAM_ELSEWHERE } from '../../session/shared/extensions/program-place'
 import { rendererFileServiceUrl } from '../../lib/chatFolder'
 import { AppModalSessions, type AppModalFocus } from '../../session/shared/extensions/app-modal'
@@ -490,7 +491,7 @@ export function hostAppFrame(
     tabId: hosted.binding.tabId,
     ...(hosted.binding.modal ? { modal: { data: hosted.binding.modal.data } } : {}),
     ...(hosted.binding.widget ? { widget: { messageId: hosted.binding.widget.messageId, data: hosted.binding.widget.data, sender: hosted.binding.widget.senderId } } : {}),
-    ...(chat ? { chat: { ...chat, ...(contextHasMembers() ? { members: members ?? [] } : {}) } } : {}),
+    ...(chat ? { chat: { ...chatForCapabilities(chat, hosted.binding.capabilities), ...(contextHasMembers() ? { members: members ?? [] } : {}) } } : {}),
     ...(hosted.binding.itemId && hosted.binding.chatId ? { file: { chat: hosted.binding.chatId, id: hosted.binding.itemId } } : {}),
     ...(hosted.binding.session
       ? {
@@ -536,6 +537,8 @@ export function hostAppFrame(
     // A project's folder names its own machine, wherever this page is.
     const folder = verbFacts(method)?.machine === 'place' ? workspaceFolder((args.place ?? args.ref) as { workspace?: string } | null) : null
     if (folder) {
+      const refusal = folderElsewhereRefusal(method, (capability) => hosted.binding.capabilities.includes(capability))
+      if (refusal) throw refusal
       const manifest = installedExtensionsStore.manifestFor(hosted.binding.extensionId)
       if (!manifest) refused('not-installed', `${hosted.binding.extensionId} is not installed on this phone`)
       return callOnComputer({ extensionId: manifest.id, extensionName: manifest.name, version: manifest.version }, { deviceId: folder.deviceId, deviceLabel: null }, method, args).then(computerReply)
@@ -715,6 +718,15 @@ export function hostAppFrame(
         if (isWorkspace(ref)) {
           if (tab !== undefined) refused('invalid', 'openWith tab is only available for chat files')
           if (!hooks.openWorkingCopy) refused('invalid', 'No file preview in this surface')
+          const folder = workspaceFolder(ref)
+          if (folder) {
+            // Read in pieces on its machine (`filesRead`, gated above) into the phone's own file preview.
+            const refusal = folderElsewhereRefusal('filesRead', (capability) => hosted.binding.capabilities.includes(capability))
+            if (refusal) throw refusal
+            const manifest = installedExtensionsStore.manifestFor(hosted.binding.extensionId)
+            if (!manifest) refused('not-installed', 'This App is not installed')
+            return openPhoneWorkingCopyFile({ extensionId: manifest.id, extensionName: manifest.name, version: manifest.version }, { deviceId: folder.deviceId, deviceLabel: null }, ref, hooks.openWorkingCopy)
+          }
           const id = workspaceSession(ref)
           const listed = id ? listedSession(readCachedDevices(), liveDeviceSessions(), id) : null
           if (!listed || !('row' in listed)) refused('not-found', 'This session is not in your task list')

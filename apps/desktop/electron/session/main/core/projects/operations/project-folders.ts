@@ -111,7 +111,7 @@ export async function projectFolderOfWorkspace(workspaceId: string): Promise<{ p
   const [row] = await db.select({ path: workspaces.path, projectId: workspaces.projectId }).from(workspaces).where(eq(workspaces.id, workspaceId)).limit(1);
   if (!row?.path) return undefined;
   if (row.projectId) return { projectId: row.projectId, workspaceId, path: row.path };
-  const [root] = await db.select({ id: projects.id }).from(projects).where(eq(projects.repositoryWorkspaceId, workspaceId)).limit(1);
+  const [root] = await db.select({ id: projects.id }).from(projects).where(and(eq(projects.repositoryWorkspaceId, workspaceId), eq(projects.rootFolderDetached, false))).limit(1);
   return root ? { projectId: root.id, workspaceId, path: row.path } : undefined;
 }
 

@@ -1,4 +1,5 @@
 import type { ExtensionFileChangeBatch } from '@shared/extensions/bridge-protocol';
+import { chatForCapabilities } from '@shared/extensions/bridge-protocol';
 import { appStateOf } from '@shared/extensions/app-state';
 import { groupFileLink } from '@gugu/core/shared/ui/guguLink';
 import * as fs from 'node:fs';
@@ -1335,7 +1336,9 @@ function handedFileOf(binding: SurfaceBinding): (AppFileRef & { id: string }) | 
 /** Which page a message or a call came from (`ExtensionPageFrom`): the place facts of its context, filled by the host. */
 async function pageFrom(binding: SurfaceBinding): Promise<ExtensionPageFrom> {
   const workspace = await workspaceOf(binding);
-  const chat = binding.conversation ? chatsDrawnIn.get(binding.conversation)?.chat : undefined;
+  // Where a project's folders are is the page's own to know (`contextFor`), not told with what it says.
+  const { folders: _folders, ...drawn } = (binding.conversation ? chatsDrawnIn.get(binding.conversation)?.chat : undefined) ?? {};
+  const chat = 'id' in drawn ? drawn as ExtensionChat : undefined;
   const file = handedFileOf(binding);
   return { tabId: binding.tabId, ...(workspace ? { workspace } : {}), ...(chat ? { chat } : {}), ...(file ? { file } : {}), operator: binding.operator };
 }
@@ -1356,7 +1359,7 @@ function contextFor(binding: SurfaceBinding, workspace: ExtensionWorkspace | und
     ...(binding.viewState ? { viewState: structuredClone(binding.viewState) } : {}),
     tabId: binding.tabId,
     ...(binding.modal ? { modal: { data: binding.modal.data } } : {}),
-    ...(drawnIn?.chat ? { chat: { ...drawnIn.chat, ...(contextHasMembers(binding) ? { members: drawnIn.members } : {}) } } : {}),
+    ...(drawnIn?.chat ? { chat: { ...chatForCapabilities(drawnIn.chat, capabilities), ...(contextHasMembers(binding) ? { members: drawnIn.members } : {}) } } : {}),
     ...(workspace ? { workspace } : {}),
     // Absent stays absent: a tab opened from the entry rail has no file.
     ...(file ? { file } : {}),

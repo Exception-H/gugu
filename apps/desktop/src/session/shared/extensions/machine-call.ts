@@ -35,6 +35,16 @@ export function placeSessionOf(args: Record<string, unknown>): string | null {
   return null
 }
 
+/**
+ * Why a page may not make this call on a project folder on another machine, or null: it needs `files:read:all-machines`, and
+ * such a folder is only read from elsewhere. Both hosts ask here; the answering machine trusts the page's host for this.
+ */
+export function folderElsewhereRefusal(method: string, has: (capability: 'files:read:all-machines') => boolean): Error | null {
+  if (!has('files:read:all-machines')) return Object.assign(new Error('Not permitted: a folder on another of your computers needs "files:read:all-machines"'), { code: 'denied' });
+  if (verbFacts(method)?.reads !== true) return Object.assign(new Error('A folder on another of your computers is read-only from here'), { code: 'denied' });
+  return null;
+}
+
 /** Why the answering machine does not do this call for a page elsewhere, or null when it does. */
 export function notOnSessionMachine(manifest: Pick<ExtensionManifest, 'contributes'>, method: string, args: Record<string, unknown>): Error | null {
   if (followsSessionMachine(manifest, method, args)) return null
