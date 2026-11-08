@@ -42,9 +42,6 @@ const scene = vi.hoisted(() => ({ sessionOn: 'here' as 'here' | 'there' }));
 vi.mock('@main/core/extensions/extension-agent-context', () => ({
   agentSessionContext: async () => (scene.sessionOn === f.side ? { workspaceRoot: f.root, projectId: 'p', workspaceId: 'w' } : null),
 }));
-vi.mock('@main/core/extensions/extension-agents', () => ({
-  sessionsElsewhere: async () => ({ rows: [{ deviceId: 'dev-there', deviceLabel: 'there', session: { conversationId: SESSION, projectId: 'p', agent: null } }], unreached: [] }),
-}));
 /** The device RPC: the call arrives at the other machine as JSON, is parsed as it is there, and answered there. */
 const across = async (caller: unknown, action: unknown) => {
   f.side = 'there';
@@ -58,7 +55,11 @@ const across = async (caller: unknown, action: unknown) => {
 };
 vi.mock('@main/core/sessions/session-family', () => ({
   // As the real `appCall` sends it: this machine's id and label on the App's caller.
-  otherMachines: () => ({ appCall: (app: object, _device: string, action: unknown) => across({ kind: 'app', deviceId: 'dev-here', deviceLabel: 'here', ...app }, action), isThisDevice: async (id: string) => id === 'dev-here' }),
+  otherMachines: () => ({
+    appCall: (app: object, _device: string, action: unknown) => across({ kind: 'app', deviceId: 'dev-here', deviceLabel: 'here', ...app }, action),
+    isThisDevice: async (id: string) => id === 'dev-here',
+    sessionHome: async () => ({ found: { deviceId: 'dev-there', label: 'there', session: { conversationId: SESSION, projectId: 'p', agent: null }, listsAgents: true }, unreached: [] }),
+  }),
 }));
 vi.mock('../../../../../src/mobile/agent-watch/sessionpage-rpc', () => ({ appCallOn: (_device: string, caller: unknown, action: unknown) => across(caller, action) }));
 

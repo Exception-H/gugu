@@ -25,6 +25,7 @@ import {
   type RemoteCaller,
   type RemoteSessionCaller,
   type SessionpageSessionsListResult,
+  type UnreachedMachine,
 } from '@gugu/session-core/session-record/contract'
 import { SESSION_HOST_RPC } from '@shared/lib/ipc/session-host-device-frames'
 import { REMOTE_PROTOCOL_VERSION } from '@gugu/core/cloud/serverMachineHealth'
@@ -445,10 +446,10 @@ export function createCrossMachineSessions(deps: CrossMachineDeps) {
    * 别的机器上的会话:每台在线机器报界面那份列表(手机目录读的同一个方法),整行交回。离线的机器只报 `since` 之后
    * 还在线过的(更早就离线的上面不可能有这棵树的 child);`since` = null 全报。
    */
-  const sessionsElsewhere: OtherMachines['sessions'] = async (since, options) => {
+  const eachMachine = async (since: string | null, options: { fresh?: boolean } | undefined, each: (device: Device, listed: Awaited<ReturnType<typeof sessionsOn>>) => void) => {
     const { thisDeviceId, rows } = await devices()
     const sinceMs = since ? Date.parse(since) : Number.NEGATIVE_INFINITY
-    const { sessions, unreached }: Awaited<ReturnType<OtherMachines['sessions']>> = { sessions: [], unreached: [] }
+    const unreached: UnreachedMachine[] = []
     await Promise.all(rows.filter((row) => row.device_id !== thisDeviceId).map(async (device) => {
       if (!isAgentHostDevice(device)) {
         unreached.push({ deviceId: device.device_id, label: device.label, detail: noTaskRuntime(device).message })
@@ -465,14 +466,31 @@ export function createCrossMachineSessions(deps: CrossMachineDeps) {
         return
       }
       try {
-        const listed = await sessionsOn(device, options)
-        for (const session of listed.sessions) sessions.push({ deviceId: device.device_id, label: device.label, session, listsAgents: listed.listsAgents })
+        each(device, await sessionsOn(device, options))
       } catch (error) {
         unreached.push({ deviceId: device.device_id, label: device.label, detail: error instanceof Error ? error.message : String(error) })
       }
     }))
+    return unreached
+  }
+  const sessionsElsewhere: OtherMachines['sessions'] = async (since, options) => {
+    const sessions: Awaited<ReturnType<OtherMachines['sessions']>>['sessions'] = []
+    const unreached = await eachMachine(since, options, (device, listed) => {
+      for (const session of listed.sessions) sessions.push({ deviceId: device.device_id, label: device.label, session, listsAgents: listed.listsAgents })
+    })
     return { sessions, unreached }
   }
+  /**
+   * The machine one session is on: the first machine to list it settles it — the others' lists are not waited for (a slow
+   * machine set how long a page on another machine's session stayed blank). None lists it: `found` null, and who could not say.
+   */
+  const sessionHome: OtherMachines['sessionHome'] = (sessionId) => new Promise((resolve, reject) => {
+    eachMachine(null, undefined, (device, listed) => {
+      const session = listed.sessions.find((row) => row.conversationId === sessionId)
+      // A later machine's answer does not settle it again (a settled promise ignores it).
+      if (session) resolve({ found: { deviceId: device.device_id, label: device.label, session, listsAgents: listed.listsAgents }, unreached: [] })
+    }).then((unreached) => resolve({ found: null, unreached }), reject)
+  })
 
   /** 那台机器上的一条会话:界面同一个方法,那边走的就是人在那台机器上点的归档。 */
   const archiveOn = async (deviceId: string, sessionId: string, removeSocialIdentity = true) => {
@@ -581,6 +599,7 @@ export function createCrossMachineSessions(deps: CrossMachineDeps) {
     runOnDevice,
     withRemoteChildren,
     sessionsElsewhere,
+    sessionHome,
     archiveOn,
     appMessage,
     appCall,

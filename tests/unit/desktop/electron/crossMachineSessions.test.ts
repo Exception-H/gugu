@@ -657,6 +657,23 @@ describe('the family across machines', () => {
       ],
     ]])
   })
+
+  it('one session\'s machine: the first machine to list it settles it, a slow machine is not waited for', async () => {
+    const listDevices = async () => [device('dev-a', 'this box', true), device('dev-b', 'slow server', true), device('dev-d', 'desk', true)]
+    // dev-b never answers; dev-d lists the session. Parent: sessionMachine waited for every machine's list.
+    const { xm } = makeCrossMachine(async (deviceId, type) => type !== 'sessionTimeline.sessionsList' ? { result: {} }
+      : deviceId === 'dev-b' ? new Promise(() => {})
+        : { result: { projects: [], sessions: [{ conversationId: 's-d', projectId: 'pd', agent: { userId: 'agent-d' } }] } }, { listDevices })
+    expect(await xm.sessionHome('s-d')).toEqual({
+      found: { deviceId: 'dev-d', label: 'desk', session: { conversationId: 's-d', projectId: 'pd', agent: { userId: 'agent-d' } }, listsAgents: true },
+      unreached: [],
+    })
+  })
+
+  it('one session\'s machine: none lists it once every machine has answered', async () => {
+    const { xm } = makeCrossMachine(async (_deviceId, type) => type === 'sessionTimeline.sessionsList' ? { result: { projects: [], sessions: [] } } : { result: {} })
+    expect(await xm.sessionHome('s-x')).toEqual({ found: null, unreached: [{ deviceId: 'dev-c', label: 'laptop', detail: '"laptop" (device:dev-c) is offline (last seen 3 h ago)' }] })
+  })
 })
 
 // #7199 云电脑休眠中 ≠ 离线:发过去之前先叫醒,醒了照常发;醒不来说清是哪台、为什么,什么都不发。
