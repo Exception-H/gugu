@@ -47,7 +47,6 @@ const gugu = {
 const $ = (id: string) => document.getElementById(id) as HTMLElement
 const names = () => [...$('file-list').querySelectorAll('.file .file-name')].map((n) => n.textContent)
 const rowOf = (name: string) => [...$('file-list').querySelectorAll<HTMLElement>('.file')].find((li) => li.querySelector('.file-name')?.textContent === name)!
-const press = (name: string) => (rowOf(name).querySelector('.file-open') as HTMLButtonElement).click()
 const dragEvent = (type: string, values: Map<string, string>) => {
   const event = new Event(type, { bubbles: true, cancelable: true })
   Object.defineProperty(event, 'dataTransfer', { value: { types: [...values.keys()], setData: (t: string, v: string) => values.set(t, v), getData: (t: string) => values.get(t) ?? '' } })
@@ -61,8 +60,8 @@ beforeAll(async () => {
   Object.assign(window, { gugu })
   // @ts-expect-error — 内置 App 是不经构建的纯 ES module,没有类型;运行时 import 可用。
   await import('../../../../apps/desktop/preinstalled-apps/workspace/app.js')
-  await until('the roots drawn', () => names().length > 0)
-  press('工作目录')
+  await until('the place switch drawn', () => !!document.querySelector('#place-switch [data-root="workspace"]'))
+  ;(document.querySelector('#place-switch [data-root="workspace"]') as HTMLButtonElement).click()
   await until('the working copy listed', () => names().includes('notes.md'))
 })
 
