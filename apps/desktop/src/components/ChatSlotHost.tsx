@@ -7,6 +7,8 @@ import { TaskChatScope } from './assistant/TaskChatScope'
 import type { AssistantChatHandlers } from './assistant/AssistantChatSlot'
 import { useProjectGroupChats } from '../lib/projectGroupChatsBridge'
 import { useChatStore } from '../store/chatContext'
+import { useTheme } from '../store/theme'
+import { SessionUiTheme } from './sessionpage/SessionUiTheme'
 
 import { isOwnedAgentPeer, openOwnedAgentEntry, useOwnedAgentEntries } from '../lib/ownedAgentConversation'
 
@@ -28,6 +30,7 @@ export const ChatSlotHost = memo(function ChatSlotHost(handlers: AssistantChatHa
   // 名字与对话列表那一行同一个函数(chatDisplayName):私聊没有自己的名字,写对方(备注优先)——列表、⌘K 面板、
   // 「来自 X」三处叫法一样。
   const projectGroupChats = useProjectGroupChats()
+  const { theme } = useTheme()
   const sidebarView = useSidebarChatView()
   const slots = readShellSlots()
   const entries = useSyncExternalStore(
@@ -49,20 +52,24 @@ export const ChatSlotHost = memo(function ChatSlotHost(handlers: AssistantChatHa
         // Wait only while the initial directory read is unfinished. Missing identities can be permanent for human DMs.
         if (privateChat && !chatsRead && !chatsLoadFailed && (!chat.peer_user_id || !identitiesById[chat.peer_user_id])) return []
         return [createPortal(
-          <InChatSlot.Provider value={{ projectName: projectGroupChats.has(chatId) ? chats.find((chat) => chat.id === chatId)?.name ?? null : null }}>
-            <TaskChatScope chatId={chatId}>
-              <ChatAreaPanel
-                viewportKey={key}
-                navigationTarget={sidebarView.focusedChatId === chatId}
-                blockHost={{
-                  actions: entries.get(chatPartSlotKey('actions', chatId)) ?? null,
-                  title: entries.get(chatPartSlotKey('title', chatId)) ?? null,
-                  tabs: entries.get(chatPartSlotKey('tabs', chatId)) ?? null,
-                }}
-                {...handlers}
-              />
-            </TaskChatScope>
-          </InChatSlot.Provider>,
+          // A block is session-page content the shell draws, in this React tree: its popups portal out of the mount, so they need
+          // the session page's theme layer (the +, a file's ⋯, an App's menus).
+          <SessionUiTheme theme={theme}>
+            <InChatSlot.Provider value={{ projectName: projectGroupChats.has(chatId) ? chats.find((chat) => chat.id === chatId)?.name ?? null : null }}>
+              <TaskChatScope chatId={chatId}>
+                <ChatAreaPanel
+                  viewportKey={key}
+                  navigationTarget={sidebarView.focusedChatId === chatId}
+                  blockHost={{
+                    actions: entries.get(chatPartSlotKey('actions', chatId)) ?? null,
+                    title: entries.get(chatPartSlotKey('title', chatId)) ?? null,
+                    tabs: entries.get(chatPartSlotKey('tabs', chatId)) ?? null,
+                  }}
+                  {...handlers}
+                />
+              </TaskChatScope>
+            </InChatSlot.Provider>
+          </SessionUiTheme>,
           element,
           key,
         )]
