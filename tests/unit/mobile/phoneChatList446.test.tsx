@@ -178,7 +178,8 @@ it('short tap and a cancelled scroll retain ordinary row behavior', async () => 
   expect(release.defaultPrevented).toBe(false)
   vi.useRealTimers()
   await clickElement(row())
-  expect(state.select).toHaveBeenCalledWith('group')
+  // A phone's list covers the chat it opens: a tap is always an opening, which selects the chat itself.
+  expect(state.open).toHaveBeenCalledWith('group', false)
   expect(state.read).not.toHaveBeenCalled()
 })
 

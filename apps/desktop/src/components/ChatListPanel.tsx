@@ -833,15 +833,16 @@ export function ChatListPanel({
       onChatSelected?.('sidebar')
       return
     }
-    if (chat.unread_locator) {
-      void openUnreadChat(chat.id).catch((error) => {
+    // A phone's list covers the chat it reopens, so a tap there is an opening (#6530), not a jump inside a chat on screen.
+    if (chat.unread_locator || mobile) {
+      void (mobile ? openUnreadChat(chat.id, false) : openUnreadChat(chat.id)).catch((error) => {
         chatListLog.error({ error: String(error) }, 'unread locator open failed')
       })
     } else {
       setActiveChatId(chat.id)
     }
     onChatSelected?.(focusTarget)
-  }, [drafts, inSidebar, onChatSelected, openUnreadChat, setActiveChatId, selectedChatId])
+  }, [drafts, inSidebar, mobile, onChatSelected, openUnreadChat, setActiveChatId, selectedChatId])
 
   const toggleTopics = (chatId: string) => {
     setExpandedTopicSources((previous) => {
