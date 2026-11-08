@@ -10,9 +10,9 @@ import { SentMessageBodyHost } from '../../../../apps/desktop/src/components/cha
 const open = vi.hoisted(() => ({ file: vi.fn() }))
 vi.mock('@/components/chat/MessageBody', () => ({
   MessageBody: function Body({ message, onOpenWorkspaceFile }: { message: MessageItem; onOpenWorkspaceFile: (link: unknown) => void }) {
-    const slot = useContext(SentMessageSurface)
+    const inTimeline = useContext(SentMessageSurface)
     open.file = onOpenWorkspaceFile as typeof open.file
-    return <p data-tab={widgetTabId(message.id, slot)}>{message.content}</p>
+    return <p data-tab={widgetTabId(message.id, inTimeline)}>{message.content}</p>
   },
 }))
 
@@ -29,21 +29,33 @@ beforeEach(() => {
 afterEach(() => { harness?.cleanup(); vi.unstubAllGlobals(); vi.restoreAllMocks(); document.body.replaceChildren() })
 const slotOf = (element: HTMLElement, onSize = vi.fn(), commands = {}) => ({ root: element, message, commands: () => commands, onSize })
 
-it('draws one message offered twice in both slots, each its own widget tab, and takes back only the slot that left', async () => {
+it('draws one message offered twice in both slots, and takes back only the slot that left', async () => {
   const errors = vi.spyOn(console, 'error')
   harness = createReactHarness(); await harness.render(<SentMessageBodyHost />)
   const first = root(), second = root()
   let takeFirst!: () => void, takeSecond!: () => void
   await act(async () => { takeFirst = offerSentMessageSlot(slotOf(first)); takeSecond = offerSentMessageSlot(slotOf(second)) })
-  const tab = (element: HTMLElement) => element.querySelector('p')?.getAttribute('data-tab')
   expect(first.textContent).toBe('said'); expect(second.textContent).toBe('said')
-  expect(tab(first)).not.toBe(tab(second))
-  expect(tab(first)).not.toBe(widgetTabId('msg', null))
   expect(errors).not.toHaveBeenCalled()
   await act(async () => takeFirst())
   expect(first.textContent).toBe(''); expect(second.textContent).toBe('said')
   await act(async () => takeSecond())
   expect(second.textContent).toBe('')
+})
+
+it('names a widget tab per surface, the same each time its row comes back', async () => {
+  harness = createReactHarness(); await harness.render(<SentMessageBodyHost />)
+  const tab = (element: HTMLElement) => element.querySelector('p')?.getAttribute('data-tab')
+  const first = root()
+  let take!: () => void
+  await act(async () => { take = offerSentMessageSlot(slotOf(first)) })
+  const named = tab(first)
+  expect(named).not.toBe(widgetTabId('msg', false))
+  await act(async () => take())
+  const again = root()
+  await act(async () => { take = offerSentMessageSlot(slotOf(again)) })
+  expect(tab(again)).toBe(named)
+  await act(async () => take())
 })
 
 it('reports the drawn size, and keeps the last one when a hidden page lays it out at 0×0', async () => {

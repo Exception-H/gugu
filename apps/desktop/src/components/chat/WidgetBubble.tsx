@@ -39,9 +39,9 @@ export const WidgetBubble = observer(function WidgetBubble({ message }: { messag
 
 function WidgetView({ message, widget, height }: { message: Message; widget: WidgetMessage; height: number }) {
   const { ref, shown } = useConversationVisibility(true)
-  const slot = useContext(SentMessageSurface)
-  const target = useMemo(() => ({ workspace: null, conversation: message.chat_id, tabId: widgetTabId(message.id, slot),
-    widget: { messageId: message.id, data: widget.data ?? {}, senderId: message.sender_user_id } }), [message.id, message.chat_id, message.sender_user_id, widget.data, slot])
+  const inTimeline = useContext(SentMessageSurface)
+  const target = useMemo(() => ({ workspace: null, conversation: message.chat_id, tabId: widgetTabId(message.id, inTimeline),
+    widget: { messageId: message.id, data: widget.data ?? {}, senderId: message.sender_user_id } }), [message.id, message.chat_id, message.sender_user_id, widget.data, inTimeline])
   const kind = `${widget.app}.${widget.view}`
   return <div className="w-[420px] max-w-full min-w-0" data-widget-bubble={message.id}>
     <div ref={ref} className="flex w-full min-w-0 overflow-hidden rounded-md" style={{ height }}>

@@ -65,7 +65,7 @@ function InlineImage({ meta, messageId, chatId, isMine }: { meta: ParsedAttachme
   const { t } = useTranslation('messaging')
   // Observed in either state: a sending row is drawn from its local preview without ever being pending.
   const box = useRef<HTMLElement>(null)
-  const onMount = useContext(SentMessageSurface) !== null
+  const onMount = useContext(SentMessageSurface)
   const near = useNearViewport(box, !onMount) || onMount
   const view = useAttachmentObjectUrl(meta.source, 'thumb', near, meta.fileMetadata)
   const img = useRef<HTMLImageElement>(null)
