@@ -7,13 +7,16 @@ describe('vendor mirror pin inventory', () => {
   it('lists every pinned platform with immutable own-storage URLs and original SHA pins', () => {
     const { artifacts } = vendorReleaseManifest()
     expect(JSON.parse(readFileSync(resolve(__dirname, '../../../scripts/build/vendor-assets.json'), 'utf8'))).toEqual(vendorReleaseManifest())
-    expect(artifacts).toHaveLength(25)
-    expect(new Set(artifacts.map(item => item.key)).size).toBe(25)
+    expect(artifacts).toHaveLength(26)
+    expect(new Set(artifacts.map(item => item.key)).size).toBe(26)
     for (const item of artifacts) {
       expect(item.sha256).toMatch(/^[a-f0-9]{64}$/)
       expect(item.url).toBe(`https://download.gugu.nextmind.space/${item.key.split('/').map(encodeURIComponent).join('/')}`)
       expect(item.repository).toMatch(/^[\w-]+\/[\w-]+$/)
     }
+    const gradle = artifacts[25]
+    expect(gradle.sha256).toBe('ed1a8d686605fd7c23bdf62c7fc7add1c5b23b2bbc3721e661934ef4a4911d7c')
+    expect(gradle.url).toBe('https://download.gugu.nextmind.space/releases/vendor/gradle/8.14.3/gradle-8.14.3-all.zip')
     const libc = artifacts.find(item => item.key.includes('/libc++/'))!
     expect(libc.url).toContain('/libc%2B%2B/30/')
     expect(libc.size).toBe(341604)

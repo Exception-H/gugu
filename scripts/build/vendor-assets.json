@@ -325,6 +325,19 @@
       "asset": "frp_0.71.1_windows_arm64.zip",
       "key": "releases/vendor/frp/v0.71.1/frp_0.71.1_windows_arm64.zip",
       "url": "https://download.gugu.nextmind.space/releases/vendor/frp/v0.71.1/frp_0.71.1_windows_arm64.zip"
+    },
+    {
+      "component": "gradle",
+      "version": "8.14.3",
+      "platform": "universal",
+      "file": "gradle-8.14.3-all.zip",
+      "sha256": "ed1a8d686605fd7c23bdf62c7fc7add1c5b23b2bbc3721e661934ef4a4911d7c",
+      "size": null,
+      "repository": "gradle/gradle-distributions",
+      "tag": "v8.14.3",
+      "asset": "gradle-8.14.3-all.zip",
+      "key": "releases/vendor/gradle/8.14.3/gradle-8.14.3-all.zip",
+      "url": "https://download.gugu.nextmind.space/releases/vendor/gradle/8.14.3/gradle-8.14.3-all.zip"
     }
   ]
 }

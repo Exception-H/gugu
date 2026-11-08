@@ -38,6 +38,11 @@ export function vendorReleaseManifest() {
       add(component, `v${pin.version}`, platform, archive.asset, archive.sha256, null, repository, `v${pin.version}`)
     }
   }
+  const wrapper = readFileSync(resolve(root, 'apps/mobile/android/gradle/wrapper/gradle-wrapper.properties'), 'utf8')
+  const gradleVersion = /gradle-([0-9.]+)-all\.zip/.exec(wrapper)?.[1]
+  const gradleSha = /^distributionSha256Sum=([a-f0-9]{64})$/m.exec(wrapper)?.[1]
+  if (!gradleVersion || !gradleSha) throw new Error('Cannot read the pinned Gradle distribution')
+  add('gradle', gradleVersion, 'universal', `gradle-${gradleVersion}-all.zip`, gradleSha, null, 'gradle/gradle-distributions', `v${gradleVersion}`)
   if (new Set(artifacts.map(item => item.key)).size !== artifacts.length) throw new Error('Duplicate vendor key')
   return { schema: 1, artifacts }
 }
