@@ -62,6 +62,12 @@ export function listExtensionData(root: string, relative: string): { path: strin
   }));
 }
 
+/** How much the App keeps in its folder, in bytes; a folder it never made is none. */
+export function extensionDataBytes(root: string): number {
+  if (!fs.existsSync(root)) return 0;
+  return fs.readdirSync(root, { recursive: true, withFileTypes: true }).reduce((total, entry) => (entry.isFile() ? total + fs.statSync(path.join(entry.parentPath, entry.name)).size : total), 0);
+}
+
 export function removeExtensionData(root: string): void {
   fs.rmSync(root, { recursive: true, force: true });
 }

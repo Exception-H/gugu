@@ -47,6 +47,8 @@ export interface ExtensionTabContributionEntry {
   forFiles: boolean;
   /** It stands alone as a page (`isOwnPage`): not a file opener, not the App's card in a message. */
   ownPage: boolean;
+  /** The person took this page out of the menus (`hiddenTabs`): nothing offers it, though a file or an agent can still open it. */
+  hidden: boolean;
   /** One page in each task (`perSession`): each task keeps its own, so it is never moved from one task to another. */
   perSession: boolean;
 }
@@ -81,6 +83,8 @@ export class InstalledExtensionsStore {
   appIcons: Record<string, string> = {};
   /** The Apps pinned to the far-left rail, in order (this machine's dock). */
   dock: string[] = [];
+  /** The pages the person took out of the menus, by App (this machine's). */
+  hiddenTabs: Record<string, string[]> = {};
   /** Ids the user has switched off — installed, listed, but not offered (#5265). */
   disabled: string[] = [];
   /** Market Apps not updated by themselves (owner 10-19): switched off, or an older version picked. Main's, mirrored. */
@@ -156,6 +160,7 @@ export class InstalledExtensionsStore {
         preinstalled: this.isPreinstalled(manifest.id),
         forFiles: declaredContexts(tab).length > 0,
         ownPage: isOwnPage(manifest, tab),
+        hidden: this.hiddenTabs[manifest.id]?.includes(tab.name) === true,
         perSession: tab.perSession === true,
       }));
     });
@@ -169,7 +174,7 @@ export class InstalledExtensionsStore {
    * 「App」page's.
    */
   get enabledTabContributions(): ExtensionTabContributionEntry[] {
-    return this.allTabContributions.filter((entry) => entry.enabled && entry.ownPage);
+    return this.allTabContributions.filter((entry) => entry.enabled && entry.ownPage && !entry.hidden);
   }
 
   /** Every enabled App's resident page, preinstalled ones included: what the resident layer keeps alive. */
@@ -217,8 +222,12 @@ export class InstalledExtensionsStore {
     const main = this.mainTabOf(extensionId);
     // A preinstalled App is where the host puts it (a chat's folder entry, a task's tabs, 「用 X 打开」), not an App of
     // the rail or a chat's App list besides — decided by origin, not manifest (统筹 09-29, L3).
-    if (!main || !main.enabled || main.preinstalled) return null;
+    if (!main || !main.enabled || main.preinstalled || main.hidden) return null;
     return { extensionId, name: main.extensionName, kind: main.kind, iconDataUrl: this.appIcons[extensionId] ?? null };
+  }
+
+  applyHiddenTabs(hiddenTabs: Record<string, string[]>): void {
+    this.hiddenTabs = hiddenTabs;
   }
 
   applyDock(dock: readonly string[]): void {
@@ -354,6 +363,7 @@ export class InstalledExtensionsStore {
       this.icons = icons ?? {};
       this.appIcons = appIcons ?? {};
       this.dock = dock ?? [];
+      this.hiddenTabs = list.hiddenTabs ?? {};
       this.disabled = disabled ?? [];
       this.autoUpdateOff = autoUpdateOff ?? [];
       this.quit = quit ?? [];

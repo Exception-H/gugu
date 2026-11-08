@@ -1,6 +1,7 @@
 import { getMainWindow } from '@main/app/window';
 import type { ChatFileRef } from '@shared/extensions/app-files-core';
 import * as fs from 'node:fs';
+import * as path from 'node:path';
 import { app } from 'electron';
 import {
   clearExtensionSessionData,
@@ -27,6 +28,8 @@ import {
 } from '@main/core/extensions/extensions-root';
 import type { ExtensionDisclosure } from '@main/core/extensions/extensions-service';
 import type { AppVariants } from '@shared/extensions/variants';
+import { extensionDataBytes, removeExtensionData } from '@main/core/extensions/extension-data';
+import { readExtensionSkills } from '../../../../extension-session-mcp';
 import { placeFor, placeLink } from '@shared/extensions/file-openers';
 import { removeUninstalledLeftovers } from '@main/core/extensions/extension-session-snapshot';
 import { extensionPrograms, extensionProgramStatus, retireExtensionPrograms, revokeExtensionPrograms, toolVisibleTo } from '@main/core/extensions/extension-programs';
@@ -171,6 +174,7 @@ export const extensionsController = createRPCController({
           // 「退出了、还没再打开」的(#7050):启用着,后台却没在跑。
           quit: quitExtensions(),
           dock: extensionsService().dock(),
+          hiddenTabs: extensionsService().hiddenTabs(),
           disclosure: disclosureOf(extensions.map((entry) => entry.manifest)),
           // Where each came from (E-05): the session page keeps the preinstalled ones out of every session's tabs, and a
           // chat's card offers an update only of one that came from a chat — the only kind a package from chat may replace.
@@ -858,6 +862,56 @@ export const extensionsController = createRPCController({
    * placeholder in the renderer, which withdraws the providers); on needs
    * nothing here, the next activate hardens the session as usual.
    */
+  /** Takes one of an App's pages out of the menus, or puts it back (`hiddenTabs`). */
+  setTabHidden: async (args: { extensionId: string; tab: string; hidden: boolean }) => {
+    try {
+      return { success: true as const, data: extensionsService().setTabHidden(args.extensionId, args.tab, args.hidden) };
+    } catch (error) {
+      log.error('Failed to change a hidden tab:', error);
+      return { success: false as const, error: error instanceof Error ? error.message : String(error) };
+    }
+  },
+
+  /** What an App keeps on this device, in bytes: its data folder. */
+  appData: async (args: { extensionId: string }) => {
+    try {
+      extensionsService().get(args.extensionId);
+      return { success: true as const, data: { bytes: extensionDataBytes(extensionDataRoot(args.extensionId)) } };
+    } catch (error) {
+      return { success: false as const, error: error instanceof Error ? error.message : String(error) };
+    }
+  },
+
+  /**
+   * Empties what an App keeps on this device, its settings aside. It stops first (as uninstalling does, it must not write while
+   * this runs) and starts again when it is next opened or called.
+   */
+  clearAppData: async (args: { extensionId: string }) => {
+    try {
+      const installed = extensionsService().get(args.extensionId);
+      quitExtension(installed.manifest.id);
+      events.emit(extensionsQuitChangedChannel, { quit: quitExtensions() });
+      await retireExtensionPrograms(args.extensionId);
+      await clearExtensionSessionData(args.extensionId);
+      removeExtensionData(extensionDataRoot(args.extensionId));
+      return { success: true as const, data: { bytes: 0 } };
+    } catch (error) {
+      log.error('Failed to clear an App\'s data:', error);
+      return { success: false as const, error: error instanceof Error ? error.message : String(error) };
+    }
+  },
+
+  /** The names of the skills an App brings, as agents read them. */
+  agentSkills: async (args: { extensionId: string }) => {
+    try {
+      const { manifest, rootDir } = extensionsService().get(args.extensionId);
+      const skills = manifest.contributes.skills ? readExtensionSkills(manifest.id, path.join(rootDir, manifest.contributes.skills), () => {}) : [];
+      return { success: true as const, data: skills.map((skill) => skill.name) };
+    } catch (error) {
+      return { success: false as const, error: error instanceof Error ? error.message : String(error) };
+    }
+  },
+
   setEnabled: async (args: { extensionId: string; enabled: boolean }) => {
     try {
       const service = extensionsService();
