@@ -451,7 +451,6 @@ export default {
     "failedFileKind": { "image": "图片", "video": "视频", "audio": "音频", "file": "文件" },
     "fileSendFailed": "{{file}} 没发出去：{{guidance}}",
     "filesSendFailed": "{{count}} 个文件没发出去：{{guidance}}",
-    "showFailedFiles": "查看这 {{count}} 个未发出的文件",
     "failureReason": {
       "tooLarge": "文件太大，请缩小后重新发送",
       "signIn": "登录已失效，请重新登录后发送",

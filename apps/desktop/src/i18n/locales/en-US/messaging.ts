@@ -453,8 +453,6 @@ export default {
     "fileSendFailed": "{{file}} was not sent: {{guidance}}",
     "filesSendFailed_one": "{{count}} file was not sent: {{guidance}}",
     "filesSendFailed_other": "{{count}} files were not sent: {{guidance}}",
-    "showFailedFiles_one": "Show the {{count}} unsent file",
-    "showFailedFiles_other": "Show the {{count}} unsent files",
     "failureReason": {
       "tooLarge": "The file is too large. Reduce its size and send it again.",
       "signIn": "Your sign-in expired. Sign in and send it again.",

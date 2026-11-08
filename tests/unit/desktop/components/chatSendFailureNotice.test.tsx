@@ -22,15 +22,14 @@ describe('attachment failure notices', () => {
     expect(notice([new File(['data'], name, { type })])).toEqual({ tier: 'error', title: `${kind} ${name} 没发出去：发送未完成，请稍后重新发送` })
   })
 
-  it('groups a batch into one notice with all filenames behind a native expansion', () => {
+  it('groups a batch into one notice that lists every filename from the start', () => {
     setLocalePreference('zh-CN')
     const files = ['first.txt', 'second.txt', 'third.txt'].map(name => new File(['data'], name))
     const result = notice(files)
     expect(result.title).toBe('3 个文件没发出去：发送未完成，请稍后重新发送')
     const description = document.createElement('div')
     description.innerHTML = renderToStaticMarkup(<>{result.description}</>)
-    expect(description.querySelector('details')?.open).toBe(false)
-    expect(description.querySelector('summary')?.textContent).toBe('查看这 3 个未发出的文件')
+    expect(description.querySelector('details'), 'a notice is measured once; an expander would spill out of the card').toBeNull()
     expect([...description.querySelectorAll('li')].map(item => item.textContent)).toEqual(files.map(file => `文件 ${file.name}`))
     expect(description.textContent).not.toMatch(/HTTP|private|secret|raw stack/)
   })
@@ -58,6 +57,6 @@ describe('attachment failure notices', () => {
     expect(notice([image]).title).toBe('Image IMG_123.png was not sent: The send did not finish. Try sending it again later.')
     const result = notice([image, new File(['data'], 'report.pdf')])
     expect(result.title).toBe('2 files were not sent: The send did not finish. Try sending it again later.')
-    expect(renderToStaticMarkup(<>{result.description}</>)).toContain('Show the 2 unsent files')
+    expect(renderToStaticMarkup(<>{result.description}</>)).toContain('File report.pdf')
   })
 })

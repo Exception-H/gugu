@@ -31,13 +31,12 @@ export function chatSendFailureNotice(files: File[], error: unknown, t: TFunctio
   return {
     tier: 'error',
     title: t('composer.filesSendFailed', { count: files.length, guidance }),
+    // @@@measured-once - sonner sizes a notice from its title and description when they change, so the list is
+    // shown from the start (scrolling inside its own cap); content that grows later would spill out of the card.
     description: (
-      <details>
-        <summary className="cursor-pointer">{t('composer.showFailedFiles', { count: files.length })}</summary>
-        <ul className="mt-1 max-h-40 overflow-y-auto break-all">
-          {files.map((file, index) => <li key={index}>{fileLabel(file, t)}</li>)}
-        </ul>
-      </details>
+      <ul className="max-h-40 overflow-y-auto break-all">
+        {files.map((file, index) => <li key={index}>{fileLabel(file, t)}</li>)}
+      </ul>
     ),
   }
 }
