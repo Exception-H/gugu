@@ -4,7 +4,6 @@ import { observer } from 'mobx-react-lite';
 import type { ReactNode } from 'react';
 import { ExtensionMark } from '@renderer/features/extensions/extension-mark';
 import { installedExtensionsStore } from '@renderer/features/extensions/installed-extensions-store';
-import { usePaneContext } from '@renderer/features/tabs/pane-context';
 import { useNavigate } from '@renderer/lib/layout/navigation-provider';
 import { Button } from '@renderer/lib/ui/button';
 import {
@@ -30,11 +29,10 @@ import { STATE_LAYERS } from '@renderer/lib/ui/state-layers';
  * ordering match the current task context rather than a single global menu.
  */
 export function PaneEmptyState() {
-  const { pane, paneId } = usePaneContext();
   const { paneLayout } = useWorkspaceViewModel();
   const entries = useSessionWorkspaceActions(
-    () => pane.open('browser', { intent: 'newTab' }),
-    (kind) => paneLayout.open(kind, {}, { from: null, intent: 'newTab', target: { paneId } })
+    () => paneLayout.openBeside('browser', {}),
+    (kind) => paneLayout.openBeside(kind, {})
   );
 
   return <WorkspacePanelActionList entries={entries} />;
@@ -68,7 +66,7 @@ export function useSessionWorkspaceActions(
       id: 'review',
       label: translate('workspace.review'),
       icon: <GitPullRequest className="size-3.5" />,
-      onClick: () => sessionView.paneLayout.open('review', {}, { from: null, intent: 'newTab' })
+      onClick: () => sessionView.paneLayout.openBeside('review', {})
     },
     terminal: {
       id: 'terminal',
@@ -86,7 +84,7 @@ export function useSessionWorkspaceActions(
       id: 'ports',
       label: translate('remotePorts.tool'),
       icon: <Cable className="size-3.5" />,
-      onClick: () => sessionView.paneLayout.open('remote-ports', {}, { from: null, intent: 'newTab' })
+      onClick: () => sessionView.paneLayout.openBeside('remote-ports', {})
     }
   };
 

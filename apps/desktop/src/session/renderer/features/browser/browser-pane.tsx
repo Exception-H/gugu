@@ -46,11 +46,11 @@ export const BrowserPane = observer(function BrowserPane({
   /** 并排时屏上两页,只有拿着焦点的那页算(spec session-page「并排」)。 */
   focused?: boolean;
 }) {
-  const { pane, paneId } = usePaneContext();
+  const { pane } = usePaneContext();
   const surface = useWorkspaceSurface();
   const startPageActions = useSessionWorkspaceActions(
-    () => pane.open('browser', { intent: 'newTab' }),
-    (kind) => surface.paneLayout.open(kind, {}, { from: null, intent: 'newTab', target: { paneId } })
+    () => surface.paneLayout.openBeside('browser', {}),
+    (kind) => surface.paneLayout.openBeside(kind, {})
   );
   return (
     <BrowserPaneContent

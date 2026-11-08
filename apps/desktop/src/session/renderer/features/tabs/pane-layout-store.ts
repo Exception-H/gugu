@@ -592,17 +592,29 @@ export class PaneLayoutStore<R extends TabRegistry = TabRegistry> {
     if (state !== null) return this._openFrom(kind, state, config);
   }
 
-  private _resourceId(kind: string, state: unknown): string {
+  /**
+   * The person asks for a page (「+」, an empty pane, a command): beside the page in front, on the main side, so what they
+   * are reading stays. Already open = shown. A page or session that says separate = a tab in the strip. Paired: it takes
+   * the side, and closing it brings back what it replaced (`@@@displaced`).
+   */
+  openBeside<K extends KindOf<R>>(kind: K, args: OpenArgsOf<R, K>): string | undefined;
+  openBeside(kind: string, args: Record<string, unknown>): string | undefined;
+  openBeside(kind: string, args: Record<string, unknown>): string | undefined {
+    return this.open(kind, args, { from: this.mainGroup.pane.resolvedActiveTabId ?? null, intent: 'beside' });
+  }
+
+  private _placementId(kind: string, state: unknown): string {
     const place = this._ctx.place;
     const container = place?.kind === 'session' ? `session:${place.sessionId}` : place?.kind === 'chat' ? `chat:${place.chatId}` : this._ctx.viewId;
-    return `${container}\u0000${kind}\u0000${this._registry.get(kind).resourceKey(state as never)}`;
+    const provider = this._registry.get(kind);
+    return `${container}\u0000${kind}\u0000${provider.placementKey?.(state as never) ?? provider.resourceKey(state as never)}`;
   }
 
   private _rememberPlacement(entry: TabEntry, placement: 'separate' | 'beside'): void {
     const pages = [...(entry.history?.pages ?? []), { kind: entry.kind, state: entry.state }];
     for (const page of pages) {
       if (!this._registry.has(page.kind) || this._registry.get(page.kind).conversation) continue;
-      this._placementMemory.write(this._resourceId(page.kind, page.state), placement);
+      this._placementMemory.write(this._placementId(page.kind, page.state), placement);
     }
   }
 
@@ -623,7 +635,7 @@ export class PaneLayoutStore<R extends TabRegistry = TabRegistry> {
     const conversation = from && this._registry.has(from.kind) && this._registry.get(from.kind).conversation === true;
     // How this page was last shown (owner 11-03: separate stays separate, beside stays beside). `inPlace`: a way into this
     // tab's own place, which beside would take the conversation out of the pair for.
-    const shownBefore = intent !== 'newTab' ? this._placementMemory.read(this._resourceId(kind, state)) : undefined;
+    const shownBefore = intent !== 'newTab' ? this._placementMemory.read(this._placementId(kind, state)) : undefined;
     const remembered = config.inPlace && shownBefore === 'beside' ? undefined : shownBefore;
     // Already open = that tab is shown (spec 「同一页已经开着」, owner 10-24: one resource, one tab); an explicit new tab
     // is a context of its own.
@@ -633,7 +645,9 @@ export class PaneLayoutStore<R extends TabRegistry = TabRegistry> {
 
     // A page this tab already went through is the tab's own (a file's 阅读 and 编辑): where it was last shown does not move it.
     const own = from && source!.pane.navigationOf(from.tabId)!.pages.some((page) => page.kind === kind && this._registry.get(kind).resourceKey(page.state as never) === key);
-    if (intent === 'navigate' && from && !conversation && (own || !remembered) && (!open || open === from)) {
+    // A placement shared by the kind says where a new tab lands, not where this page was: a link inside a page still goes in place.
+    const pageRemembered = this._registry.get(kind).placementKey ? undefined : remembered;
+    if (intent === 'navigate' && from && !conversation && (own || !pageRemembered) && (!open || open === from)) {
       source!.pane.navigate(from.tabId, kind, state, config.viewState);
       if (activate) {
         if (this.groups.includes(source as Pane<R>)) this.activePaneId = source!.paneId;
