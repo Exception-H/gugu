@@ -134,7 +134,7 @@ describe('App 设置页', () => {
     expect(phone).toContain('extensions.permissionsNoteInstall');
   });
 
-  it('data: its size and a clear button; nothing to clear greys it', async () => {
+  it('data: its size and a clear button; nothing counted says so, and can still be cleared: not all an App keeps is counted', async () => {
     const onClearData = vi.fn();
     await render({ onClearData }, async (document) => {
       expect(document.querySelector('[data-testid="app-manage-data"]')?.textContent).toContain('2 KB');
@@ -143,7 +143,8 @@ describe('App 设置页', () => {
     expect(onClearData).toHaveBeenCalledOnce();
     api.appData.mockResolvedValueOnce({ success: true, data: { bytes: 0 } });
     await render({ onClearData }, async (document) => {
-      expect(document.querySelector<HTMLButtonElement>('[data-testid="app-manage-data-clear"]')?.disabled).toBe(true);
+      expect(document.querySelector('[data-testid="app-manage-data"]')?.textContent).toContain('extensions.manageDataNone');
+      expect(document.querySelector<HTMLButtonElement>('[data-testid="app-manage-data-clear"]')?.disabled).toBe(false);
     });
   });
 

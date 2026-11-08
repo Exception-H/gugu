@@ -198,6 +198,19 @@ describe('「App」 on the phone: an App’s settings page', () => {
     expect(phone.setEnabled).toHaveBeenLastCalledWith('notes', true)
   })
 
+  it('one gugu ships has no switch and no uninstall: its link opens the page, and pressing nothing can only fail', async () => {
+    const origins = (store as unknown as { origins: Record<string, string> }).origins
+    origins.vote = 'preinstalled'
+    try {
+      await harness.render(createElement(PhoneAppManage, { extensionId: 'vote', gone: false, onClose: () => undefined, onViewInMarket: () => undefined }))
+      await until('its settings page', () => page('[data-testid="app-manage-page"]') !== null)
+      expect(page('[data-testid="app-manage-switch"]')).toBeNull()
+      expect(page('[data-testid="app-manage-uninstall"]')).toBeNull()
+    } finally {
+      delete origins.vote
+    }
+  })
+
   it('it has no agents or per-permission take-back on the phone', async () => {
     await harness.render(createElement(Apps))
     await marketAnswered(1)

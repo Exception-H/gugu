@@ -98,6 +98,11 @@ function entryForTab(manifest: ExtensionManifest, tabKind: string | undefined): 
   return entry;
 }
 
+/** An App gugu ships is where gugu puts it, and other Apps and every task lean on it: nobody manages it from outside. */
+function refuseBuiltIn(extensionId: string): void {
+  if (extensionsService().origins()[extensionId] === 'preinstalled') throw new Error(`"${extensionId}" comes with gugu; it is not changed from here`);
+}
+
 /** For each extension that gives agents tools: whether new sessions list them up front. */
 function disclosureOf(manifests: readonly ExtensionManifest[]) {
   return Object.fromEntries(
@@ -818,6 +823,7 @@ export const extensionsController = createRPCController({
   }) => {
     try {
       const service = extensionsService();
+      refuseBuiltIn(args.extensionId);
       service.setPermissionGranted(args.extensionId, args.permission, args.granted);
       const installed = service.get(args.extensionId);
       if ((!args.granted && args.permission === 'agents:tools') || (
@@ -893,7 +899,7 @@ export const extensionsController = createRPCController({
     try {
       const service = extensionsService();
       const installed = service.get(args.extensionId);
-      if (service.origins()[args.extensionId] === 'preinstalled') throw new Error(`"${args.extensionId}" comes with gugu; its data is not cleared from here`);
+      refuseBuiltIn(args.extensionId);
       quitExtension(installed.manifest.id);
       events.emit(extensionsQuitChangedChannel, { quit: quitExtensions() });
       await retireExtensionPrograms(args.extensionId);
@@ -977,6 +983,7 @@ export const extensionsController = createRPCController({
   /** Whether new sessions list this extension's agent tools up front; sessions already open keep theirs. */
   setDisclosure: async (args: { extensionId: string; level: ExtensionDisclosure }) => {
     try {
+      refuseBuiltIn(args.extensionId);
       extensionsService().setDisclosure(args.extensionId, args.level);
       return { success: true, data: { level: extensionsService().disclosure(args.extensionId) } };
     } catch (error) {

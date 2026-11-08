@@ -385,7 +385,7 @@ export function AppManagePage({
     sections.push({ id: 'data', label: translate('extensions.manageData'), body: (
       <Row title={translate('extensions.manageDataRow')} note={translate('extensions.manageDataNote')} testId="app-manage-data">
         <span className="mg-value">{dataBytes.status === 'ready' ? (dataBytes.data === 0 ? translate('extensions.manageDataNone') : formatSize(dataBytes.data)) : dataBytes.status === 'error' ? translate('extensions.manageDataUnreadable') : ''}</span>
-        <Button type="button" variant="outline" size="sm" disabled={readOnly || dataBytes.status !== 'ready' || dataBytes.data === 0} onClick={onClearData} data-testid="app-manage-data-clear">{translate('extensions.manageDataClear')}</Button>
+        <Button type="button" variant="outline" size="sm" disabled={readOnly} onClick={onClearData} data-testid="app-manage-data-clear">{translate('extensions.manageDataClear')}</Button>
       </Row>
     ) });
   }

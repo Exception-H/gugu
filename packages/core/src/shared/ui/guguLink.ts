@@ -252,7 +252,6 @@ export type AgentSessionTarget = { kind: 'session'; agentId: string; deviceId?: 
 /** What a click may open: any link target, or an agent's session named by the agent. */
 export type OpenTarget = GuguLinkTarget | AgentSessionTarget
 
-/** One reader for stored references and OS links. Only external invocation binds a link to a build's scheme. */
 /**
  * A gugu URL read the same in every browser. Before Chromium 130 a custom scheme's URL has no host (`hostname` is empty and the
  * authority stays in `pathname`), so every gugu://ext link read as no link at all on those phones. The authority is taken from
@@ -276,6 +275,7 @@ export function readGuguUrl(raw: string): { url: URL; host: string; port: string
   } catch { return null }
 }
 
+/** One reader for stored references and OS links. Only external invocation binds a link to a build's scheme. */
 export function parseGuguLink(raw: string, options: { supabaseUrl?: string } = {}): GuguLinkTarget | null {
   const chat = parseConversationLink(raw)
   if (chat) return { kind: 'chat', ...chat }
