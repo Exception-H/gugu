@@ -88,7 +88,8 @@ export const EXTENSION_TOOL_CONFINEMENT_API_VERSION = 29;
 // 31: `gugu.cloud` (app-cloud-core.ts), an App's own part of the cloud, and `gugu.pickAgent`, the person's pick of one of their agents.
 // 32: a person's `getContext().operator` carries their own `guguNumber`.
 // 34: `contributes.prompts` (the App's prompts in the composer's `/` menu) and `gugu.prompts`, the person's own prompts (`prompts`).
-export const EXTENSION_API_VERSION = 34;
+// 35: `contributes.settingsTab`, the App's own tab its settings page links to.
+export const EXTENSION_API_VERSION = 35;
 
 /**
  * The page `app_check` runs is started with this argument (摩擦单 F5, F69): it says how often it wrote, set presence and
