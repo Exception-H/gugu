@@ -129,7 +129,18 @@ export function createFileSaver(providers: FileProviders): NonNullable<FileProvi
       context.signal?.throwIfAborted()
       return hash.digest('hex') === revision.sha256
     }
-    if (await holds(path)) return saved
+    // A file that does not hold this sha may be someone's work: it moves aside, it is never deleted.
+    const moveAside = async (file: string) => {
+      const aside = join(directory, '.changed', randomUUID())
+      await mkdir(aside, { recursive: true, mode: 0o700 })
+      const moved = await rename(file, join(aside, basename(file))).then(() => true, error => { if (error.code === 'ENOENT') return false; throw error })
+      if (moved) storeLog.warn({ sha256: revision.sha256, name: basename(file), aside }, 'stored file no longer holds its sha: moved aside')
+      else await rmdir(aside)
+    }
+    if (await holds(path)) {
+      if (store) await chmod(path, STORED_FILE_MODE)
+      return saved
+    }
     if (store && revision.sha256) {
       // Under this sha, every name that no longer holds it (someone cleared the flag and edited it; hard-linked names change
       // together) is moved aside, not deleted: it may be an agent's work. One that still holds it gives this name its bytes.
@@ -138,13 +149,17 @@ export function createFileSaver(providers: FileProviders): NonNullable<FileProvi
         const same = join(target, name)
         if (name.endsWith('.part')) continue
         if (await holds(same)) { good ??= same; continue }
-        const aside = join(directory, '.changed', randomUUID())
-        await mkdir(aside, { recursive: true, mode: 0o700 })
-        await rename(same, join(aside, name)).catch(error => { if (error.code !== 'ENOENT') throw error })
-        storeLog.warn({ sha256: revision.sha256, name, aside }, 'stored file no longer holds its sha: moved aside')
+        // Only the name being handed out has to move now. Another that is open and locked (Windows) waits for its own hand-out.
+        await moveAside(same).catch(error => {
+          if (same === path) throw error
+          storeLog.warn({ sha256: revision.sha256, name, code: error.code }, 'stored file no longer holds its sha: could not move it aside')
+        })
       }
       // A filesystem without hard links (exFAT, some network drives) stores this name as its own copy, below.
-      if (good && await link(await requireAgentFileAccess(good), path).then(() => true, error => error.code === 'EEXIST')) return saved
+      if (good && await link(await requireAgentFileAccess(good), path).then(() => true, error => error.code === 'EEXIST')) {
+        await chmod(path, STORED_FILE_MODE)
+        return saved
+      }
     }
     await mkdir(target, { recursive: true, mode: 0o700 })
     // The store commits by a link from a private name: two agents saving one new file both succeed, where a rename onto the
@@ -158,8 +173,11 @@ export function createFileSaver(providers: FileProviders): NonNullable<FileProvi
         await chmod(written, STORED_FILE_MODE)
         const placed = () => link(written, path).then(() => true, error => error.code === 'EEXIST' ? holds(path) : null)
         let done = await placed()
-        if (done === false) { await rm(path, { force: true }); done = await placed() }
-        if (done === null) await rename(written, path).catch(async error => { if (!await holds(path)) throw error })
+        if (done === false) { await moveAside(path); done = await placed() }
+        if (done === null && !await holds(path)) {
+          await moveAside(path)
+          await rename(written, path).catch(async error => { if (!await holds(path)) throw error })
+        }
         else if (!done) throw new Error('The stored file changed while it was saved')
         // Windows clears the read-only flag on the file to delete a name of it, and the published name shares that file.
         await rm(written, { force: true })

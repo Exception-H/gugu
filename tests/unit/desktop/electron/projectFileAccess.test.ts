@@ -10,7 +10,7 @@ vi.mock('node:fs/promises', async importOriginal => {
 })
 import { chmod, mkdtemp, mkdir, readFile, readdir, rm, stat, symlink, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
-import { join } from 'node:path'
+import { dirname, join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { createFileResolver, type FileProviders, type FileRevision } from '../../../../packages/core/src/shared/fileResolver'
 import { ciphertextSize, createFileKey, transformFile } from '../../../../packages/core/src/shared/fileCipher'
@@ -99,7 +99,7 @@ describe('downloads consume one file without the random-read cache', () => {
     expect(x.ino).not.toBe(y.ino)
     expect([x.mode & 0o777, y.mode & 0o777]).toEqual([0o444, 0o444])
     expect(digest(await readFile(b.file_path))).toBe(revision.sha256)
-    expect(await readdir(join(home, 'file-store', revision.sha256!))).toEqual(['one.bin', 'two.bin'])
+    expect((await readdir(join(home, 'file-store', revision.sha256!))).sort()).toEqual(['one.bin', 'two.bin'])
   })
   it('where hard links are unavailable and another save got there first, the rename refused onto it is still a success', async () => {
     const { resolve } = remote()
@@ -114,7 +114,56 @@ describe('downloads consume one file without the random-read cache', () => {
     if (file.status !== 'ready') throw new Error(file.status)
     const saved = await saveToFileStore(file, home, 'report.bin')
     expect(digest(await readFile(saved.file_path))).toBe(revision.sha256)
+    expect((await stat(saved.file_path)).mode & 0o777).toBe(0o444)
     expect(await readdir(join(home, 'file-store', revision.sha256!))).toEqual(['report.bin'])
+  })
+  const savedTo = async (resolve: ReturnType<typeof remote>['resolve'], name: string) => {
+    const file = await resolve(ref, actor)
+    if (file.status !== 'ready') throw new Error(file.status)
+    return saveToFileStore(file, home, name)
+  }
+  const asideFiles = async () => {
+    const root = join(home, 'file-store', '.changed')
+    return Promise.all((await readdir(root)).map(async id => readFile(join(root, id, (await readdir(join(root, id)))[0]!))))
+  }
+  it.each([['a link', 'EEXIST'], ['a rename, without hard links', 'EPERM']])('a changed file that appears at the name while it saves is moved aside by %s', async (_, code) => {
+    const { resolve } = remote()
+    const edit = Buffer.alloc(bytes.length, 1)
+    fsHooks.link = async (_from, to) => {
+      if (code === 'EEXIST') delete fsHooks.link
+      await writeFile(to, edit)
+      throw Object.assign(new Error('link'), { code })
+    }
+    const saved = await savedTo(resolve, 'report.bin')
+    expect(digest(await readFile(saved.file_path))).toBe(revision.sha256)
+    expect((await stat(saved.file_path)).mode & 0o777).toBe(0o444)
+    const aside = await asideFiles()
+    expect(aside).toHaveLength(1)
+    expect(aside[0]!.equals(edit)).toBe(true)
+  })
+  it('a changed name that cannot move holds back only its own hand-out', async () => {
+    const { resolve } = remote()
+    const first = await savedTo(resolve, 'report.bin')
+    const locked = await savedTo(resolve, 'locked.bin')
+    await chmod(first.file_path, 0o644)
+    await writeFile(first.file_path, Buffer.alloc(bytes.length, 1))
+    fsHooks.rename = async (from, to) => {
+      if (from === locked.file_path) throw Object.assign(new Error('open elsewhere'), { code: 'EBUSY' })
+      return actualRename(from, to)
+    }
+    expect(digest(await readFile((await savedTo(resolve, 'report.bin')).file_path))).toBe(revision.sha256)
+    expect((await readdir(dirname(locked.file_path))).sort()).toEqual(['locked.bin', 'report.bin'])
+    await expect(savedTo(resolve, 'locked.bin')).rejects.toThrow('open elsewhere')
+  })
+  it('hands out a name read-only again when only its flag was cleared', async () => {
+    const { resolve } = remote()
+    const first = await savedTo(resolve, 'report.bin')
+    await chmod(first.file_path, 0o644)
+    expect((await stat((await savedTo(resolve, 'report.bin')).file_path)).mode & 0o777).toBe(0o444)
+    await chmod(first.file_path, 0o644)
+    const second = await savedTo(resolve, 'renamed.bin')
+    expect((await stat(second.file_path)).mode & 0o777).toBe(0o444)
+    expect((await stat(second.file_path)).ino).toBe((await stat(first.file_path)).ino)
   })
   it('writes one authenticated destination, reuses its verified digest, and leaves no remote-files chunks or snapshot', async () => {
     const { resolve, fetcher } = remote()
