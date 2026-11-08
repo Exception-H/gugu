@@ -77,14 +77,22 @@ export async function readCloudPrompts(client: SettingsTableClient, userId: stri
   return libraryOf(await readUserSettingsConfig(client, userId, SCOPE), warn);
 }
 
-/** Apply `edit` to the latest row. */
+/**
+ * Apply `edit` to the latest row. An override this client cannot read is written back as it was (a newer client's),
+ * only never used here.
+ */
 export async function editCloudPrompts(
   client: VersionedSettingsTableClient,
   userId: string,
   edit: (library: PromptLibrary) => PromptLibrary,
   warn: PromptWarn,
 ): Promise<PromptLibrary> {
-  const row = await updateUserSettingsConfig(client, userId, SCOPE, (config) => ({ ...config, ...libraryOf(edit(libraryOf(config, warn)), warn) }));
+  const row = await updateUserSettingsConfig(client, userId, SCOPE, (config) => {
+    const read = libraryOf(config, warn);
+    const unread = Object.entries(config.overrides ?? {}).filter(([key]) => !(key in read.overrides));
+    const next = libraryOf(edit(read), warn);
+    return { ...config, items: next.items, overrides: { ...Object.fromEntries(unread), ...next.overrides } };
+  });
   return libraryOf(row.config, warn);
 }
 

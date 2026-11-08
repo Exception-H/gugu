@@ -89,6 +89,8 @@ describe('a broken override is dropped alone', () => {
     expect(warned[0]).toContain('workspace/bad')
     const saved = await editCloudPrompts(table.client, 'u1', (all) => ({ ...all, items: [] }), () => {})
     expect(saved).toEqual({ items: [], overrides: { 'workspace/newer': { hidden: true, since: 'v9' } } })
+    // Editing another prompt writes the unreadable one back as it was: a newer client's override is not lost.
+    expect(table.row().config.overrides).toEqual({ 'workspace/bad': { title: 1 }, 'workspace/newer': { hidden: true, since: 'v9' } })
   })
 
   test('a hidden App prompt is only restored: editing it would make it 「已修改」', () => {
