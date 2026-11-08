@@ -268,8 +268,11 @@ export function parseGuguLink(raw: string, options: { supabaseUrl?: string } = {
       }
     } catch { /* An invalid database URL cannot name a login approval. */ }
   }
-  const scheme = url.protocol.slice(0, -1)
-  if (!/^gugu(?:-[a-z0-9-]+)?$/.test(scheme)) return null
+  const scheme = /^gugu(?:-[a-z0-9-]+)?:\/\//i.exec(raw)
+  if (!scheme) return null
+  // @@@non-special-url - Read as https: a WebView before Chromium 130 gives a custom scheme's URL no host, so `hostname` was
+  // empty and every gugu://ext link read as no link at all on those phones. Only the scheme differs from what was written.
+  try { url = new URL(`https://${raw.slice(scheme[0].length)}`) } catch { return null }
   if (url.hostname === 'app') {
     if (url.username || url.password || url.port || url.hash || !/^\/[^/]+$/.test(url.pathname)
       || [...url.searchParams.keys()].some((key) => !['device', 'variant'].includes(key) || url.searchParams.getAll(key).length !== 1)) return null
