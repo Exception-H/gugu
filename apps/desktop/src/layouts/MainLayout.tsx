@@ -514,9 +514,11 @@ function InnerLayout({
     const closeForFeedback = () => setSettingsModalOpen(false)
     window.addEventListener(UI_EVENTS.openSettings, open)
     window.addEventListener(UI_EVENTS.sessionpageOpenFeedback, closeForFeedback)
+    window.addEventListener(UI_EVENTS.closeSettings, closeForFeedback)
     return () => {
       window.removeEventListener(UI_EVENTS.openSettings, open)
       window.removeEventListener(UI_EVENTS.sessionpageOpenFeedback, closeForFeedback)
+      window.removeEventListener(UI_EVENTS.closeSettings, closeForFeedback)
     }
   }, [openSettingsSection])
 

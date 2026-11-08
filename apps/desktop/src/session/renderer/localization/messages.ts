@@ -9,6 +9,7 @@ import { enUSLegacyDmMessages, zhCNLegacyDmMessages } from './messages-legacy-dm
 import { enUSSessionScheduleMessages, zhCNSessionScheduleMessages } from './messages-session-schedules';
 import { enUSAgentStatusMessages, zhCNAgentStatusMessages } from './messages-agent-status';
 import { enUSAppSettingsMessages, zhCNAppSettingsMessages } from './messages-app-settings';
+import { enUSThemeMessages, zhCNThemeMessages } from './messages-themes';
 
 const enUSCoreMessages = {
   'taskError.connectionLost': 'The connection to the machine was lost. Try again when it reconnects.',
@@ -650,14 +651,6 @@ const enUSCoreMessages = {
   'chat.loading': 'Loading chat...',
   'chat.startingSession': 'Starting task...',
   'chat.startingSessionChecking': 'Checking the {engine} executable · since {since}',
-  'chat.lifeStageFailed': 'Could not start at {stage}',
-  'chat.lifeStage.identity': 'Identity',
-  'chat.lifeStage.workspace': 'Workspace',
-  'chat.lifeStage.capabilities': 'Tools',
-  'chat.lifeStage.platform': 'Model access',
-  'chat.lifeStage.cli': 'Agent CLI',
-  'chat.lifeStage.process': 'Agent process',
-  'chat.lifeStage.channel': 'Connecting',
   'chat.reloadPreserved': 'Reloaded — continued the same conversation',
   'chat.reloadReplaced': 'Reloaded — the agent started a fresh context; gugu keeps the history',
   'chat.opencodePreparing': 'Preparing OpenCode (the first run may take longer)...',
@@ -842,7 +835,7 @@ const enUSCoreMessages = {
   'transcript.activitySending': "Sending to {names}",
   'transcript.activityGroupSent': "Sent {count} messages in {names}",
   'transcript.activityExchanged': "Exchanged {count} messages with {names}",
-  'transcript.activityReplyToYou': "Replied to you in {name}: {text}",
+  'transcript.activityReplyToYou': "Replied to you in {name}",
   'transcript.activityExpand': "Show activity: {summary}",
   'transcript.activityCollapse': "Hide activity: {summary}",
 
@@ -1721,14 +1714,6 @@ const zhCNCoreMessages: Record<CoreSessionMessageKey, string> = {
   'chat.loading': '正在加载对话...',
   'chat.startingSession': '正在启动任务...',
   'chat.startingSessionChecking': '正在检查 {engine} 可执行文件 · 从 {since} 开始',
-  'chat.lifeStageFailed': '在「{stage}」这一步没能启动',
-  'chat.lifeStage.identity': '身份',
-  'chat.lifeStage.workspace': '工作区',
-  'chat.lifeStage.capabilities': '工具',
-  'chat.lifeStage.platform': '模型授权',
-  'chat.lifeStage.cli': '命令行',
-  'chat.lifeStage.process': '进程',
-  'chat.lifeStage.channel': '连接',
   'chat.reloadPreserved': '已重新加载，接着原来的对话',
   'chat.reloadReplaced': '已重新加载，agent 开了新的上下文，咕咕这边的历史都在',
   'chat.opencodePreparing': '正在准备 OpenCode（首次较慢）...',
@@ -1907,7 +1892,7 @@ const zhCNCoreMessages: Record<CoreSessionMessageKey, string> = {
   'transcript.activitySending': "正在给 {names} 发消息",
   'transcript.activityGroupSent': "在 {names} 发了 {count} 条消息",
   'transcript.activityExchanged': "与 {names} 往来 {count} 条消息",
-  'transcript.activityReplyToYou': "在 {name} 回了你：{text}",
+  'transcript.activityReplyToYou': "在 {name} 里回复了你",
   'transcript.activityExpand': "展开往来记录：{summary}",
   'transcript.activityCollapse': "收起往来记录：{summary}",
 
@@ -2196,6 +2181,7 @@ export const enUSMessages = {
   ...enUSAgentStatusMessages,
   ...enUSAppSettingsMessages,
   ...enUSSessionScheduleMessages,
+  ...enUSThemeMessages,
 } as const;
 
 export type SessionMessageKey = keyof typeof enUSMessages;
@@ -2219,4 +2205,5 @@ export const zhCNMessages: Record<SessionMessageKey, string> = {
   ...zhCNAgentStatusMessages,
   ...zhCNAppSettingsMessages,
   ...zhCNSessionScheduleMessages,
+  ...zhCNThemeMessages,
 };

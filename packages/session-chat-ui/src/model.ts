@@ -594,6 +594,8 @@ export type ToolRunItem = {
   live?: boolean;
   /** 跑着的这一段此刻在做什么(`toolRunNow`):在跑的命令或在思考;只在活动层、只在有的时候写。 */
   now?: ToolRunNow;
+  /** Folded only: the last step that handed back pictures, so its strip shows without opening the line. */
+  pictureStep?: ToolNode;
 };
 
 /**

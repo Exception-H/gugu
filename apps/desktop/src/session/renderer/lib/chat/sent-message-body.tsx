@@ -42,7 +42,7 @@ export function SentMessageBody({ message, commands, onSize }: {
     commands?.onOpenLink?.(meta.source.kind === 'item' ? `gugu-file://${meta.source.itemId}?v=${meta.source.version}` : sentAttachmentLink(message.id, message.chat_id || undefined));
   };
   return <div ref={box} data-sent-message-body-content={message.id} style={{ width: 'fit-content', maxWidth: '100%', minWidth: 0 }}>
-    <SentMessageSurface.Provider value><MessageBody message={shown} compact={false} isGroup={false} authorIsAgent senderName={commands?.conversationAgentName?.() ?? ''}
+    <SentMessageSurface.Provider value><MessageBody message={shown} compact={false} isGroup={false} senderName={commands?.conversationAgentName?.() ?? ''}
       time={null} onOpenFile={openFile} onOpenWorkspaceFile={link => commands?.onOpenFile?.({ path: link.path, itemId: message.id, source: 'prose-link', ...(link.at ? { at: link.at } : {}) })} /></SentMessageSurface.Provider>
   </div>;
 }

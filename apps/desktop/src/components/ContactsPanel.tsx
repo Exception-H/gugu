@@ -57,7 +57,7 @@ import { chatService } from '../lib/chat'
 import { persistableGroupRoster, replaceGroupRoster } from '../lib/imRepository'
 import { rendererLogger } from '../lib/log'
 import { closeIfMyAssistant } from '../lib/assistantClose'
-import { getGroupRoleLabel } from '@gugu/core/shared/enums/groupRoleModels'
+import { normalizeGroupRole } from '@gugu/core/shared/enums/groupRoleModels'
 import { AUTOMATION_TEST_IDS } from '../lib/automationDom'
 import type { GroupMemberItem } from '@gugu/core/shared/types/chat'
 import type { QrScanRoute } from '../lib/qrScanRoute'
@@ -860,7 +860,7 @@ function GroupChatDetailPane({
                     </div>
                     <div className="text-xs text-[var(--muted-fg)]">
                       {member.type === 'agent' ? 'Agent · ' : ''}
-                      {getGroupRoleLabel(member.role)}
+                      {ct(`profile.roles.${normalizeGroupRole(member.role)}`)}
                     </div>
                   </div>
                 </div>

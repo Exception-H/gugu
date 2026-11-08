@@ -1,4 +1,3 @@
-import { personalConversationPreview } from '@gugu/session-core/session-record/personal-conversation';
 import type { SessionCommandDefinition } from '@gugu/session-core/acp';
 import type { AcpPermissionParams } from '@gugu/session-core/agents/plugins';
 import { findToolImage, trimItemsForTransport, type ToolImageLookup } from '@gugu/session-core/session-record';
@@ -1130,17 +1129,10 @@ export class SessionManager implements InboundRouter {
   }
 
   async prompt(input: SendPromptInput): Promise<Result<{ queued: boolean }, AcpSendPromptError>> {
-    const record = this.cells.get(input.sessionId);
-    if (!record) return acpErr.sessionNotFound(input.sessionId);
-    if (record.closing) return acpErr.sessionBusy('Session is closing; resume it after teardown');
-    if (record.phase === 'lost') {
-      return acpErr.invalidState(
-        `Session '${input.sessionId}' lost its ACP adapter: ${record.loss.message}; reconnect before sending`
-      );
-    }
-    const dispatched = record.cell.promptDetached(input.prompt, input.steerIfBusy ? { steerIfBusy: true } : undefined);
-    void dispatched.completion.catch((error: unknown) => this.deps.logger.error('SessionManager: cycle completion failed', { sessionId: input.sessionId, error }));
-    return dispatched.admission;
+    const dispatched = this.promptDetached(input);
+    if (!dispatched.success) return dispatched;
+    void dispatched.data.completion.catch((error: unknown) => this.deps.logger.error('SessionManager: cycle completion failed', { sessionId: input.sessionId, error }));
+    return dispatched.data.admission;
   }
 
   /** Internal host path: resolve admission without waiting for the provider turn. */
@@ -1159,7 +1151,13 @@ export class SessionManager implements InboundRouter {
     const detached = record.cell.promptDetached(input.prompt, input.steerIfBusy ? { steerIfBusy: true } : undefined);
     return ok({
       admission: detached.admission,
-      completion: detached.completion,
+      completion: detached.completion.then(async result => {
+        if (!result.success && 'cause' in result.error && result.error.cause?.code === 'prompt_admission_timeout') {
+          // The abandoned native RPC still owns this transport. Retire it on every runtime entry.
+          await this.stop(input.sessionId);
+        }
+        return result;
+      }),
     });
   }
 
@@ -2624,13 +2622,13 @@ export class SessionManager implements InboundRouter {
   }
 
   private publishConversationActivity(record: SessionRecord, closed = false): void {
-    if (record.input.sourceSessionId || !this.deps.onConversationActivity) return;
+    if (record.input.sourceSessionId || !this.deps.conversationPreview) return;
     const turn = !closed && !record.replaying ? record.cell.transcript.activeTurn : null;
-    const preview = turn ? personalConversationPreview(turn) : null;
+    const preview = turn ? this.deps.conversationPreview.project(turn) : null;
     const value = JSON.stringify(preview);
     if ((this.conversationPreviews.get(record.cell) ?? 'null') === value) return;
     this.conversationPreviews.set(record.cell, value);
-    this.deps.onConversationActivity({ sessionId: record.input.sessionId, preview });
+    this.deps.conversationPreview.onChange({ sessionId: record.input.sessionId, preview });
   }
 
   private upsertSessionSummary(

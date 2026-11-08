@@ -39,7 +39,7 @@ export class NodeExecutionContext implements IExecutionContext {
     }
     return execFileAsync(launch.command, launch.args, {
       cwd: this.root || undefined,
-      env,
+      env: launch.env ?? env,
       timeout: opts.timeout,
       maxBuffer: opts.maxBuffer,
       signal: this.signal(opts.signal),

@@ -3,7 +3,7 @@ import type { AgentType } from '@gugu/core/agentTypes'
 import type { AgentStatusView } from '../agentStatus'
 import type { CloudComputerPresence, DeviceHostInfo } from './deviceHost'
 import type { DeviceProject } from './deviceProject'
-import type { AgentFailureReason } from '../agentQuotaReason'
+import type { SystemNotice } from '../ui/systemNotice'
 import type { FileMetadata } from '../fileResolver'
 export type { AgentType } from '@gugu/core/agentTypes'
 
@@ -65,8 +65,8 @@ export interface ChatItem {
   created_at: string
   last_message_at: string | null
   last_message_preview: string | null
-  /** The last message is an agent's failure row: the list says this reason in the viewer's language, not the preview. */
-  last_message_failure?: AgentFailureReason | null
+  /** The last message is a system row with a marker: the list says it in the viewer's language, not as stored. */
+  last_message_notice?: SystemNotice | null
   unread_count: number
   /** The server-owned stream/message locator for the first unread projection. */
   unread_locator?: ChatUnreadLocator | null

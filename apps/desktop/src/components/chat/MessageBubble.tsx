@@ -348,7 +348,7 @@ export const MessageBubble = memo(function MessageBubble({
               <span className="msg-time-room-inline" style={{ color: 'var(--muted-fg)', fontStyle: 'italic', '--msg-time-room': timeRoom } as React.CSSProperties}>{t('message.retracted')}</span>
             ) : (
               <div className={timeInline ? 'msg-time-room' : undefined} style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: '4px', '--msg-time-room': timeRoom } as React.CSSProperties}>
-                <MessageBody message={msg} compact={compactMobile} isGroup={isGroup} authorIsAgent={avatarIsAgent} senderName={avatarName} time={replyQuote ? <>{replyQuote}{fmtMsgTime(msg.created_at)}</> : fmtMsgTime(msg.created_at)} mention={mentionRender} memberProfiles={memberProfiles} onOpenTopic={onOpenTopic} onOpenFile={onOpenFile} />
+                <MessageBody message={msg} compact={compactMobile} isGroup={isGroup} senderName={avatarName} time={replyQuote ? <>{replyQuote}{fmtMsgTime(msg.created_at)}</> : fmtMsgTime(msg.created_at)} mention={mentionRender} memberProfiles={memberProfiles} onOpenTopic={onOpenTopic} onOpenFile={onOpenFile} />
               </div>
             )}
             {!card && (showTime || (!showSender && replyQuote)) && <BubbleTime iso={msg.created_at} isMine={msg.is_mine} inline={timeInline} replyMark={!showSender ? replyQuote : undefined} hideTime={!showTime} />}

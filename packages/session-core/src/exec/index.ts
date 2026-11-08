@@ -13,8 +13,9 @@ export {
   escapeCmdCommand,
   escapeCmdShimArgument,
   planDirectSpawn,
-  resolveWindowsHandoffExecutable,
+  resolveWindowsHandoffLaunch,
   type DirectSpawnPlan,
+  type WindowsHandoffLaunch,
   type WindowsHandoffOptions,
   type WindowsLauncherOverrides,
 } from './windows-launcher';
