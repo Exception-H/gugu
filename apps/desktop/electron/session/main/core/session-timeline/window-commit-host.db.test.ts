@@ -18,7 +18,9 @@ import type { WindowCommittedEvent } from './window-commit-tap';
 import { events as hostEvents } from '@main/lib/events';
 import { reserveWindowCommitHost as reserveProduction } from './window-commit-production';
 import { readPublishedCommitEntity } from './window-commit-publisher';
+import * as publishers from './window-commit-publisher';
 import { openCommitBodySlot, readCommitBodySlot } from './window-commit-slot';
+import { withStoredTurns } from '../sessions/session-turn-store';
 
 const state = vi.hoisted(() => ({ db: undefined as AppDb | undefined, sqlite: undefined as Database.Database | undefined, root: '' }));
 vi.mock('@main/db/client', () => ({ get db() { return state.db; }, get sqlite() { return state.sqlite; } }));
@@ -41,7 +43,7 @@ describe('the main-process commit host and actual canonical writer', () => {
   afterEach(async () => {
     // Close the test source even when a test only reserved a cold host.
     connected ??= await connectWindowCommitHost(stream(source()), () => {}, connection); connected.close(); connected = undefined; pair.disconnect();
-    fixture?.close(); state.db = undefined; state.sqlite = undefined; await rm(state.root, { recursive: true, force: true }); vi.clearAllMocks();
+    fixture?.close(); state.db = undefined; state.sqlite = undefined; await rm(state.root, { recursive: true, force: true }); vi.restoreAllMocks(); vi.clearAllMocks();
   });
 
   it('registers before worker availability, persists one real event and withholds delivery until projection completion', async () => {
@@ -70,6 +72,50 @@ describe('the main-process commit host and actual canonical writer', () => {
   it('rejects new handoff reservations without a durable producer rather than declaring a successful empty view', () => {
     expect(() => reserveWindowCommitHost('view', 'c', vi.fn())).toThrow(expect.objectContaining({ code: 'live_projection_unavailable' }));
     expect(fixture.sqlite.prepare('SELECT id FROM session_turns').all()).toEqual([]);
+  });
+
+  it('commits the next canonical row while projection is held, but publishes projections in order', async () => {
+    const actual = source(), gate = Promise.withResolvers<{ projectionId: string }>(), entered = Promise.withResolvers<void>();
+    const project = vi.fn(async (receipt: { referenceId: string }) => {
+      if (receipt.referenceId === 'one') { entered.resolve(); return gate.promise; }
+      return { projectionId: 'projection-two' };
+    });
+    bindWindowCommitProjection(project);
+    const failed = vi.fn(), owner = reserveWindowCommitHost('view', 'c', failed), after = await owner.prepare(); owner.authorize();
+    connected = await connectWindowCommitHost(stream(actual), () => {}, connection);
+    const seen = vi.fn(), reading = owner.read(after).then(page => { seen(page); return page; });
+    const emit = (referenceId: string) => actual.emit({ sessionId: 'c', source: 'live', turn: {
+      id: referenceId, seq: 0, referenceId, initiator: 'user', items: [], outcome: { kind: 'done' },
+    } });
+    try {
+      emit('one'); await entered.promise; emit('two');
+      await vi.waitFor(() => expect(fixture.sqlite.prepare('SELECT count(*) n FROM session_turns').get()).toEqual({ n: 2 }));
+      expect(await withStoredTurns('c', async () => createWindowCommitReceipts(fixture.sqlite).byReference('c', 'two')?.storedSeq)).toBe(1);
+      expect(project).toHaveBeenCalledTimes(1); expect(seen).not.toHaveBeenCalled();
+    } finally { gate.resolve({ projectionId: 'projection-one' }); await withStoredTurns('c', async () => {}); }
+    const first = await reading; expect(first.entries[0].referenceId).toBe('one'); owner.ack(first.next);
+    const second = await owner.read(first.next); expect(second.entries[0].referenceId).toBe('two'); owner.ack(second.next);
+    expect(project).toHaveBeenCalledTimes(2); expect(failed).not.toHaveBeenCalled(); owner.close();
+  });
+
+  it('fails instead of handing out a real publication whose receipt was deleted after the publisher returned', async () => {
+    const create = publishers.createWindowCommitPublisher;
+    vi.spyOn(publishers, 'createWindowCommitPublisher').mockImplementation((...args) => {
+      const publisher = create(...args);
+      return { async publish(...input) {
+        const result = await publisher.publish(...input);
+        queueMicrotask(() => fixture.sqlite.prepare('DELETE FROM session_turns WHERE id=?').run(input[0].rowId));
+        return result;
+      } };
+    });
+    const actual = source(), failed = vi.fn(), owner = reserveProduction('view', 'c', failed), after = await owner.prepare(); owner.authorize();
+    connected = await connectWindowCommitHost(stream(actual), () => {}, connection);
+    const reading = expect(owner.read(after)).rejects.toMatchObject({ code: 'live_commit_failed' });
+    actual.emit({ sessionId: 'c', source: 'live', turn: { id: 'deleted', seq: 0, referenceId: 'deleted-ref', initiator: 'user',
+      items: [{ kind: 'message', id: 'm', seq: 0, role: 'assistant', text: 'real durable projection' }], outcome: { kind: 'done' } } });
+    await reading; expect(failed).toHaveBeenCalledTimes(1);
+    expect(fixture.sqlite.prepare('SELECT count(*) n FROM session_turns').get()).toEqual({ n: 0 });
+    expect(fixture.sqlite.prepare('SELECT count(*) n FROM session_window_commit_receipts').get()).toEqual({ n: 0 });
   });
 
   it('delivers a cold complete turn through the real durable publisher, journal, body point read and ACK', async () => {
