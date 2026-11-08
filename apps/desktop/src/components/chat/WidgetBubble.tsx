@@ -12,7 +12,7 @@ import { installedExtensionsStore } from '../../session/renderer/features/extens
 import { isInstallRefused } from '../../session/shared/extensions/attachment-install'
 import { refusedLine } from '../extensionBundle/installedHere'
 import { ExtensionPage } from '../../session/renderer/features/extensions/extension-view-layer'
-import { useConversationVisibility } from './useConversationVisibility'
+import { useConversationVisibility, useStayedInView } from './useConversationVisibility'
 import { SentMessageSurface, widgetTabId } from './sentMessageSurface'
 import { useAuth } from '../../store/auth'
 import { messageForUser } from '../../lib/userFacingError'
@@ -40,12 +40,14 @@ export const WidgetBubble = observer(function WidgetBubble({ message }: { messag
 function WidgetView({ message, widget, height }: { message: Message; widget: WidgetMessage; height: number }) {
   const { ref, shown } = useConversationVisibility(true)
   const inTimeline = useContext(SentMessageSurface)
+  // A widget's page is a process of its own. In a timeline a row scrolled past must not start one: wait until it stays.
+  const stayed = useStayedInView(shown)
   const target = useMemo(() => ({ workspace: null, conversation: message.chat_id, tabId: widgetTabId(message.id, inTimeline),
     widget: { messageId: message.id, data: widget.data ?? {}, senderId: message.sender_user_id } }), [message.id, message.chat_id, message.sender_user_id, widget.data, inTimeline])
   const kind = `${widget.app}.${widget.view}`
   return <div className="w-[420px] max-w-full min-w-0" data-widget-bubble={message.id}>
     <div ref={ref} className="flex w-full min-w-0 overflow-hidden rounded-md" style={{ height }}>
-      {shown ? platform.kind === 'electron' ? <ExtensionPage extensionId={widget.app} kind={kind} inline={target} /> : <PhoneAppFrame
+      {shown && (stayed || !inTimeline) ? platform.kind === 'electron' ? <ExtensionPage extensionId={widget.app} kind={kind} inline={target} /> : <PhoneAppFrame
         kind={kind} tabId={target.tabId} chatId={message.chat_id} widget={target.widget}
         onOpenWith={detail => window.dispatchEvent(new CustomEvent(APP_OPEN_WITH_EVENT, { detail }))}
         testId="widget-frame" missingTestId="widget-frame-missing"

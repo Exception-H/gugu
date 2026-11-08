@@ -6,6 +6,7 @@ import { createReactHarness } from '../../../support/testHarness'
 import { SentMessageSurface, widgetTabId } from '../../../../apps/desktop/src/components/chat/sentMessageSurface'
 import { offerSentMessageSlot } from '../../../../apps/desktop/src/components/chat/sentMessageSlots'
 import { SentMessageBodyHost } from '../../../../apps/desktop/src/components/chat/SentMessageBodyHost'
+import { useStayedInView } from '../../../../apps/desktop/src/components/chat/useConversationVisibility'
 
 const open = vi.hoisted(() => ({ file: vi.fn(), draws: 0 }))
 vi.mock('@/components/chat/MessageBody', () => ({
@@ -20,12 +21,10 @@ vi.mock('@/components/chat/MessageBody', () => ({
 const message = { id: 'msg', chat_id: 'chat', content: 'said', content_type: 'text' } as MessageItem
 const root = () => document.body.appendChild(document.createElement('div'))
 let harness: ReturnType<typeof createReactHarness>
-let observed: (() => void)[]
-let rect: { width: number; height: number }
+let observed: ((entries: unknown[]) => void)[]
 beforeEach(() => {
-  observed = []; rect = { width: 120, height: 40 }
-  vi.stubGlobal('ResizeObserver', class { constructor(private report: () => void) {} observe() { observed.push(this.report) } disconnect() {} })
-  vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockImplementation(() => rect as DOMRect)
+  observed = []
+  vi.stubGlobal('ResizeObserver', class { constructor(private report: (entries: unknown[]) => void) {} observe() { observed.push(this.report) } disconnect() {} })
 })
 afterEach(() => { harness?.cleanup(); vi.unstubAllGlobals(); vi.restoreAllMocks(); document.body.replaceChildren() })
 const slotOf = (element: HTMLElement, onSize = vi.fn(), commands = {}) => ({ root: element, message, commands: () => commands, onSize })
@@ -78,13 +77,17 @@ it('reports the drawn size, and keeps the last one when a hidden page lays it ou
   const onSize = vi.fn(), element = root()
   let take!: () => void
   await act(async () => { take = offerSentMessageSlot(slotOf(element, onSize)) })
+  const report = (inlineSize: number, blockSize: number) => observed.at(-1)!([{ borderBoxSize: [{ inlineSize, blockSize }] }])
+  const rect = vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect')
+  report(120, 40)
   expect(onSize).toHaveBeenLastCalledWith({ width: 120, height: 40 })
-  rect = { width: 0, height: 0 }; onSize.mockClear()
-  observed.at(-1)!()
+  onSize.mockClear()
+  report(0, 0)
   expect(onSize).not.toHaveBeenCalled()
-  rect = { width: 90.2, height: 60.1 }
-  observed.at(-1)!()
+  report(90.2, 60.1)
   expect(onSize).toHaveBeenLastCalledWith({ width: 91, height: 61 })
+  // Reading its size must not force a layout on the scroll frame.
+  expect(rect).not.toHaveBeenCalled()
   await act(async () => take())
 })
 
@@ -96,4 +99,22 @@ it('opens a working-folder link in the task, the way the timeline opens it', asy
   open.file({ kind: 'workspace-file', path: 'src/a.ts' })
   expect(onOpenFile).toHaveBeenCalledWith({ path: 'src/a.ts', itemId: 'msg', source: 'prose-link' })
   await act(async () => take())
+})
+
+it('a widget in view starts its page only once it stays, so scrolling past starts none', async () => {
+  vi.useFakeTimers()
+  let stayed = false
+  function Probe({ shown }: { shown: boolean }) { stayed = useStayedInView(shown); return null }
+  harness = createReactHarness()
+  await harness.render(<Probe shown />)
+  expect(stayed).toBe(false)
+  await harness.render(<Probe shown={false} />)
+  await act(async () => { vi.advanceTimersByTime(1000) })
+  expect(stayed).toBe(false)
+  await harness.render(<Probe shown />)
+  await act(async () => { vi.advanceTimersByTime(180) })
+  expect(stayed).toBe(true)
+  await harness.render(<Probe shown={false} />)
+  expect(stayed).toBe(false)
+  vi.useRealTimers()
 })

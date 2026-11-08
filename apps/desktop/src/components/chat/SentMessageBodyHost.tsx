@@ -1,4 +1,4 @@
-import { memo, useSyncExternalStore } from 'react'
+import { memo, startTransition, useEffect, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { SentMessageBody } from '@/session/renderer/lib/chat/sent-message-body'
 import { sentMessageSlots, subscribeSentMessageSlots } from './sentMessageSlots'
@@ -11,6 +11,13 @@ const SlotBody = memo(SentMessageBody)
  * task page runs in a React root of its own, and MessageBody's file cards and reference tags read both. Mounted once.
  */
 export function SentMessageBodyHost() {
-  const current = useSyncExternalStore(subscribeSentMessageSlots, sentMessageSlots)
+  // Rows enter the virtual list inside its animation frame. Drawing their bodies there holds that scroll frame, so they
+  // draw just after it, interruptibly; the row has already reserved the slot's height.
+  const [current, setCurrent] = useState(sentMessageSlots)
+  useEffect(() => {
+    const update = () => startTransition(() => setCurrent(sentMessageSlots()))
+    update()
+    return subscribeSentMessageSlots(update)
+  }, [])
   return current.map(slot => createPortal(<SlotBody message={slot.message} commands={slot.commands()} onSize={slot.onSize} />, slot.root, slot.id))
 }

@@ -22,10 +22,12 @@ export function SentMessageBody({ message, commands, onSize }: {
     const element = box.current;
     if (!element) return;
     // A hidden page (another tab, the app in the background) lays this out at 0×0: that is not its size, keep the last one.
-    const report = () => { const rect = element.getBoundingClientRect(); if (rect.width > 0) sizeTo.current({ width: Math.ceil(rect.width), height: Math.ceil(rect.height) }); };
-    const observer = new ResizeObserver(report);
+    // The observer reports after layout and before paint, so reading its entry forces no layout of its own.
+    const observer = new ResizeObserver(([entry]) => {
+      const box = entry?.borderBoxSize[0];
+      if (box && box.inlineSize > 0) sizeTo.current({ width: Math.ceil(box.inlineSize), height: Math.ceil(box.blockSize) });
+    });
     observer.observe(element);
-    report();
     return () => observer.disconnect();
   }, []);
   const sessionId = commands?.conversationAgentSession?.() ?? null;
