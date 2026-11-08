@@ -35,6 +35,7 @@ export type IntegrationMoveDeps = {
     account: { accountId: string; displayName?: string; credentials: IntegrationCredentials }
   ): Promise<void>;
   setDefault(integrationId: string, accountId: string): Promise<boolean>;
+  deleteAccount(integrationId: string, accountId: string): Promise<void>;
   /** 只收 id 和错误类型名:底层错误文案可能夹带写入的参数,❌ 进日志。 */
   warn(message: string, context: { integrationId: string; accountId: string; errorName: string }): void;
 };
@@ -120,8 +121,8 @@ export async function importAccountsFromMove(
       ...(account.config ? { config: account.config } : {}),
       reason,
     });
-  const storedOf = async (account: MovableIntegrationAccount) =>
-    (await deps.listAccounts(account.integrationId)).accounts.find((a) => a.accountId === account.accountId)?.credentials;
+  const warnNotDone = (message: string, integrationId: string, accountId: string, cause: unknown) =>
+    deps.warn(message, { integrationId, accountId, errorName: cause instanceof Error ? cause.name : typeof cause });
   for (const account of incoming) {
     if (!deps.hasIntegration(account.integrationId)) {
       skip(account, 'unknown-integration');
@@ -131,10 +132,13 @@ export async function importAccountsFromMove(
       skip(account, 'cli');
       continue;
     }
+    // 这一条是这次才写进来的:读回不对就得收回去,否则留下一个坏的「已连接」账号,以后再搬一直判 exists。
+    let createdHere = false;
     try {
       // 新家已经连着同一个 id 的另一份凭据(人在两头各自连过同一家):不覆盖 —— 覆盖就把新家原来那个账号弄没了。
       // 同一份凭据 = 上一次搬到一半留下的,当作已经搬过(幂等)。
-      const present = await storedOf(account);
+      const before = await deps.listAccounts(account.integrationId);
+      const present = before.accounts.find((a) => a.accountId === account.accountId)?.credentials;
       if (present && !sameCredentials(present, account.credentials)) {
         skip(account, 'exists');
         continue;
@@ -144,24 +148,26 @@ export async function importAccountsFromMove(
         ...(account.displayName ? { displayName: account.displayName } : {}),
         credentials: account.credentials,
       });
+      createdHere = !present && !before.unreadable.includes(account.accountId);
       // 写完读回来对一遍:读不回来就不算带过去了。
-      const stored = await storedOf(account);
+      const stored = (await deps.listAccounts(account.integrationId)).accounts.find((a) => a.accountId === account.accountId)?.credentials;
       if (!stored || !sameCredentials(stored, account.credentials)) throw new Error('credential read-back mismatch');
       imported += 1;
       if (account.isDefault) defaults.set(account.integrationId, account.accountId);
     } catch (cause) {
-      deps.warn('Integration account not imported', {
-        integrationId: account.integrationId,
-        accountId: account.accountId,
-        errorName: cause instanceof Error ? cause.name : typeof cause,
-      });
+      warnNotDone('Integration account not imported', account.integrationId, account.accountId, cause);
+      if (createdHere) {
+        await deps.deleteAccount(account.integrationId, account.accountId).catch((failure: unknown) =>
+          warnNotDone('Integration account not cleaned up', account.integrationId, account.accountId, failure)
+        );
+      }
       skip(account, cause instanceof SecureStorageUnavailableError ? 'no-keyring' : 'import-failed');
     }
   }
   // 「谁是默认」放到最后一并落:账号表对「第一个写进去的当默认」,搬过来的次序不该决定它。账号已经在了,这一步没成不算没搬。
   for (const [integrationId, accountId] of defaults) {
     await deps.setDefault(integrationId, accountId).catch((cause: unknown) =>
-      deps.warn('Integration default account not set', { integrationId, accountId, errorName: cause instanceof Error ? cause.name : typeof cause })
+      warnNotDone('Integration default account not set', integrationId, accountId, cause)
     );
   }
   return { imported, skipped };

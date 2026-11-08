@@ -49,10 +49,7 @@ export function AssistantMoveDialog() {
   const { t } = useTranslation('assistant')
   const { phase, assistantName, env, language } = useSyncExternalStore(subscribeMove, getMoveState)
   if (phase.kind === 'idle') return null
-  const skipped = phase.kind === 'done' ? phase.report.accounts.skipped : []
-  // 「新家已有同名账号」不用重连:那边本来就连着。
-  const exists = skipped.filter((item) => item.reason === 'exists')
-  const reconnect = skipped.filter((item) => item.reason !== 'exists')
+  const reconnect = phase.kind === 'done' ? phase.report.accounts.skipped : []
   const go = (direction: MoveDirection, names: Map<string, string>) => {
     if (env) void startMove(env, direction, names, language)
   }
@@ -147,23 +144,20 @@ export function AssistantMoveDialog() {
                 {reconnect.some((item) => item.reason === 'no-keyring') ? (
                   <p data-testid="assistant-move-no-keyring">{t('move.doneReconnectNoKeyring')}</p>
                 ) : null}
+                {reconnect.some((item) => item.reason === 'exists') ? (
+                  <p data-testid="assistant-move-exists">{t('move.doneReconnectExists')}</p>
+                ) : null}
                 <p className="text-[var(--muted-fg)]">
                   {t(phase.direction === 'to-cloud' ? 'move.doneReconnectWhereCloud' : 'move.doneReconnectWhereComputer')}
                 </p>
                 <ReconnectList names={phase.names} items={reconnect} testId="assistant-move-done-reconnect-list" />
               </div>
             ) : null}
-            {exists.length > 0 ||
-            phase.report.skippedFiles.length > 0 ||
+            {phase.report.skippedFiles.length > 0 ||
             phase.report.schedules.skipped.length > 0 ? (
               <div>
                 <p>{t('move.doneNotMoved')}</p>
                 <ul className="ml-5 list-disc">
-                  {exists.map((item) => (
-                    <li key={`e-${item.integrationId}/${item.accountId ?? ''}`}>
-                      {t('move.doneNotMovedExists', { name: phase.names.get(item.integrationId) ?? item.integrationId })}
-                    </li>
-                  ))}
                   {phase.report.skippedFiles.map((item) => (
                     <li key={`f-${item.rel}`}>{t('move.doneNotMovedFile', { rel: item.rel })}</li>
                   ))}

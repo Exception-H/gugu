@@ -22,6 +22,9 @@ function machine(rows: Record<string, Row[]>, opts: { cli?: string[]; unreadable
     hasIntegration: (id) => (opts.known ?? [...store.keys(), 'github', 'notion', 'qq-mail', 'dingtalk', 'enterprise-mail']).includes(id),
     plainFields: (id) => opts.plain?.[id] ?? [],
     warn: (message, context) => warnings.push({ message, context }),
+    deleteAccount: async (id, accountId) => {
+      store.set(id, (store.get(id) ?? []).filter((row) => row.accountId !== accountId));
+    },
     listAccounts: async (id) => ({ accounts: store.get(id) ?? [], unreadable: opts.unreadable?.[id] ?? [] }),
     upsertAccount: async (id, account) => {
       const list = store.get(id) ?? [];
@@ -155,6 +158,38 @@ describe('存不进新家:逐条报回去手动重连,其余照常', () => {
     };
     const result = await importAccountsFromMove(lossy, [{ integrationId: 'notion', accountId: 'default', isDefault: true, credentials: { t: 'full-token' } }]);
     expect(result).toEqual({ imported: 0, skipped: [{ integrationId: 'notion', accountId: 'default', reason: 'import-failed' }] });
+    // 这条是这次才写的:不收回去就留下一个坏的「已连接」账号,以后再搬一直判 exists。
+    expect(target.store.get('notion')).toEqual([]);
+  });
+
+  it('读回不对、但这条之前就有且读得出来:不删(那是新家原来的账号)', async () => {
+    const target = machine({ notion: [{ accountId: 'default', isDefault: true, credentials: { t: 'same' } }] });
+    const lossy = { ...target.deps, upsertAccount: async (integrationId: string, account: { accountId: string; credentials: IntegrationCredentials }) =>
+      target.deps.upsertAccount(integrationId, { ...account, credentials: { t: 'trunc' } }) };
+    const result = await importAccountsFromMove(lossy, [{ integrationId: 'notion', accountId: 'default', isDefault: true, credentials: { t: 'same' } }]);
+    expect(result.skipped.map((s) => s.reason)).toEqual(['import-failed']);
+    expect(target.store.get('notion')).toHaveLength(1);
+  });
+
+  it('读回不对、这条之前读不出密钥:也不删,那一行不是这次造的', async () => {
+    const target = machine({ notion: [] }, { unreadable: { notion: ['default'] } });
+    const deleted: string[] = [];
+    const lossy = { ...target.deps, deleteAccount: async (_id: string, accountId: string) => { deleted.push(accountId); },
+      upsertAccount: async () => {} };
+    const result = await importAccountsFromMove(lossy, [{ integrationId: 'notion', accountId: 'default', isDefault: true, credentials: { t: 'x' } }]);
+    expect(result.skipped.map((s) => s.reason)).toEqual(['import-failed']);
+    expect(deleted).toEqual([]);
+  });
+
+  it('收回也失败:照样报回去,只记 id 和错误类型', async () => {
+    const target = machine({});
+    const lossy = { ...target.deps, deleteAccount: async () => { throw new Error('params SECRET'); },
+      upsertAccount: async (integrationId: string, account: { accountId: string; credentials: IntegrationCredentials }) =>
+        target.deps.upsertAccount(integrationId, { ...account, credentials: { t: 'trunc' } }) };
+    const result = await importAccountsFromMove(lossy, [{ integrationId: 'notion', accountId: 'default', isDefault: true, credentials: { t: 'SECRET' } }]);
+    expect(result.skipped.map((s) => s.reason)).toEqual(['import-failed']);
+    expect(target.warnings).toHaveLength(2);
+    expect(JSON.stringify(target.warnings)).not.toContain('SECRET');
   });
 
   it('新家没有钥匙串:每一条都标 no-keyring,带着不保密的配置,❌ 抛错让搬家失败', async () => {

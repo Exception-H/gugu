@@ -221,8 +221,9 @@ describe('点了先列清带走什么,确认才搬', () => {
     expect(mocks.runAssistantMove).toHaveBeenCalledWith(expect.objectContaining({ assistantId: 'agent-1' }), 'to-cloud', expect.any(Function))
     expect(document.body.querySelector('[data-testid="assistant-move-report"]')?.textContent).toContain('1 个账号已带过去')
     expect(document.body.querySelector('[data-testid="assistant-move-no-keyring"]')?.textContent).toContain('没有可用的系统钥匙串')
-    expect(document.body.textContent).toContain('新家已经连着另一个同名账号')
-    expect(document.body.querySelector('[data-testid="assistant-move-done-reconnect-list"]')?.textContent).not.toContain('github')
+    // 同名、凭据不同的那一份可能已经失效(OAuth 刷新 token 被另一头轮换):也要看得到、能去重连。
+    expect(document.body.querySelector('[data-testid="assistant-move-exists"]')?.textContent).toContain('没有覆盖')
+    expect(document.body.querySelector('[data-testid="assistant-move-done-reconnect-list"]')?.textContent).toContain('github')
     const done = document.body.querySelector('[data-testid="assistant-move-done-reconnect"]')?.textContent ?? ''
     expect(done).toContain('Notion · a@x.cn')
     expect(done).toContain('imap.x.cn')

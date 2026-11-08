@@ -30,6 +30,7 @@ const moveDeps: IntegrationMoveDeps = {
   listAccounts: (integrationId) => integrationCredentialStore.listAccountsDetailed(integrationId),
   upsertAccount: (integrationId, account) => integrationCredentialStore.upsertAccount(integrationId, account),
   setDefault: (integrationId, accountId) => integrationCredentialStore.setDefault(integrationId, accountId),
+  deleteAccount: (integrationId, accountId) => integrationCredentialStore.delete(integrationId, accountId),
   warn: (message, context) => log.warn(message, context),
 };
 
