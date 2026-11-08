@@ -176,8 +176,8 @@ function InnerLayout({
   // 手机上「我的」是推进来的一层(owner 10-26:页头左上角自己的头像进),nav / detail 两层都没有底栏;桌面走设置弹窗。
   const [settingsPane, setSettingsPane] = useState<'nav' | 'detail'>('nav')
   const [watchCreateRequest, setWatchCreateRequest] = useState(0)
-  // 手机上从群成员里点的「新建 Agent」:与 watchCreateRequest 一起递进去,null = 不进群。
-  const [watchCreateGroup, setWatchCreateGroup] = useState<{ chatId: string; name: string } | null>(null)
+  // 手机上非项目群输入框的「新任务」:与 watchCreateRequest 一起递进去,null = 不进群。
+  const [watchTaskGroup, setWatchTaskGroup] = useState<{ chatId: string; name: string } | null>(null)
   const [openedPhoneApp, setOpenedPhoneApp] = useState<{ kind: string; name: string } | null>(null)
   const [watchParentTab, setWatchParentTab] = useState<SidebarTab | null>(null)
   const watchOpenRequest = useAppShowSession(() => {
@@ -377,7 +377,7 @@ function InnerLayout({
   // 桌面:gugu-dev#181 只有一个「新建会话」—— 会话页的新建会话页(不进群)。
   const openAgentCreateDraftFromContacts = useCallback(() => {
     if (mobile) {
-      setWatchCreateGroup(null)
+      setWatchTaskGroup(null)
       setActiveTab('tasks')
       setWatchCreateRequest((n) => n + 1)
       return
@@ -630,15 +630,15 @@ function InnerLayout({
   useEffect(() => platform.subscribeNotificationClicks?.(({ chatId }) => openNotificationRef.current(chatId)), [])
 
 
-  // 群成员面板的「新建 Agent 并加入本群」:手机与联系人页「新建 Agent」同一条(会话页选机器),只是带上这个群;
-  // 桌面(gugu-dev#181)把那个群的输入框换成「新任务」。
+  // 群输入框的「新任务」(gugu-dev#181):桌面把那个群的输入框换成新任务框;手机(非项目群,项目群是浮起的文件夹卡
+  // PhoneNewTask)进会话页选机器 —— 两边都是首句落成这个群里的任务卡、agent 进群、人回到群。
   useEffect(() => {
     const onCreateInGroup = (event: Event) => {
       const { chatId } = (event as CustomEvent<{ chatId?: unknown }>).detail ?? {}
       if (typeof chatId !== 'string' || chatId.length === 0) return
       const name = chatsRef.current.find((chat) => chat.id === chatId)?.name || t('group.settings.groupFallback', { ns: 'messaging' })
       if (mobile) {
-        setWatchCreateGroup({ chatId, name })
+        setWatchTaskGroup({ chatId, name })
         setActiveTab('tasks')
         setWatchCreateRequest((n) => n + 1)
         return
@@ -1176,7 +1176,7 @@ function InnerLayout({
                   active={activeTab === 'tasks'}
                   onExit={exitPhoneSessions}
                   createRequest={watchCreateRequest}
-                  createInGroup={watchCreateGroup}
+                  taskInGroup={watchTaskGroup}
                   openRequest={watchOpenRequest}
                   onOpenGroupChat={handleReturnToGroup}
                 />

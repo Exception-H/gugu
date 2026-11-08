@@ -515,7 +515,6 @@ export default {
     "memberList": {
       "agentLeave": "Take it out of this group",
       "clearSearch": "Clear search",
-      "createAgent": "New Agent in this group",
       "invite": "Invite members",
       "makeAdmin": "Make admin",
       "manage": "Manage {{name}}",
@@ -686,8 +685,7 @@ export default {
     "more": "More actions",
     "searchChat": "Search chat",
     "searchConversation": "Search this chat",
-    "groupFolder": "Group folder",
-    "folder": "Folder"
+    "folder": "Files"
   },
   "history": {
     "searchTopics": "Search topics",

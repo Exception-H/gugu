@@ -514,7 +514,6 @@ export default {
     "memberList": {
       "agentLeave": "让它退出群聊",
       "clearSearch": "清除搜索",
-      "createAgent": "新建 Agent 并加入本群",
       "invite": "邀请成员",
       "makeAdmin": "设为管理员",
       "manage": "管理 {{name}}",
@@ -684,8 +683,7 @@ export default {
     "more": "更多操作",
     "searchChat": "搜索对话",
     "searchConversation": "在对话中搜索",
-    "groupFolder": "群文件夹",
-    "folder": "文件夹"
+    "folder": "文件"
   },
   "history": {
     "searchTopics": "搜索话题",
