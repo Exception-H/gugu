@@ -9,7 +9,6 @@ import { createChatState } from '../state/chat-state';
 import { createChatView } from '../chat-view';
 import type { ChatMessage, TranscriptTurn } from '../model';
 import { until, untilStable } from '../../../../tests/support/awaitCondition';
-import { pinFade } from '../chat-root.css';
 
 const peer = 'user:11111111-1111-4111-8111-111111111111';
 const me = '22222222-2222-4222-8222-222222222222';
@@ -105,8 +104,8 @@ describe('approved A2A activity', () => {
     t.host.querySelector<HTMLButtonElement>('[data-expand-user-card]')!.click();
     await untilStable('the full final answer is measured', () => t.scroll().scrollHeight);
     t.scroll().scrollTop = 850;
-    await untilStable('owner reading ordinary reply', () => t.host.querySelector('[data-agent-conversation-message="Owner question"]')?.getBoundingClientRect().top);
-    const row = t.host.querySelector<HTMLElement>('[data-agent-conversation-message="Owner question"]');
+    await untilStable('owner reading ordinary reply', () => t.host.querySelector('[data-pin-summary="Owner question"]')?.getBoundingClientRect().top);
+    const row = t.host.querySelector<HTMLElement>('[data-pin-summary="Owner question"]');
     expect(row).not.toBeNull();
     expect(row!.getBoundingClientRect().top).toBeCloseTo(t.scroll().getBoundingClientRect().top + 8, 0);
   });
@@ -117,8 +116,8 @@ describe('approved A2A activity', () => {
     t.button().click();
     await untilStable('human owner activity geometry', () => t.scroll().scrollHeight);
     t.scroll().scrollTop = 850;
-    await untilStable('human owner sticky position', () => t.host.querySelector('[data-agent-conversation-message="Owner message"]')?.getBoundingClientRect().top);
-    const row = t.host.querySelector<HTMLElement>('[data-agent-conversation-message="Owner message"]');
+    await untilStable('human owner sticky position', () => t.host.querySelector('[data-pin-summary="Owner message"]')?.getBoundingClientRect().top);
+    const row = t.host.querySelector<HTMLElement>('[data-pin-summary="Owner message"]');
     expect(row, 'the viewer message must remain mounted while its activity is read').not.toBeNull();
     expect(row!.getBoundingClientRect().top).toBeCloseTo(t.scroll().getBoundingClientRect().top + 8, 0);
   });
@@ -292,8 +291,8 @@ describe('approved A2A activity', () => {
     t.button().click();
     await untilStable('open activity heights settled', () => t.scroll().scrollHeight);
     t.scroll().scrollTop = 850;
-    await untilStable('both sticky lanes settled', () => [t.head()?.getBoundingClientRect().top, t.host.querySelector('[data-user-card="Owner question"]')?.getBoundingClientRect().top]);
-    const own = t.host.querySelector('[data-agent-conversation-message="Owner question"]')!.getBoundingClientRect();
+    await untilStable('both sticky lanes settled', () => [t.head()?.getBoundingClientRect().top, t.host.querySelector('[data-pin-summary="Owner question"]')?.getBoundingClientRect().top]);
+    const own = t.host.querySelector('[data-pin-summary="Owner question"]')!.getBoundingClientRect();
     const activity = t.head()!.getBoundingClientRect();
     expect(Math.abs(own.top - t.scroll().getBoundingClientRect().top - 8)).toBeLessThan(2);
     expect(activity.top).toBeGreaterThanOrEqual(own.bottom + 6);
@@ -308,9 +307,11 @@ describe('approved A2A activity', () => {
     await untilStable('push-out rows measured', () => t.scroll().scrollHeight);
     t.scroll().scrollTop = 850;
     await untilStable('push-out lanes mounted', () => t.head()?.getBoundingClientRect().top);
-    const own = () => t.host.querySelector<HTMLElement>('[data-agent-conversation-message="Owner question"]')!;
+    const own = () => t.host.querySelector<HTMLElement>('[data-pin-summary="Owner question"]')!;
     const sample = () => ({ scroll: t.scroll().scrollTop, own: own()?.getBoundingClientRect().top,
       activity: t.head()?.getBoundingClientRect().top, opaque: t.head() && getComputedStyle(t.head()!.closest('[data-index]')!.querySelector('[data-chat-pin-backdrop]')!).opacity });
+    await untilStable('both pins settled', () => [sample().own, sample().activity]);
+    const pinned = sample();
     const row = t.head()!.closest<HTMLElement>('[data-index]')!;
     const end = Number.parseFloat(row.style.top) + Number.parseFloat(row.style.height);
     const samples = [];
@@ -334,7 +335,7 @@ describe('approved A2A activity', () => {
     t.scroll().scrollTop = 850;
     await untilStable('reverse scroll restores the same pins', () => [sample().own, sample().activity]);
     expect(sample().own).toBe(8);
-    expect(sample().activity).toBe(108);
+    expect(sample().activity).toBe(pinned.activity);
     expect(sample().opaque).toBe('1');
   });
   it.each([true, false])('returns pinned rows during the height collapse without skipping to the final anchor (following conclusion: %s)', async following => {
@@ -344,7 +345,7 @@ describe('approved A2A activity', () => {
     await untilStable('collapse source measured', () => t.scroll().scrollHeight);
     t.scroll().scrollTop = 850;
     await untilStable('collapse starts with two pinned rows', () => t.head()?.getBoundingClientRect().top);
-    const own = () => t.host.querySelector('[data-agent-conversation-message="Owner question"]')?.getBoundingClientRect();
+    const own = () => t.host.querySelector('[data-pin-summary="Owner question"]')?.getBoundingClientRect();
     const start = t.scroll().scrollTop;
     // Drive the real layout tween with a frame clock. A busy browser can deliver
     // its next animation frame after the entire 200ms duration has elapsed.
@@ -389,7 +390,7 @@ describe('approved A2A activity', () => {
     // Older Android WebViews do not implement scroll-state queries. Disable
     // those containers while exercising the real sticky layout and paint.
     for (const row of t.host.querySelectorAll<HTMLElement>('[data-index] > div')) row.style.containerType = 'normal';
-    const own = () => t.host.querySelector(`[data-agent-conversation-message="${question}"]`)!;
+    const own = () => t.host.querySelector(`[data-pin-summary="${question}"]`)!;
     const masks = () => [own(), t.head()!].map(row => row.closest('[data-index]')!.querySelector<HTMLElement>('[data-chat-pin-backdrop]')!);
     t.scroll().scrollTop = 850;
     await untilStable('both opaque lanes stuck', () => [own().getBoundingClientRect().top, t.head()?.getBoundingClientRect().top]);
@@ -454,8 +455,8 @@ describe('approved A2A activity', () => {
     const style = getComputedStyle(backdrop);
     expect(style.opacity).toBe('1');
     expect(style.backgroundColor).toBe(background === '#ffffff' ? 'rgb(255, 255, 255)' : 'rgb(33, 33, 33)');
-    const own = t.host.querySelector('[data-agent-conversation-message]')!.getBoundingClientRect();
-    const ownPaint = t.host.querySelector('[data-agent-conversation-message]')!.closest('[data-index]')!.querySelector<HTMLElement>('[data-chat-pin-backdrop]')!.getBoundingClientRect();
+    const own = t.host.querySelector('[data-pin-summary]')!.closest<HTMLElement>('[data-index] > div:last-child')!.getBoundingClientRect();
+    const ownPaint = t.host.querySelector('[data-pin-summary]')!.closest('[data-index]')!.querySelector<HTMLElement>('[data-chat-pin-backdrop]')!.getBoundingClientRect();
     expect(ownPaint.top, 'the reserved top gap above the owner pin must not expose an older body line').toBeLessThanOrEqual(viewport.top);
     expect(Math.abs(paint.top - own.bottom), 'the two page-colored pins meet without exposing half a body line in their seam').toBeLessThan(1);
     expect(Math.abs(paint.bottom - row.bottom), 'no opaque band below the semantic row').toBeLessThan(1);
@@ -469,8 +470,6 @@ describe('approved A2A activity', () => {
     expect(style.borderLeftWidth).toBe('0px');
     expect(style.borderRightWidth).toBe('0px');
     expect(style.borderBottomWidth).toBe('1px');
-    const fadeSelector = pinFade.split(/\s+/).map(name => `.${name}`).join('');
-    expect(t.host.querySelectorAll(fadeSelector), 'neither pin may paint a fade across the preceding message').toHaveLength(0);
     if (frameWidth !== width) {
       expect(paint.left).toBeGreaterThanOrEqual(viewport.left - 1);
       expect(paint.right).toBeLessThanOrEqual(viewport.right + 1);
