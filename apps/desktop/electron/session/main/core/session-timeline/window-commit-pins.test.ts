@@ -24,7 +24,7 @@ async function fixture() {
       firstCommitCursor: null, latestRevisionCursor: { workerEpoch: 'w', storeEpoch: 's', sequence: receipts.size }, binding, source };
     receipts.set(sourceId, receipt); return { receipt, projectionId: `${sourceId}/${'b'.repeat(32)}` };
   }
-  return { directory, input, version, current, setLock: (value: boolean) => { lockHeld = value; }, protect: () => { protectedIntent = true; } };
+  return { directory, input, version, current, receipts, setLock: (value: boolean) => { lockHeld = value; }, protect: () => { protectedIntent = true; } };
 }
 
 describe('durable version pins under an exclusive gateway incarnation', () => {
@@ -106,5 +106,27 @@ describe('durable version pins under an exclusive gateway incarnation', () => {
     expect(await restarted.beginCollection(v, createWindowBudget())).toBe('collecting');
     await restarted.finishCollection(v, createWindowBudget());
     expect(await restarted.beginCollection(v, createWindowBudget())).toBe('collected');
+  });
+
+  it('does not use a positive proof for a different DB namespace to retire this namespace owner', async () => {
+    const f = await fixture(), pins = await openWindowCommitPins(f.input), v = await f.version();
+    await pins.acquire({}, v, createWindowBudget());
+    const foreign = await openWindowCommitPins({ ...f.input, proof: { ...f.input.proof, namespace: `${f.directory}:different-db` } });
+    await expect(foreign.beginCollection(v, createWindowBudget())).rejects.toMatchObject({ code: 'pin_namespace_changed' });
+    expect(await pins.beginCollection(v, createWindowBudget())).toBe('pinned');
+  });
+
+  it('serializes a bounded collection batch against new acquisitions and makes retired-head cleanup retryable', async () => {
+    const f = await fixture(), pins = await openWindowCommitPins(f.input), v = await f.version();
+    expect(await pins.beginCollection(v, createWindowBudget())).toBe('collecting');
+    const gate = Promise.withResolvers<void>(), entered = Promise.withResolvers<void>();
+    const collect = pins.withCollection(v, createWindowBudget(), async check => { entered.resolve(); await gate.promise; check(); return 'batch'; });
+    await entered.promise; const acquisition = pins.acquire({}, v, createWindowBudget());
+    gate.resolve(); expect(await collect).toBe('batch');
+    await expect(acquisition).rejects.toMatchObject({ code: 'version_collecting' });
+    await pins.finishCollection(v, createWindowBudget());
+    await expect(pins.forgetCollected(v, createWindowBudget())).rejects.toMatchObject({ code: 'commit_receipt_retained' });
+    f.receipts.delete(v.receipt.sourceId);
+    await pins.forgetCollected(v, createWindowBudget()); await pins.forgetCollected(v, createWindowBudget());
   });
 });

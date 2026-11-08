@@ -1,13 +1,16 @@
 import { createHash, randomUUID } from 'node:crypto';
-import { realpath } from 'node:fs/promises';
-import { readWindowFrame, writeWindowFrame } from '@gugu/session-core/session-record/window-cache/disk-frame';
+import { realpath, rm } from 'node:fs/promises';
+import { join } from 'node:path';
+import { windowFrameName } from '@gugu/session-core/session-record/window-cache/frame';
+import { readWindowFrame, writeWindowFrame, syncWindowDirectory } from '@gugu/session-core/session-record/window-cache/disk-frame';
 import type { WindowBudget } from '@gugu/session-core/session-record/window-cache/types';
 import { snapshotWindowCommitReceipt, type WindowCommitReceipt, type createWindowCommitReceipts } from './window-commit-receipt';
 
-export type CommitVersion = { receipt: WindowCommitReceipt; projectionId: string };
+export type CommitSourceVersion = { receipt: WindowCommitReceipt };
+export type CommitVersion = CommitSourceVersion & { projectionId: string };
 export type WindowGatewayProof = { namespace: string; assertHeld(): void };
 type Receipt = WindowCommitReceipt;
-type State = { version: 1; sourceId: string; epoch: string; stage: 'active' | 'collecting' | 'collected'; holders: { id: string; count: number }[] };
+type State = { version: 1; sourceId: string; namespace: string; epoch: string; stage: 'active' | 'collecting' | 'collected'; holders: { id: string; count: number }[] };
 type Held = { receipt: Receipt; tokens: Set<object> };
 type Owner = { id: string; closed: boolean; versions: Map<string, Held> };
 const tails = new Map<string, Promise<void>>();
@@ -27,13 +30,13 @@ function parse(bytes: Uint8Array): unknown { return JSON.parse(new TextDecoder('
 export async function openWindowCommitPins(input: {
   directory: string; proof: WindowGatewayProof;
   receipts: Pick<ReturnType<typeof createWindowCommitReceipts>, 'bySource' | 'byRow'>;
-  canCollect(version: CommitVersion, budget: WindowBudget, signal?: AbortSignal): Promise<boolean>;
+  canCollect(version: CommitSourceVersion, budget: WindowBudget, signal?: AbortSignal): Promise<boolean>;
 }, signal?: AbortSignal) {
   input.proof.assertHeld(); signal?.throwIfAborted();
   const directory = await realpath(input.directory), epoch = randomUUID();
   const scope = createHash('sha256').update(input.proof.namespace).digest('hex');
   const epochKey = { scope, sourceLineage: scope, decoderVersion: 1, kind: 'head' as const, cursor: 'version:gateway' };
-  const namespace = `${directory}:${scope}`, owners = new WeakMap<object, Owner>();
+  const namespace = directory, owners = new WeakMap<object, Owner>();
   let invalid = false;
   function proof() {
     if (invalid) throw fault('gateway_invalidated');
@@ -49,13 +52,14 @@ export async function openWindowCommitPins(input: {
     const saved = found.kind === 'hit' ? parse(found.bytes) as { version: number; epoch: string } : null;
     if (saved?.version !== 1 || saved.epoch !== epoch) throw fault('gateway_epoch_changed');
   }
-  async function load(receipt: Receipt, b: WindowBudget): Promise<State> {
+  async function readState(receipt: Receipt, b: WindowBudget): Promise<{ found: boolean; state: State }> {
     const found = await readWindowFrame(directory, key(receipt), b);
     if (found.kind === 'miss') {
-      if (found.reason === 'not_found') return { version: 1, sourceId: receipt.sourceId, epoch, stage: 'active', holders: [] };
+      if (found.reason === 'not_found') return { found: false, state: { version: 1, sourceId: receipt.sourceId, namespace: scope, epoch, stage: 'active', holders: [] } };
       throw found.reason === 'io' ? found.error : fault('invalid_version_pin');
     }
     const s = parse(found.bytes) as State;
+    if (s?.namespace !== scope) throw fault('pin_namespace_changed');
     if (s?.version !== 1 || s.sourceId !== receipt.sourceId || typeof s.epoch !== 'string'
       || !['active', 'collecting', 'collected'].includes(s.stage) || !Array.isArray(s.holders)
       || s.holders.some(h => !h || typeof h.id !== 'string' || !/^[a-f0-9-]{36}$/.test(h.id)
@@ -63,8 +67,9 @@ export async function openWindowCommitPins(input: {
       throw fault('invalid_version_pin');
     // current() and the held exclusive lock prove prior gateway capabilities
     // cannot still issue reads. Collection progress survives incarnation changes.
-    return { ...s, epoch, holders: s.epoch === epoch ? s.holders : [] };
+    return { found: true, state: { ...s, epoch, holders: s.epoch === epoch ? s.holders : [] } };
   }
+  const load = async (receipt: Receipt, b: WindowBudget) => (await readState(receipt, b)).state;
   async function save(receipt: Receipt, s: State) {
     proof(); await writeWindowFrame(directory, key(receipt), Buffer.from(JSON.stringify(s))); proof();
   }
@@ -119,9 +124,9 @@ export async function openWindowCommitPins(input: {
     },
     /** The collector must additionally prove no source/recovery or unfinished
      * build intent. Claim is durable before unlinking any version artifacts. */
-    beginCollection(version: CommitVersion, b: WindowBudget, abort?: AbortSignal) {
+    beginCollection(version: CommitSourceVersion, b: WindowBudget, abort?: AbortSignal) {
       const receipt = snapshotWindowCommitReceipt(version.receipt);
-      const selected = { receipt, projectionId: version.projectionId };
+      const selected = { receipt };
       return serial(namespace, async () => {
         await current(b, abort); const s = await load(receipt, b);
         if (s.holders.length) return 'pinned' as const;
@@ -131,12 +136,37 @@ export async function openWindowCommitPins(input: {
         abort?.throwIfAborted(); s.stage = 'collecting'; await save(receipt, s); return 'collecting' as const;
       });
     },
-    finishCollection(version: CommitVersion, b: WindowBudget, abort?: AbortSignal) {
+    finishCollection(version: CommitSourceVersion, b: WindowBudget, abort?: AbortSignal) {
       const receipt = snapshotWindowCommitReceipt(version.receipt);
       return serial(namespace, async () => {
         await current(b, abort); const s = await load(receipt, b);
         if (s.stage !== 'collecting' || s.holders.length) throw fault('version_not_collecting');
         abort?.throwIfAborted(); s.stage = 'collected'; await save(receipt, s);
+      });
+    },
+    /** One bounded collector batch holds the same namespace queue as acquire.
+     * check() must precede mutations and follow each async filesystem boundary. */
+    withCollection<T>(version: CommitSourceVersion, b: WindowBudget, remove: (check: () => void) => Promise<T>, abort?: AbortSignal) {
+      const receipt = snapshotWindowCommitReceipt(version.receipt);
+      return serial(namespace, async () => {
+        await current(b, abort); const s = await load(receipt, b);
+        if (s.stage !== 'collecting' || s.holders.length || input.receipts.byRow(receipt.rowId)?.sourceId === receipt.sourceId)
+          throw fault('version_not_collecting');
+        const held = () => { proof(); abort?.throwIfAborted(); }; held();
+        try { return await remove(held); } finally { proof(); }
+      });
+    },
+    /** Only after artifact deletion and the retired receipt's removal. The
+     * absence of that head makes a retry idempotent, not a new collection job. */
+    forgetCollected(version: CommitSourceVersion, b: WindowBudget, abort?: AbortSignal) {
+      const receipt = snapshotWindowCommitReceipt(version.receipt);
+      return serial(namespace, async () => {
+        await current(b, abort); const loaded = await readState(receipt, b);
+        if (input.receipts.bySource(receipt.sourceId)) throw fault('commit_receipt_retained');
+        if (!loaded.found) return;
+        if (loaded.state.stage !== 'collected' || loaded.state.holders.length) throw fault('version_not_collected');
+        abort?.throwIfAborted(); proof(); await rm(join(directory, windowFrameName(key(receipt))), { force: true });
+        proof(); await syncWindowDirectory(directory); proof();
       });
     },
   };
