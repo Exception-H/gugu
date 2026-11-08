@@ -88,7 +88,7 @@ describe('built-in theme packs', () => {
     (_id, mode, pack) => {
       const p = resolvePalette(pack.modes[mode]!, mode)
       const surfaces = { page: p.page, bg: p.bg, card: p.card, muted: p.muted }
-      const colorOf: Record<PaletteRole, string> = { fg: p.fg, mutedFg: p.mutedFg, faintFg: p.faintFg, live: p.live, dangerFg: p.dangerFg, warnFg: p.warnFg }
+      const colorOf: Record<PaletteRole, string> = { fg: p.fg, mutedFg: p.mutedFg, faintFg: p.faintFg, live: p.live, dangerFg: p.dangerFg, warnFg: p.warnFg, okFg: p.okFg }
       for (const [role, { min, on }] of Object.entries(CONTRAST_FLOORS) as Array<[PaletteRole, (typeof CONTRAST_FLOORS)[PaletteRole]]>) {
         for (const surface of on) {
           expect(contrastRatio(colorOf[role], surfaces[surface]), `${role} on ${surface}`).toBeGreaterThanOrEqual(min)

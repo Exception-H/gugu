@@ -55,7 +55,7 @@ export type ThemePack = {
   source: ThemePackSource;
 };
 
-export type PaletteRole = 'fg' | 'mutedFg' | 'faintFg' | 'live' | 'dangerFg' | 'warnFg';
+export type PaletteRole = 'fg' | 'mutedFg' | 'faintFg' | 'live' | 'dangerFg' | 'warnFg' | 'okFg';
 
 export type ResolvedPalette = {
   page: string;
@@ -70,6 +70,7 @@ export type ResolvedPalette = {
   dangerFg: string;
   warn: string;
   warnFg: string;
+  okFg: string;
   ansi: Partial<Record<AnsiName, string>>;
 };
 
@@ -89,13 +90,14 @@ export const CONTRAST_FLOORS: Record<PaletteRole, { min: number; on: ReadonlyArr
   live: { min: 4.5, on: ['page', 'bg', 'card', 'muted'] },
   dangerFg: { min: 4.5, on: ['page', 'bg', 'card', 'muted'] },
   warnFg: { min: 4.5, on: ['page', 'bg', 'card', 'muted'] },
+  okFg: { min: 4.5, on: ['page', 'bg', 'card', 'muted'] },
 };
 
 /** 上游没给时用 tokens.css 的同名默认值(--live-dark / --live-light / --danger / --warn)。 */
 /** 正文与次级字之间至少差这么多 OKLab 亮度(咕咕默认两套各是 0.24 / 0.30)。 */
 export const MIN_TEXT_STEP = 0.1;
 
-const FALLBACK = { live: { dark: '#61a5fa', light: '#3b82f6' }, danger: '#ef4444', warn: '#f59e0b' } as const;
+const FALLBACK = { live: { dark: '#61a5fa', light: '#3b82f6' }, danger: '#ef4444', warn: '#f59e0b', ok: '#16a34a' } as const;
 
 // 颜色算术交给仓库已有的 colorjs.io(session-ui 的主题生成也用它);这里只包成「进出都是 #rrggbb」的几行。
 const toHex = (c: Color) => c.to('srgb').toString({ format: 'hex', collapse: false });
@@ -201,6 +203,8 @@ export function resolvePalette(raw: RawPalette, mode: ThemeMode): ResolvedPalett
     dangerFg: guard('dangerFg', danger),
     warn,
     warnFg: guard('warnFg', warn),
+    // 成功字:主题的终端绿(内置和 VS Code 导入都有),没有就是 tokens.css 的 --ok。
+    okFg: guard('okFg', raw.ansi?.green ?? FALLBACK.ok),
     ansi: raw.ansi ?? {},
   };
 }
@@ -211,7 +215,7 @@ export function resolvePalette(raw: RawPalette, mode: ThemeMode): ResolvedPalett
  */
 export function paletteIsReadable(raw: RawPalette, mode: ThemeMode): boolean {
   const p = resolvePalette(raw, mode);
-  const colorOf: Record<PaletteRole, string> = { fg: p.fg, mutedFg: p.mutedFg, faintFg: p.faintFg, live: p.live, dangerFg: p.dangerFg, warnFg: p.warnFg };
+  const colorOf: Record<PaletteRole, string> = { fg: p.fg, mutedFg: p.mutedFg, faintFg: p.faintFg, live: p.live, dangerFg: p.dangerFg, warnFg: p.warnFg, okFg: p.okFg };
   return (Object.keys(CONTRAST_FLOORS) as PaletteRole[]).every((role) => {
     const { min, on } = CONTRAST_FLOORS[role];
     return on.every((surface) => contrastRatio(colorOf[role], p[surface]) >= min);
@@ -226,7 +230,7 @@ export function paletteDeclarations(p: ResolvedPalette, mode: ThemeMode): string
     d('fg', p.fg), d('muted', p.muted), d('muted-fg', p.mutedFg), d('faint-fg', p.faintFg),
     // --live 本身由 tokens.css 按主题指向这两档之一,所以覆盖的是档位,不是 --live。
     d(mode === 'dark' ? 'live-dark' : 'live-light', p.live),
-    d('danger', p.danger), d('danger-fg', p.dangerFg), d('warn', p.warn), d('warn-fg', p.warnFg),
+    d('danger', p.danger), d('danger-fg', p.dangerFg), d('warn', p.warn), d('warn-fg', p.warnFg), d('ok-fg', p.okFg),
   ];
   for (const name of ANSI_NAMES) {
     const value = p.ansi[name];
