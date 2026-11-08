@@ -773,7 +773,8 @@ function renderChrome() {
 async function refreshList(readPreferences = false) {
   if (!state.root || !canRead()) return showList()
   // Drawn as it is asked: a folder not read yet says so (renderList) until its answer is drawn.
-  const asked = inWorkspace() ? null : (state.listing = { heard: [] })
+  // Whatever was still being read for the list before this one (the other root, say) has no say in it any more.
+  const asked = (state.listing = inWorkspace() ? null : { heard: [] })
   renderList()
   if (inWorkspace()) return listDownTo(state.folder ?? '')
   // A folder this page was left in (its view state) that no read has named: the whole tree, for the way up to it.
