@@ -665,6 +665,7 @@ export default {
     "appDockFailed": "左栏没能改动",
     "appOpen": "打开",
     "appOpenInWindow": "在新窗口打开",
+    "appSettings": "App 设置",
     "appUnpin": "从左栏移走",
     "appQuit": "退出",
     "appQuitFailed": "没能退出",

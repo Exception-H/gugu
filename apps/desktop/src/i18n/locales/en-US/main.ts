@@ -671,6 +671,7 @@ export default {
     "appDockFailed": "The left rail could not be changed",
     "appOpen": "Open",
     "appOpenInWindow": "Open in New Window",
+    "appSettings": "App settings",
     "appUnpin": "Take off the left rail",
     "appQuit": "Quit",
     "appQuitFailed": "Could not quit",
