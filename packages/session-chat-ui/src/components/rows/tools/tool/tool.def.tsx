@@ -22,6 +22,15 @@ import {
   type ToolPayloadItem,
 } from './tool.layout';
 
+/** A call's pictures as the strip reads them: inline ones as URLs, ones the history left behind as a count. */
+export function toolPictures(item: ToolNode): Pick<ChatToolCall, 'images' | 'imageCount'> {
+  const base = 'toolCallId' in item ? item : null;
+  return {
+    ...(base?.images?.length ? { images: base.images.map(toolImageUrl) } : {}),
+    ...(base?.imageRefs?.length ? { imageCount: base.imageRefs.length } : {}),
+  };
+}
+
 export function toolFromItem(item: ToolNode, ctx: SegmentCtx): ChatToolCall {
   const base = 'toolCallId' in item ? item : null;
   const name =
@@ -113,8 +122,7 @@ export function toolFromItem(item: ToolNode, ctx: SegmentCtx): ChatToolCall {
     inputSummary: resolvedSummary,
     ...(base?.rawInput !== undefined ? { request: base.rawInput } : {}),
     ...(result !== undefined ? { result } : {}),
-    ...(base?.images?.length ? { images: base.images.map(toolImageUrl) } : {}),
-    ...(base?.imageRefs?.length ? { imageCount: base.imageRefs.length } : {}),
+    ...toolPictures(item),
   };
 }
 

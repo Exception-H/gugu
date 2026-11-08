@@ -207,7 +207,7 @@ export function Tool(props: ToolProps) {
  * saying how many more there are. A click opens the host's viewer on all of them from that one. Decoding is the
  * browser's business off the row's paint (`decoding=async`, `loading=lazy`): the box is already its final size.
  */
-function ToolThumbs(props: { item: ChatToolCall; strip: ToolThumbStrip }) {
+export function ToolThumbs(props: { item: Pick<ChatToolCall, 'id' | 'images' | 'imageCount'>; strip: ToolThumbStrip }) {
   const commands = useCommands();
   const translate = useChatTranslator();
   const count = () => props.item.imageCount ?? props.item.images?.length ?? 0;

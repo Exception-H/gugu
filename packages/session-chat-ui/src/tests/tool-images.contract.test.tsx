@@ -14,6 +14,9 @@ import { Tool } from '@session-chat/components/rows/tools/tool/Tool'
 import { ROW_H } from '@session-chat/components/engine/row-metrics'
 import { toolGroupUnitDef } from '@session-chat/components/rows/tools/tool-group/tool-group.def'
 import { toolUnitDef } from '@session-chat/components/rows/tools/tool/tool.def'
+import { conversationStepData, conversationStepUnitDef } from '@session-chat/components/rows/conversation-step/conversation-step.def'
+import { CONVERSATION_NARRATION_H } from '@session-chat/components/rows/message/ConversationNarration'
+import type { ChatTranslator } from '@session-chat/localization'
 import {
   TOOL_THUMB_H,
   TOOL_THUMB_MAX,
@@ -22,10 +25,12 @@ import {
   toolThumbStrip
 } from '@session-chat/components/rows/tools/tool/tool-images'
 import type { ChatCommands } from '@session-chat/commands'
-import type { ChatToolCall } from '@session-chat/model'
+import type { ChatToolCall, ToolNode } from '@session-chat/model'
 import type { ItemNode } from '@session-chat/state/flatten'
 import { describe, expect, it } from 'vitest'
 import { makeContractCtx, renderAndMeasureUnit, type ContractInspector } from './contract'
+
+type Step = Parameters<typeof conversationStepData>[0]
 
 const WIDTH = 720
 const NARROW_WIDTH = 180
@@ -219,5 +224,32 @@ describe('transport picture loading', () => {
       dispose()
       host.remove()
     }
+  })
+})
+
+// The task page draws every tool call as a conversation step, so a call's pictures have to be there too.
+describe('conversation step: the same strip under the step line', () => {
+  const translate = ((key: string) => key) as unknown as ChatTranslator
+  const step = (extra: Partial<ToolNode> = {}) => conversationStepData({
+    kind: 'unknown-tool-call', id: 'step', toolCallId: 'step', name: 'view_image', status: 'done',
+    inputSummary: 'shot.png', ...extra
+  } as Step, translate)
+
+  it.each([
+    { label: 'inline pictures', data: step({ images: [{ mimeType: 'image/png', data: four[0].split(',')[1] }] } as Partial<ToolNode>), boxes: 1, more: 0 },
+    { label: 'pictures left behind by history', data: step({ imageRefs: Array.from({ length: 6 }, () => ({ mimeType: 'image/png', chars: 9 })) } as Partial<ToolNode>), boxes: TOOL_THUMB_MAX, more: 2 }
+  ])('$label: reserved height = painted height', async ({ data, boxes, more }) => {
+    const reading = await renderAndMeasureUnit(conversationStepUnitDef, data, makeContractCtx({ width: WIDTH }), readStrip)
+    expect(reading.dom).toBe(reading.computed)
+    expect(reading.computed).toBe(CONVERSATION_NARRATION_H + TOOL_THUMB_STRIP_H)
+    expect(reading.inspected.boxes).toBe(boxes)
+    expect(reading.inspected.more).toBe(more)
+    expect(reading.spill).toBe(0)
+  })
+
+  it('a step without pictures keeps its one line', async () => {
+    const reading = await renderAndMeasureUnit(conversationStepUnitDef, step(), makeContractCtx({ width: WIDTH }), readStrip)
+    expect(reading.computed).toBe(CONVERSATION_NARRATION_H)
+    expect(reading.inspected.boxes).toBe(0)
   })
 })

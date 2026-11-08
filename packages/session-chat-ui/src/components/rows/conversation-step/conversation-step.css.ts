@@ -12,3 +12,4 @@ export const detail = style({ minWidth: 0, overflow: 'hidden', textOverflow: 'el
   fontFamily: vars.fontSans, fontSize: 12, lineHeight: '18px', padding: '1px 5px', borderRadius: 6,
   background: 'color-mix(in srgb, currentColor 6%, transparent)' });
 export const status = style({ flexShrink: 0, marginLeft: 'auto', fontSize: 12 });
+export const pictures = style({ paddingLeft: 20 });
