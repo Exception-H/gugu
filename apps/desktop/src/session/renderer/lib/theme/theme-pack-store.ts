@@ -10,13 +10,11 @@
  * 只作用于这台电脑上的咕咕 —— 资源库别的格是分机器的,这一格不是。
  */
 import builtinThemePacks from './builtin-theme-packs.json';
-import { readEffectiveHostTheme, readThemePreference, writeThemePreference, type ThemePreference } from './host-theme';
+import { notifyHostTheme, readEffectiveHostTheme, readThemePreference, writeThemePreference, type ThemePreference } from './host-theme';
+import { THEME_PACK_CSS_KEY, THEME_PACK_SLOTS_KEY, THEME_PACK_STYLE_ID } from './theme-pack-ids';
 import { packModes, themePackStylesheet, type ThemeMode, type ThemePack } from './theme-packs';
 
-/** 与 index.html 引导脚本逐字一致。 */
-export const THEME_PACK_SLOTS_KEY = 'app-theme-pack';
-export const THEME_PACK_CSS_KEY = 'app-theme-pack-css';
-export const THEME_PACK_STYLE_ID = 'gugu-theme-pack';
+export { THEME_PACK_CSS_KEY, THEME_PACK_SLOTS_KEY, THEME_PACK_STYLE_ID };
 const IMPORTED_KEY = 'app-theme-packs-imported';
 
 /** 内置七族的上游配色:数据文件,由 scripts/theme-packs/generate-builtin-theme-packs.ts 从上游 .vsix 生成,❌ 手改。 */
@@ -75,14 +73,16 @@ export function applyThemePackSlots(slots: ThemePackSlots = readThemePackSlots()
   let style = document.getElementById(THEME_PACK_STYLE_ID);
   if (!css) {
     style?.remove();
-    return;
+  } else {
+    if (!style) {
+      style = document.createElement('style');
+      style.id = THEME_PACK_STYLE_ID;
+      document.head.appendChild(style);
+    }
+    if (style.textContent !== css) style.textContent = css;
   }
-  if (!style) {
-    style = document.createElement('style');
-    style.id = THEME_PACK_STYLE_ID;
-    document.head.appendChild(style);
-  }
-  if (style.textContent !== css) style.textContent = css;
+  // App 页面在自己的 webview 里,要被告知。
+  notifyHostTheme();
 }
 
 function writeSlots(slots: ThemePackSlots): void {

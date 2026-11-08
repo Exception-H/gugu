@@ -4,6 +4,8 @@ import { evaluateObsidianCss } from '@/session/renderer/lib/theme/theme-pack-imp
 import { chooseThemePack, resetThemePacks } from '@/session/renderer/lib/theme/theme-pack-store'
 import { writeThemePreference } from '@/session/renderer/lib/theme/host-theme'
 import { resolvePalette } from '@/session/renderer/lib/theme/theme-packs'
+import { appThemeColors } from '@/session/renderer/lib/theme/app-theme-colors'
+import { applyThemeColors } from '@/session/app-runtime/theme-colors'
 import { BUILTIN_THEME_PACKS } from '@/session/renderer/lib/theme/theme-pack-store'
 import '@/styles/tokens.css'
 
@@ -43,4 +45,44 @@ it('a chosen pack out-ranks tokens.css on the root, in both modes', () => {
   expect(read('--muted-fg')).toBe(resolvePalette(pack.modes.dark!, 'dark').mutedFg)
   resetThemePacks()
   expect(read('--bg')).toBe('#181818')
+})
+
+it('App pages get the palette in the theme\'s values; no theme, nothing, and the build\'s palette stands', () => {
+  expect(appThemeColors()).toBeUndefined()
+  const pack = BUILTIN_THEME_PACKS.find((p) => p.id === 'tokyo-night')!
+  chooseThemePack(pack.id)
+  const light = resolvePalette(pack.modes.light!, 'light')
+  expect(appThemeColors()).toMatchObject({ '--em-background': light.bg, '--em-foreground': light.fg, '--em-background-3': light.muted })
+  writeThemePreference('dark')
+  expect(appThemeColors()?.['--em-background']).toBe(resolvePalette(pack.modes.dark!, 'dark').bg)
+  resetThemePacks()
+  expect(appThemeColors()).toBeUndefined()
+})
+
+it('a dark-only theme leaves App pages on the default in light', () => {
+  chooseThemePack('dracula')
+  expect(appThemeColors()?.['--em-background']).toBeTruthy()
+  writeThemePreference('light')
+  expect(appThemeColors()).toBeUndefined()
+})
+
+it('on a page, the theme\'s colors beat ui.css whichever loads first, and leave with the theme', () => {
+  const root = document.documentElement
+  const ui = () => {
+    const sheet = document.createElement('style')
+    sheet.textContent = '@layer gugu { :root[data-gugu-theme="dark"] { --em-background: #181818; } }'
+    return document.head.appendChild(sheet)
+  }
+  root.dataset.guguTheme = 'dark'
+  const read = () => getComputedStyle(root).getPropertyValue('--em-background').trim()
+  const before = ui()
+  applyThemeColors({ '--em-background': '#112233' })
+  expect(read()).toBe('#112233')
+  const after = ui()
+  expect(read()).toBe('#112233')
+  applyThemeColors(undefined)
+  expect(read()).toBe('#181818')
+  before.remove()
+  after.remove()
+  delete root.dataset.guguTheme
 })

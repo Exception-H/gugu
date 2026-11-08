@@ -1415,6 +1415,8 @@ const writeAppState = (state: Record<string, unknown>): void => writeStateFile(a
 const WINDOW_TONE_BG = { light: '#ffffff', dark: '#111114' } as const
 type WindowTone = keyof typeof WINDOW_TONE_BG
 
+let hostThemeColors: Record<string, string> | undefined
+
 function readWindowTone(): WindowTone {
   const saved = readAppState().windowTone
   return saved === 'dark' ? 'dark' : 'light'
@@ -2397,8 +2399,13 @@ ipcMain.handle('locale:sync-resolved', (_event, locale: unknown) => {
   syncResolvedHostLocale(locale)
 })
 // @@@window-tone — 渲染层是主题真值的唯一写入者,落属性时顺带告诉主进程,主进程只被告知。
-ipcMain.on('window:sync-tone', (_event, tone: unknown) => {
+ipcMain.on('window:sync-tone', (event, tone: unknown, colors: Record<string, string> | undefined) => {
+  // @@@app-theme-colors 主题的配色只听主窗的:别的窗口也发 tone,但它们的文档不带主题样式表。
+  const colorsChanged = event.sender === mainWindow?.webContents && JSON.stringify(colors) !== JSON.stringify(hostThemeColors)
+  if (colorsChanged) hostThemeColors = colors
+  const toneBefore = readWindowTone()
   syncWindowTone(tone)
+  if (colorsChanged && readWindowTone() === toneBefore) tellHostPresentationChanged()
 })
 // @@@host-system-languages — renderer 判定「跟随系统」的唯一真值源。**不能**让 renderer 自己读
 // navigator.languages:Electron 把 Chromium 界面语言排在那个列表首位(中文 macOS 实测 ['en-US',
@@ -4372,6 +4379,7 @@ function loadEmdashBridge(): EmdashBridgeModule | null {
       onHostWindowFocusChange,
       hostLocale: currentHostLocale,
       hostTone: readWindowTone,
+      hostThemeColors: () => hostThemeColors,
       selfGuguNumber,
       onHostPresentationChange: (listener) => {
         hostPresentationListeners.add(listener)
