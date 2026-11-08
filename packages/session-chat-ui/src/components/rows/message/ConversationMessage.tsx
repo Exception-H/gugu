@@ -1,6 +1,6 @@
 /** @jsxImportSource solid-js */
 import { PasswordRequestCard, passwordRequest, PASSWORD_CARD_HEIGHT } from './PasswordRequestCard';
-import { SentMessageReceipt } from '../agent-activity/SentMessageReceipt';
+import { GroupReply } from '../agent-activity/GroupReply';
 import { conversationSpeaker, messageReplyReference } from '@session-chat/state/conversation-density';
 import { For, Show, createMemo } from 'solid-js';
 import { conversationHeaderLayout } from './conversation-header-layout';
@@ -84,7 +84,7 @@ function headerLayout(item: ChatMessage, ctx: MeasureCtx) {
 }
 
 function singleHeight(item: ChatMessage, ctx: MeasureCtx, vars: MessageVars): number {
-  if (item.conversationPart === 'sent-receipt') return 32;
+  if (item.groupReply) return 32;
   if (item.conversationNarration) return conversationNarrationHeight(item, ctx);
   if (item.conversationPart === 'head') {
     const head = headerLayout(item, ctx);
@@ -115,7 +115,7 @@ export function backgroundHeight(item: { id: string }, ctx: MeasureCtx): number 
 export function ConversationMessage(props: { data: ChatMessage; ctx: RenderCtx; vars: MessageVars }) {
   // 中途说的话:步骤之间一行灰字,放不下就省略(设计稿 0 号「五路排查都回来了……」)。
   // 同一条在跑完时会变成回复气泡(同一个 id),所以用 <Show> 跟着数据换,❌ 组件里一次性 if。
-  return <Show when={props.data.conversationPart !== 'sent-receipt'} fallback={<SentMessageReceipt message={props.data} />}><Show when={!props.data.conversationNarration} fallback={
+  return <Show when={!props.data.groupReply} fallback={<GroupReply message={props.data} />}><Show when={!props.data.conversationNarration} fallback={
     <ConversationNarration data={props.data} ctx={props.ctx} />
   }>
     <Show when={(props.data.guguDelivery?.segments.length ?? 0) > 1} fallback={<SingleConversationMessage {...props} />}>

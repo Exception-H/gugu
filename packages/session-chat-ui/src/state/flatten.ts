@@ -502,12 +502,8 @@ export function flattenTier(
           const reply = { ...output.reply, conversationProcess: process,
             ...(block.fullReply ? { conversationFull: true } : {}) };
           const groupReply = viewerGroupReply(reply, ctx);
-          if (groupReply || (!replyActivity && reply.sentTo?.kind === 'chat' && !reply.sentAttachments?.length && !reply.sentAttachment)) {
-            if (ops.length) {
-              processItem({ kind: 'turn-process', ...process, turnId: turn.id, withBody: true });
-              steps();
-            }
-            processItem({ ...reply, conversationPart: 'sent-receipt', ...(groupReply ? { groupReply } : {}) });
+          if (groupReply) {
+            processItem({ ...reply, conversationPart: 'group-reply', groupReply });
           } else emitConversationReply(reply, [], steps, replyActivity);
         } else {
           processItem({ kind: 'turn-process', ...process, turnId: turn.id,
