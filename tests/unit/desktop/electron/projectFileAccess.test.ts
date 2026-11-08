@@ -405,7 +405,7 @@ describe('the owner’s already-held SSH link', () => {
 })
 
 describe('the host’s on-demand client-encrypted transfer', () => {
-  function fixture(options: { denied?: boolean; changed?: boolean } = {}) {
+  function fixture(options: { denied?: boolean; changed?: boolean; late?: boolean } = {}) {
     const calls: string[] = [], commitBodies: Record<string, unknown>[] = []
     let uploaded: Uint8Array | undefined
     const read = vi.fn(async (request: Parameters<ReturnType<typeof createProjectFileReader>>[0]) => reader()(request, 'owner'))
@@ -413,14 +413,20 @@ describe('the host’s on-demand client-encrypted transfer', () => {
       const route = String(input).split('/').at(-1)!
       calls.push(route)
       const body = route === 'object' ? null : JSON.parse(init!.body as string)
-      if (route === 'file-pending') return Response.json({ transfers: [{ ...revision, id: 'transfer', state: 'requested', ...(options.changed ? { sha256: '0'.repeat(64) } : {}) }] })
+      if (route === 'file-pending') {
+        const first = { ...revision, id: 'transfer', state: 'requested', ...(options.changed ? { sha256: '0'.repeat(64) } : {}) }
+        // late: another reader's request lands while the first upload runs; the list read before it does not hold it.
+        const pending = calls.filter(call => call === 'file-pending').length
+        return Response.json({ transfers: options.late && pending > 1 ? [{ ...first, state: 'uploading' }, { ...revision, id: 'late', state: 'requested' }] : [first] })
+      }
       if (route === 'file-accept') {
         if (options.denied) return Response.json({ error: 'quota', message: 'Quota exhausted' }, { status: 403 })
         expect(body.ciphertext_bytes).toBe(ciphertextSize(bytes.length))
-        expect(read).not.toHaveBeenCalled()
+        if (body.transfer_id === 'transfer') expect(read).not.toHaveBeenCalled()
         return Response.json({ url: 'https://objects.invalid/object', fields: { key: 'random-object' }, max_bytes: ciphertextSize(bytes.length) })
       }
       if (route === 'object') {
+        if (options.late && !late) late = drain()
         const form = init!.body as FormData
         expect([...form.keys()]).toEqual(['key', 'file'])
         uploaded = new Uint8Array(await (form.get('file') as Blob).arrayBuffer())
@@ -436,13 +442,15 @@ describe('the host’s on-demand client-encrypted transfer', () => {
       }
       throw Error(`Unexpected fake route ${route}`)
     })
+    let late: Promise<void> | undefined
     const drain = createProjectTransferHost({ identity, read, tempRoot, env, endpoint: async () => ({ supabaseUrl: 'https://api.invalid', anonKey: 'test-anon', token: 'test-token', fetch: fetcher as typeof fetch }) })
-    return { drain, calls, read, commitBodies, uploaded: () => uploaded }
+    return { drain, calls, read, commitBodies, uploaded: () => uploaded, late: () => late }
   }
   it('reserves before disk/bytes, uses one upload executor, transfers the key only in commit and removes staging', async () => {
     const f = fixture()
     await Promise.all([f.drain(), f.drain()])
-    expect(f.calls).toEqual(['file-pending', 'file-accept', 'object', 'file-commit'])
+    // The second event reads the list once more after the first drain; the transfer already taken is not taken again.
+    expect(f.calls).toEqual(['file-pending', 'file-accept', 'object', 'file-commit', 'file-pending'])
     expect(await readdir(tempRoot)).toEqual([])
     const cipher = f.uploaded()!
     const source = { size: cipher.length, dispose: async () => {}, read: async (offset: number, length: number) => cipher.slice(offset, offset + length) }
@@ -457,10 +465,17 @@ describe('the host’s on-demand client-encrypted transfer', () => {
     await f.drain() // A repeated event does not generate another key or overwrite an accepted object.
     expect(f.calls.filter(value => value === 'object')).toHaveLength(1)
   })
+  it('serves a request that lands while a drain is uploading, from a second read of the list', async () => {
+    const f = fixture({ late: true })
+    await f.drain()
+    await f.late()
+    expect(f.commitBodies.map(body => body.transfer_id)).toEqual(['transfer', 'late'])
+    expect(f.calls.filter(call => call === 'file-pending')).toHaveLength(2)
+  })
   it.each(['quota', 'revision', 'source-sha'])('does not upload or commit when %s fails', async failure => {
     const f = fixture({ denied: failure === 'quota', changed: failure === 'revision' })
     if (failure === 'source-sha') await writeFile(join(root, 'file.bin'), Buffer.alloc(bytes.length, 9))
-    await expect(f.drain()).rejects.toThrow('project file transfer(s) failed')
+    await expect(f.drain()).rejects.toThrow(failure === 'quota' ? 'transfer: attachments/file-accept: Quota exhausted' : 'transfer: ')
     expect(f.calls).not.toContain('object'); expect(f.calls).not.toContain('file-commit')
     if (failure !== 'source-sha') expect(f.read).not.toHaveBeenCalled()
     expect(await readdir(tempRoot).catch(() => [])).toEqual([])

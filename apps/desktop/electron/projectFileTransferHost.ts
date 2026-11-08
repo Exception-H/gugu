@@ -12,7 +12,7 @@ export function createProjectTransferHost(deps: {
   endpoint(): Promise<AttachmentsEndpoint>
   read: ProjectFileReader; tempRoot: string; env?: NodeJS.ProcessEnv; later?: ProjectFileVersionLookup
 }) {
-  let running: Promise<void> | undefined
+  let running: Promise<void> | undefined, again = false
   const attempted = new Set<string>()
   const drain = async () => {
     const identity = await deps.identity(), endpoint = await deps.endpoint()
@@ -41,9 +41,17 @@ export function createProjectTransferHost(deps: {
         await uploadAttachmentPlan(endpoint, permit, { bytes: await sink.blob(), name: 'file.enc', contentType: 'application/octet-stream' })
         // Key travels over the authenticated API only, never the object form, a device event or a log.
         await attachmentRequest(endpoint, 'file-commit', { transfer_id: row.id, ciphertext_bytes: size, ciphertext_sha256: encrypted.ciphertextSha256, key: Buffer.from(key).toString('base64') })
-      } catch { failed.push(row.id) } finally { key?.fill(0); await sink?.abort() }
+      } catch (error) { failed.push(`${row.id}: ${error instanceof Error ? error.message : String(error)}`) } finally { key?.fill(0); await sink?.abort() }
     }
-    if (failed.length) throw new Error(`${failed.length} project file transfer(s) failed; no unverified bytes were committed`)
+    if (failed.length) throw new Error(`${failed.length} project file transfer(s) failed; no unverified bytes were committed (${failed.join('; ')})`)
   }
-  return () => running ??= drain().finally(() => { running = undefined })
+  // A request that lands while a drain runs is not in the list that drain read: it reads the list once more when it is done.
+  return () => {
+    again = true
+    return running ??= (async () => {
+      let failure: unknown
+      while (again) { again = false; await drain().catch((error: unknown) => { failure = error }) }
+      if (failure) throw failure
+    })().finally(() => { running = undefined })
+  }
 }
