@@ -230,6 +230,23 @@ describe('reaching another machine', () => {
     expect(listDevices).toHaveBeenCalled()
   })
 
+  it('a page\'s call does not wait for the cloud computer\'s state; a paused cloud computer still refuses it', async () => {
+    let answerState: (state: { state: string; deviceId: string; error: null; since: null } | null) => void = () => {}
+    const cloudComputerState = vi.fn(() => new Promise<{ state: string; deviceId: string; error: null; since: null } | null>((done) => { answerState = done }))
+    // That machine answers c-1; c-2 never comes back (a paused machine hears nothing).
+    const { xm, call } = makeCrossMachine(async (_device, _channel, { action }) => (action as { call_id?: string }).call_id === 'c-2'
+      ? new Promise(() => {}) : { result: { ok: true } }, { cloudComputerState: cloudComputerState as never })
+    const appCall = (id: string) => xm.appCall({ extensionId: 'app', extensionName: 'App' }, 'dev-b', {
+      action: 'app_call', call_id: id, session_id: 's', version: '1', method: 'filesList', args: {},
+    })
+    // Parent: the call was sent only once the manager answered — this one would never have been.
+    await expect(appCall('c-1')).resolves.toEqual({ ok: true })
+    expect(call).toHaveBeenCalledOnce()
+    const paused = appCall('c-2')
+    answerState({ state: 'asleep', deviceId: 'dev-b', error: null, since: null })
+    await expect(paused).rejects.toMatchObject({ code: 'SESSION_DEVICE_OFFLINE' })
+  })
+
   it('asks that machine\'s task-page router: agentSession.<action>(caller, action), one call, no window', async () => {
     const { xm, call } = makeCrossMachine()
     await expect(xm.call('dev-b', CALLER, { action: 'get', session_id: 's' })).resolves.toEqual({ ok: true })
