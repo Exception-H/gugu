@@ -2,7 +2,7 @@ import { promptAttachmentSchema, turnFileRefSchema } from '@gugu/session-core/ac
 import { SessionInputAdmissionError, sessionInputAdmission, type SessionInputAdmission } from '@gugu/core/shared/sessionInputAdmission';
 import { createNativeRecordReader } from './native-record';
 import { createWindowOpenings, type WindowOpeningInput, type WindowOpeningLease, type WindowOpeningProof, type WindowOpeningSelection } from './window-opening';
-import { reserveWindowCommitHost } from './window-commit-host';
+import { reserveWindowCommitHost } from './window-commit-production';
 import type { WindowLiveReadRequest, WindowLiveAckRequest, WindowCommitPage } from '@gugu/session-wire/session-window-live';
 import { priorInputAdmission, sameInput, type InputAdmissionPayload } from './input-admission';
 import { ask, withdrawAll } from '../asks';

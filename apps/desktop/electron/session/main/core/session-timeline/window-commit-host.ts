@@ -69,6 +69,12 @@ export function bindWindowCommitProjection(project: Producer): () => void {
   const producer = { project }; selected.producer = producer; selected.enabled = true;
   return () => { if (selected.producer !== producer) return; selected.producer = undefined; selected.enabled = false; selected.runtime.invalidateStore(); };
 }
+/** One main-owned production factory per host generation; no worker get/start. */
+export function ensureWindowCommitProjection(factory: () => Producer): void {
+  const selected = slot();
+  if (selected.producer) return;
+  selected.producer = { project: factory() }; selected.enabled = true;
+}
 export function reserveWindowCommitHost(...input: Parameters<Runtime['reserve']>) {
   const selected = slot();
   if (!selected.enabled || selected.storageFailed) throw Object.assign(new Error('Commit projection is unavailable'), { code: 'live_projection_unavailable' });

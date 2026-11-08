@@ -16,6 +16,9 @@ import { readWindowCommitSourceChunk } from './window-commit-source';
 import { createWindowBudget } from '@gugu/session-core/session-record/window-cache/read-budget';
 import type { WindowCommittedEvent } from './window-commit-tap';
 import { events as hostEvents } from '@main/lib/events';
+import { reserveWindowCommitHost as reserveProduction } from './window-commit-production';
+import { readPublishedCommitEntity } from './window-commit-publisher';
+import { openCommitBodySlot, readCommitBodySlot } from './window-commit-slot';
 
 const state = vi.hoisted(() => ({ db: undefined as AppDb | undefined, sqlite: undefined as Database.Database | undefined, root: '' }));
 vi.mock('@main/db/client', () => ({ get db() { return state.db; }, get sqlite() { return state.sqlite; } }));
@@ -67,6 +70,25 @@ describe('the main-process commit host and actual canonical writer', () => {
   it('rejects new handoff reservations without a durable producer rather than declaring a successful empty view', () => {
     expect(() => reserveWindowCommitHost('view', 'c', vi.fn())).toThrow(expect.objectContaining({ code: 'live_projection_unavailable' }));
     expect(fixture.sqlite.prepare('SELECT id FROM session_turns').all()).toEqual([]);
+  });
+
+  it('delivers a cold complete turn through the real durable publisher, journal, body point read and ACK', async () => {
+    const failed = vi.fn(), events = source(), owner = reserveProduction('real-view', 'c', failed), after = await owner.prepare();
+    expect(events.subscriberCount).toBe(0); expect(fixture.sqlite.prepare('SELECT id FROM session_turns').all()).toEqual([]);
+    connected = await connectWindowCommitHost(stream(events), () => {}, connection);
+    const written = Promise.withResolvers<void>();
+    vi.mocked(hostEvents.emit).mockImplementation(channel => { if (channel.name === 'session:turn-settled') written.resolve(); });
+    events.emit({ sessionId: 'c', source: 'live', turn: { id: 'gap-turn', seq: 0, referenceId: 'gap-ref', initiator: 'user',
+      items: [{ kind: 'message', id: 'gap-item', seq: 0, role: 'assistant', text: 'complete before live attaches' }], outcome: { kind: 'done' } } });
+    await written.promise; owner.authorize(); const page = await owner.read(after);
+    expect(page.entries).toHaveLength(1); expect(page.entries[0]).toMatchObject({ kind: 'insert', referenceId: 'gap-ref', storedSeq: 0 });
+    const receipts = createWindowCommitReceipts(fixture.sqlite), receipt = receipts.byReference('c', 'gap-ref')!;
+    const directory = join(state.root, 'session-window-cache', 'committed');
+    const entity = await readPublishedCommitEntity({ directory, receipts, receipt }, page.entries[0].projectionId, 0, createWindowBudget());
+    const body = openCommitBodySlot(directory, receipts, receipt, entity.facts, 'text', entity.bodyBuildId);
+    expect(await readCommitBodySlot(body, 0, createWindowBudget())).toMatchObject({ kind: 'body', text: 'complete before live attaches', moreAfter: 'no' });
+    owner.ack(page.next); const waiting = expect(owner.read(page.next)).rejects.toMatchObject({ code: 'unsubscribed' });
+    owner.close(); await waiting; expect(failed).not.toHaveBeenCalled();
   });
 
   it('awaits source attachment before releasing the worker boundary and fails a cold owner on setup failure', async () => {
