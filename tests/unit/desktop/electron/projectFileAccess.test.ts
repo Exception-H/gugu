@@ -295,6 +295,16 @@ describe('local read fence and verified snapshot', () => {
     await expect(second.get(key, 1)).rejects.toThrow('Invalid file range')
     await second.clear(key); expect(await readdir(tempRoot)).toEqual([])
   })
+  it('an agent reading by message gets the file on this disk, with no temporary transfer through the cloud', async () => {
+    const read = createProjectFileReader({ identity, root: async () => root, env })
+    const never = vi.fn(async () => { throw Error('Network must remain unused') })
+    const providers: FileProviders = { local: localProjectFileProvider({ identity, read, tempRoot, env }), metadata: vi.fn(async () => ({ status: 'ready' as const, revision })), managed: never, ssh: never, temporary: never }
+    const file = await createFileResolver(providers)({ message_id: 'message' }, { accountId, actorId: 'agent' })
+    if (file.status !== 'ready') throw Error('ready expected')
+    expect(await file.read(0, 2)).toEqual(new Uint8Array([83, 83]))
+    await file.dispose()
+    expect(never).not.toHaveBeenCalled()
+  })
   it('resolves locally before cloud lookup, is lazy, and exposes immutable bytes without paths or writes', async () => {
     const read = vi.fn(reader())
     const never = vi.fn(async () => { throw Error('Network must remain unused') })

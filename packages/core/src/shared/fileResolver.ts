@@ -147,7 +147,10 @@ export async function openFileBytes(providers: FileProviders, revision: FileRevi
   }
   if (local) return consume(await local.open())
   if (revision.source !== 'managed-object' && context.actor.accountId === revision.host_account_id) {
-    const own = { ...context, actor: Object.freeze({ accountId: context.actor.accountId, actorId: context.actor.accountId }) }
+    // The file's own id, however it was asked for (a message, an attachment): this device keeps versions by item. Without it
+    // an agent's read of a file on this very disk would miss, and go up to the cloud and back as a temporary transfer.
+    const ref = revision.item_id ? Object.freeze({ item_id: revision.item_id, version: revision.version! }) : context.ref
+    const own = { ...context, ref, actor: Object.freeze({ accountId: context.actor.accountId, actorId: context.actor.accountId }) }
     const here = await providers.local(own)
     if (here && sameRevision(here.revision, revision)) return consume(await here.open())
     context.signal?.throwIfAborted()
