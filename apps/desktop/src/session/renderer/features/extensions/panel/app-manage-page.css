@@ -159,6 +159,12 @@
 .mg .mk-tools {
   margin-top: 8px;
 }
+.mg .mk-tools i {
+  font-style: normal;
+}
+.mg-row .text-md {
+  font-size: var(--font-body);
+}
 .mg .mk-vers {
   margin-top: 8px;
 }

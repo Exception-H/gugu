@@ -412,7 +412,7 @@ export function AppManagePage({
       {links.map((link) => <Button type="button" variant="outline" size="sm" key={link.href} onClick={() => onOpenExternal(link.href)}>{link.label}</Button>)}
     </Row>
     {onUninstall ? (
-      <Row title={translate('extensions.manageUninstall', { name: text.name })} note={translate('extensions.manageUninstallNote')} testId="app-manage-uninstall">
+      <Row title={translate('extensions.manageUninstall')} note={translate('extensions.manageUninstallNote')} testId="app-manage-uninstall">
         <Button type="button" variant="destructive" size="sm" disabled={readOnly || pending !== undefined} onClick={onUninstall} data-testid="app-manage-uninstall-action">{translate('extensions.uninstallAction')}</Button>
       </Row>
     ) : null}
@@ -430,7 +430,7 @@ export function AppManagePage({
     const onScroll = () => {
       if (clicked.current) return;
       const top = scroller.getBoundingClientRect().top + 80;
-      const atEnd = scroller.scrollTop + scroller.clientHeight >= scroller.scrollHeight - 2;
+      const atEnd = scroller.scrollTop > 0 && scroller.scrollTop + scroller.clientHeight >= scroller.scrollHeight - 2;
       const seen = atEnd ? nodes.at(-1) : nodes.filter((node) => node.getBoundingClientRect().top <= top).at(-1);
       setCurrent((seen ?? nodes[0])!.getAttribute('data-manage-section')!);
     };
