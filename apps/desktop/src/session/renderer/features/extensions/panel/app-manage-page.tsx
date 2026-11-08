@@ -226,7 +226,8 @@ export function AppManagePage({
   // ── 页面:能关的一页一行;打开文件的和消息卡片关不了,各并成一行,不重复 App 的名字 ──
   const pageTabs = manifest.contributes.tabs.filter((tab) => !tab.hostPage);
   const ownPages = pageTabs.filter((tab) => isOwnPage(manifest, tab));
-  const allHidden = ownPages.length > 0 && ownPages.every((tab) => hiddenTabs.includes(tab.name));
+  // A host page (its settings, drawn by gugu) cannot be turned off, so an App with one still opens to it.
+  const allHidden = ownPages.length > 0 && manifest.contributes.tabs.every((tab) => !isOwnPage(manifest, tab) || hiddenTabs.includes(tab.name));
   const listJoin = locale.startsWith('zh') ? '、' : ', ';
   const fileTypes = [...new Set(pageTabs.flatMap((tab) => [...claimedSuffixes(tab, 'session'), ...claimedSuffixes(tab, 'chat')]))]
     .map((suffix) => (suffix === '*' ? translate('extensions.manageAnyFile') : suffix));

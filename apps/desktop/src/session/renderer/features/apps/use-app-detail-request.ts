@@ -27,6 +27,8 @@ export function useAppDetailRequest({ target, ready, host, setDetail, detail, ro
       if (target.variant && !installed) throw new Error('The installed App is no longer available on this device.');
       if (installed) {
         setDetail({ page: 'manage', extensionId: target.extensionId, fromApp: target.fromApp });
+        // The same App's page may already be showing, scrolled down: asking for it again starts at the top.
+        rootRef.current?.scrollIntoView({ block: 'start' });
         return;
       }
       const result = await host.api.marketEntry({ extensionId: target.extensionId });
@@ -36,7 +38,7 @@ export function useAppDetailRequest({ target, ready, host, setDetail, detail, ro
     };
     void open().catch((error: unknown) => { if (!cancelled) toast({ title: messageForUser(error), variant: 'destructive' }); });
     return () => { cancelled = true; };
-  }, [target, ready, host, setDetail]);
+  }, [target, ready, host, setDetail, rootRef]);
   const variants = target ? host.store.variants[target.extensionId] : undefined;
   useEffect(() => {
     if (target?.variant && detail?.page === 'manage' && detail.extensionId === target.extensionId) {
