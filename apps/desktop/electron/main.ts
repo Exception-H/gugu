@@ -44,6 +44,7 @@ import {
   safeStorage,
   screen,
   desktopCapturer,
+  systemPreferences,
   webContents,
   type OpenDialogOptions
 } from 'electron'
@@ -54,6 +55,7 @@ import { captureReading, currentReading, historyReading } from './session/main/c
 import { setMacFootprintReader } from './session/main/core/resource-monitor/footprint'
 import { clearTraceLeftovers } from './session/main/core/resource-monitor/capture'
 import { sampleCuaImage } from './device-actions/native/cua-image-sample'
+import { createScreenCapture } from './device-actions/screen-capture'
 import { createComputerControlWindow } from './device-actions/computer-control-window'
 import { computerControlWindowReaders } from './device-actions/computer-control-foreground'
 import { installNativeAppearanceSync, installWindowMaterial, type WindowMaterialHost } from './window-material'
@@ -2085,6 +2087,13 @@ function deviceActionsRuntime(): DeviceActionsRuntime {
         const out = resized.getSize()
         return { mimeType: 'image/jpeg', data: resized.toJPEG(quality).toString('base64'), width: out.width, height: out.height }
       },
+      captureScreenNative: createScreenCapture({
+        platform: process.platform,
+        primaryDisplay: () => screen.getPrimaryDisplay(),
+        displayCount: () => screen.getAllDisplays().length,
+        screenAccess: () => systemPreferences.getMediaAccessStatus('screen'),
+        sources: options => desktopCapturer.getSources(options),
+      }),
       // 截主屏一张,长边缩到 maxEdge(模型看图的甜区);macOS 上要「屏幕录制」权限,没有时系统只给桌面背景。
       captureScreen: async ({ maxEdge }) => {
         const primary = screen.getPrimaryDisplay()
