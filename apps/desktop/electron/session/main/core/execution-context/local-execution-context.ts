@@ -60,7 +60,7 @@ export class LocalExecutionContext implements IExecutionContext {
     }
     return execFileAsync(launch.command, launch.args, {
       cwd: this.root || undefined,
-      env,
+      env: launch.env ?? env,
       timeout,
       maxBuffer,
       signal: this._signal(opts.signal),
