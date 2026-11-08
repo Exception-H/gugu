@@ -1,12 +1,11 @@
 import { createChatContext, createChatState, type ChatMessage } from '@gugu/session-chat-ui';
-import { act } from 'react';
-import { createRoot } from 'react-dom/client';
 import { afterEach, expect, it } from 'vitest';
 import { page } from 'vitest/browser';
 import { SessionUiTheme } from '@/components/sessionpage/SessionUiTheme';
 import { AgentConversationView } from '@renderer/lib/chat/agent-conversation-view';
 import { workspaceFileMentionProvider } from '@renderer/lib/chat/workspace-file-mention-provider';
 import { until } from '../../../../../../../tests/support/awaitCondition';
+import { createReactHarness } from '../../../../../../../tests/support/testHarness';
 import '@/styles/tokens.css';
 import '@renderer/index.css';
 import '@/mobile/phone-look.css';
@@ -46,9 +45,11 @@ it.each(['light', 'dark'].flatMap(theme => ['conversation', 'task'].map(surface 
   state.transcript.history.seed([{ id: 'owner-input', seq: 1, initiator: 'user', outcome: { kind: 'done' }, items: [message] }]);
   const mount = surface === 'task' ? shell.appendChild(document.createElement('section')) : shell;
   if (surface === 'task') mount.className = 'assistant-task-chat-window';
-  const root = createRoot(mount);
-  cleanups.push(() => { act(() => root.unmount()); state.dispose(); context.dispose(); host.remove(); });
-  await act(async () => { root.render(<SessionUiTheme theme={theme}><AgentConversationView context={context} state={state} /></SessionUiTheme>); });
+  const harness = createReactHarness();
+  harness.container.style.display = 'contents';
+  mount.append(harness.container);
+  cleanups.push(() => { harness.cleanup(); state.dispose(); context.dispose(); host.remove(); });
+  await harness.render(<SessionUiTheme theme={theme}><AgentConversationView context={context} state={state} /></SessionUiTheme>);
   await until('actual message body and destination render', () => !!shell.querySelector('[data-user-card] .gg-md p') && !!shell.querySelector('[data-slot="sent-to"]'));
   const card = shell.querySelector<HTMLElement>('[data-user-card]')!;
   const text = card.querySelector<HTMLElement>('.gg-md p')!;
