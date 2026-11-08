@@ -16,7 +16,9 @@ export type AgentActivityEvent = {
 export type AgentActivityGroup = { id: string; events: readonly AgentActivityEvent[]; messageIds?: readonly string[] };
 export const activityId = (id: string) => `agent-activity:${id}`;
 
-function actor(address: string, ctx: SegmentCtx, fallback?: string | null): ActivityActor | null {
+type ActivityContext = Pick<SegmentCtx, 'actor' | 'chatName' | 'chatKind' | 'translate'>;
+
+function actor(address: string, ctx: ActivityContext, fallback?: string | null): ActivityActor | null {
   const known = ctx.actor?.(address);
   const match = /^(user|session):(.+)$/.exec(known?.id ?? address);
   if (!match) return null;
@@ -26,7 +28,7 @@ function actor(address: string, ctx: SegmentCtx, fallback?: string | null): Acti
 }
 
 /** Identity comes from the authenticated envelope, never names or message prose. Mixed batches stay visible. */
-export function incomingActivity(item: ChatMessage, ctx: SegmentCtx, live = false): AgentActivityEvent | null {
+export function incomingActivity(item: ChatMessage, ctx: ActivityContext, live = false): AgentActivityEvent | null {
   // Host custody must not expose a proven Agent input before its native echo arrives.
   if (item.role !== 'user' || (item.sendStatus && item.sendStatus.state !== 'receiving')) return null;
   const segments = (item.guguDelivery ?? readDeliveryEnvelope(item.text))?.segments;
@@ -42,7 +44,7 @@ export function incomingActivity(item: ChatMessage, ctx: SegmentCtx, live = fals
   return { id: item.id, direction: 'received', actors: actors as ActivityActor[], count: segments.length, live };
 }
 
-function sentGroup(addresses: SendAddresses, ctx: SegmentCtx): ActivityActor | undefined {
+function sentGroup(addresses: SendAddresses, ctx: ActivityContext): ActivityActor | undefined {
   const target = addresses.target;
   if (target.kind !== 'chat' || target.whisper) return;
   const id = target.conversationId || target.chatId;
@@ -54,7 +56,7 @@ function sentGroup(addresses: SendAddresses, ctx: SegmentCtx): ActivityActor | u
 }
 
 /** Any human/unknown addressee keeps the output visible. A known, unaddressed group is A2A. */
-export function outgoingActivity(id: string, addresses: SendAddresses | undefined | null, ctx: SegmentCtx, count = 1): AgentActivityEvent | null {
+export function outgoingActivity(id: string, addresses: SendAddresses | undefined | null, ctx: ActivityContext, count = 1): AgentActivityEvent | null {
   if (!addresses) return null;
   const group = sentGroup(addresses, ctx);
   const recipients = addresses.recipients ?? (addresses.recipientsExplicit === false && group ? [] : null);
@@ -80,7 +82,7 @@ export function hasUnconfirmedSend(items: readonly TranscriptItem[], turn: Trans
 }
 
 /** Proven group reply to the viewer: preserve one original source link, no session notification. */
-export function viewerGroupReply(message: ChatMessage, ctx: SegmentCtx): ActivityActor | null {
+export function viewerGroupReply(message: ChatMessage, ctx: ActivityContext & Pick<SegmentCtx, 'viewerId'>): ActivityActor | null {
   const addresses = message.sentAddresses;
   const viewer = ctx.viewerId?.replace(/^user:/, '');
   if (!viewer || !addresses?.confirmed || !addresses.recipients?.some(id => id === `user:${viewer}`)) return null;

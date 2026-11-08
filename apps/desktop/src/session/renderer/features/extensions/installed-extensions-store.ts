@@ -6,6 +6,7 @@ import {
   declaredContexts,
   extensionTabKind,
   isOwnPage,
+  parseExtensionTabKind,
   type ExtensionManifest,
   type ExtensionTabKind
 } from '@shared/extensions/manifest';
@@ -116,6 +117,18 @@ export class InstalledExtensionsStore {
   constructor(private readonly api: InstalledExtensionsApi = rpc.extensions) {
     makeAutoObservable<InstalledExtensionsStore, 'api'>(this, { api: false });
     subscribeLocale(() => runInAction(() => { this.locale = getLocaleSnapshot().resolvedLocale; }));
+  }
+
+  /**
+   * The file an App names for a chat (`chatFile`) is that App's own state, not a document of the person's: its tab goes by
+   * the App's name. `fileName` may also be the name shown for it, its claimed suffix dropped (a block keeps only that).
+   */
+  isChatFile(kind: string | null | undefined, fileName: string | undefined): boolean {
+    const tabName = kind ? parseExtensionTabKind(kind) : null;
+    const tab = tabName && this.manifestFor(tabName.extensionId)?.contributes.tabs.find((candidate) => candidate.name === tabName.tabName);
+    const chatFile = tab?.chatFile?.toLowerCase();
+    const name = fileName?.toLowerCase();
+    return !!chatFile && !!name && (chatFile === name || chatFile.startsWith(`${name}.`));
   }
 
   /** A default App page uses its localized name; specifically named subpages keep their contribution title. */

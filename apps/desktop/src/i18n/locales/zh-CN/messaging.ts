@@ -290,6 +290,7 @@ export default {
     "markAllReadPartial_other": "有 {{count}} 个会话未能标为已读，请重试",
     "markUnreadFailed": "标记未读失败，请重试",
     "muted": "消息免打扰",
+    "newMessage": "收到一条新消息",
     "noResults": "未找到对话",
     "searchMessagesTitle": "搜索消息",
     "listLabel": "对话列表",
@@ -446,7 +447,20 @@ export default {
     "mobilePlaceholder": "消息",
     "projectGroupPlaceholder": "发消息给 {{name}}… @ 某个 agent 叫它",
     "removeAttachment": "移除 {{fileName}}",
-    "sendFailed": "发送失败：{{reason}}",
+    "sendFailed": "消息没发出去：{{guidance}}",
+    "failedFileLabel": "{{kind}} {{name}}",
+    "failedFileKind": { "image": "图片", "video": "视频", "audio": "音频", "file": "文件" },
+    "fileSendFailed": "{{file}} 没发出去：{{guidance}}",
+    "filesSendFailed": "{{count}} 个文件没发出去：{{guidance}}",
+    "failureReason": {
+      "tooLarge": "文件太大，请缩小后重新发送",
+      "signIn": "登录已失效，请重新登录后发送",
+      "denied": "没有发送权限，请确认对话权限后重新发送",
+      "busy": "发送过于频繁，请稍后重新发送",
+      "chatUnavailable": "对话已不可用，请返回消息列表确认",
+      "timeout": "发送超时，请稍后重新发送",
+      "unavailable": "发送未完成，请稍后重新发送"
+    },
     "verb": {
       "task": "新任务"
     },
@@ -510,6 +524,15 @@ export default {
       "joined": " 加入了群聊",
       "mentionHint": "在输入框里 @{{name}}",
       "separator": "、"
+    },
+    "notice": {
+      "agentFloodGroup": "这个群里 agent 较多，已把它们都转为被动模式，@ 它们才会回。",
+      "agentFloodTopic": "这条话题里 agent 较多，已把它们都转为被动模式，@ 它们才会回。",
+      "left": "{{actor}} 退出了群聊",
+      "madeAdmin": "{{actor}} 将 {{target}} 设为管理员",
+      "removed": "{{actor}} 将 {{target}} 移出了群聊",
+      "revokedAdmin": "{{actor}} 撤销了 {{target}} 的管理员身份",
+      "topicOpened": "{{actor}} 开了话题："
     },
     "memberList": {
       "agentLeave": "让它退出群聊",
@@ -830,7 +853,8 @@ export default {
     "sourceDiscarded": "原消息未发出，已被丢弃",
     "deliveryTimeout": "投递超时 {{seconds}}s（网络挂起）",
     "discarded": "已丢弃",
-    "offscreenFailure": "有消息未送达，回到对应对话可重试或丢弃",
+    "offscreenFailure": "「{{chatName}}」中的消息未送达，回到该对话可重试或丢弃",
+    "chatById": "会话 {{id}}",
     "recipientMissing": "收件人已不可用，消息未发送。",
     "sendFailed": "发送失败"
   },

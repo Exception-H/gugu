@@ -31,7 +31,7 @@ import { measureUserMessage } from './user-message-metrics';
 import { userMessageActionsHeight, type MessageVars } from './metrics';
 import { conversationRoot, conversationHeader, conversationName, conversationTime, conversationProcessButton, conversationProcessChevron, conversationTimeSeparator, conversationReferenceSeparator } from './conversation-message.css';
 
-import { CONVERSATION_PREVIEW_MAX_H } from '@session-chat/components/engine/row-metrics';
+import { CONVERSATION_PREVIEW_MAX_H, USER_PREVIEW_MAX_H } from '@session-chat/components/engine/row-metrics';
 
 export function conversationContext(ctx: MeasureCtx, item?: ChatMessage): MeasureCtx {
   return { ...ctx,
@@ -40,8 +40,10 @@ export function conversationContext(ctx: MeasureCtx, item?: ChatMessage): Measur
 }
 
 export function conversationVars(item: ChatMessage, vars: MessageVars): MessageVars {
-  const long = !item.conversationFull && (item.text.length > 700 || item.text.split('\n').length > 10);
-  return { ...vars, footerH: CONVERSATION_FOOTER_H, collapsedMaxH: long ? CONVERSATION_PREVIEW_MAX_H : Number.MAX_SAFE_INTEGER, expandedMaxH: Number.MAX_SAFE_INTEGER };
+  // A person's message folds sooner than a reply: about five lines (owner 2026-11-07, 「折叠的 threshold 压小一点」).
+  const [chars, lines, cap] = item.role === 'user' ? [200, 5, USER_PREVIEW_MAX_H] : [700, 10, CONVERSATION_PREVIEW_MAX_H];
+  const long = !item.conversationFull && (item.text.length > chars || item.text.split('\n').length > lines);
+  return { ...vars, footerH: CONVERSATION_FOOTER_H, collapsedMaxH: long ? cap : Number.MAX_SAFE_INTEGER, expandedMaxH: Number.MAX_SAFE_INTEGER };
 }
 
 function segments(item: ChatMessage): ChatMessage[] {

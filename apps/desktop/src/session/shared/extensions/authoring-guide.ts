@@ -925,8 +925,8 @@ into \`bind.codemirror\` uploads beside it.
 A canvas, a board, an editor: write your own CSS, and take the values from the tokens — they follow light and dark by
 themselves. Colours: \`--em-background\`, \`--em-background-1\` (a card), \`--em-background-3\`, \`--em-foreground\`,
 \`--em-foreground-muted\`, \`--em-foreground-passive\`, \`--em-border\`, \`--em-border-1\`, \`--em-accent-9\` /
-\`--em-accent-contrast\` (gugu's primary is ink, not a hue), \`--em-foreground-destructive|success|warning|info\` and their
-\`--em-background-*\`, \`--em-hover\` / \`--em-press\` / \`--em-selected\`. Sizes: \`--em-font-caption|body|title|heading|page\`
+\`--em-accent-contrast\` (gugu's primary is ink, not a hue), \`--em-foreground-destructive|success|warning|info\` (text) and their
+\`--em-background-*\`, \`--em-danger-solid\` (fill under a white label), \`--em-danger\` / \`--em-warn\` (fills with nothing on them; the foregrounds are for text), \`--em-hover\` / \`--em-press\` / \`--em-selected\`. Sizes: \`--em-font-caption|body|title|heading|page\`
 (11–20) with \`--em-lh-*\`, \`--em-spacing-xs\`…\`-2xl\` (4–24), \`--em-radius-control\` (8) / \`-xl\` (12), \`--em-control-h-md\`.
 The page's edge is \`body\`'s margin: \`body { margin: 0 }\` and the page is yours edge to edge.
 

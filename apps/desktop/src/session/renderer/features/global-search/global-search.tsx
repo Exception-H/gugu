@@ -270,7 +270,7 @@ export function GlobalSearch({ tasks, names = false, onClose, onOpen }: { tasks:
             </button>}
             {group.hits.map((hit) => {
               const isSelected = hit.id === selected?.id
-              const sender = hit.kind === 'message' ? hit.sender ?? translate('globalSearch.system') : translate(hit.role === 'assistant' ? 'globalSearch.agent' : 'globalSearch.you')
+              const sender = hit.kind === 'message' ? hit.sender ?? translate('globalSearch.system') : translate(hit.role === 'assistant' || hit.activity ? 'globalSearch.agent' : 'globalSearch.you')
               return (
                 <button type="button" role="option" aria-selected={isSelected} data-selected={isSelected} key={hit.id}
                   onMouseMove={() => { if (!isSelected) updateSearchSession({ selectedId: hit.id }) }}

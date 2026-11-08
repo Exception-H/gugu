@@ -2,7 +2,7 @@ import { followLink, openLinkTarget } from '../../lib/guguLinks'
 import { reaction } from 'mobx'
 import { lazy, Suspense, useEffect, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import { readMemberRosterRevision, readWorkspaceChanges } from '../../lib/accountRevisionCoordinator'
+import { readMemberRosterRevision, readRenamedMembers, readWorkspaceChanges } from '../../lib/accountRevisionCoordinator'
 import { extensionSurfaceStore } from '../../session/renderer/features/extensions/extension-surface-store'
 import { installedExtensionsStore } from '../../session/renderer/features/extensions/installed-extensions-store'
 import {
@@ -229,6 +229,14 @@ export function PhoneAppFrame({
     return subscribeAccountRevision('chat_members_changed', (operations) => {
       const changes = operations.map((operation) => readMemberRosterRevision(operation.payload)).filter((change) => change.chatId === chatId)
       if (changes.length > 0) hostRef.current?.membersChanged(changes)
+    })
+  }, [chatId, subscribeAccountRevision])
+  // A name or face is the person's, not a member row's: no chat_members_changed comes for it (`MemberChange.renamed`).
+  useEffect(() => {
+    if (!chatId) return undefined
+    return subscribeAccountRevision('agent_changed', (operations) => {
+      const renamed = readRenamedMembers(operations.map((operation) => operation.payload))
+      if (renamed.length > 0) hostRef.current?.membersChanged(renamed.map((memberId) => ({ memberId, left: false, renamed: true })))
     })
   }, [chatId, subscribeAccountRevision])
 

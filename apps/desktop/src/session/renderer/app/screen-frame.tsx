@@ -315,7 +315,7 @@ const ChatAppBlock = observer(function ChatAppBlock({ blockId, content }: { bloc
   const { chatId, tabKind, itemId, title } = content;
   const contribution = installedExtensionsStore.allTabContributions.find((entry) => entry.kind === tabKind);
   const slot = `screen:${blockId}`;
-  const { label, tooltip } = extensionTabTitle(extensionSurfaceStore.said(null, slot), itemId ? title : (installedExtensionsStore.tabTitle(tabKind) ?? title));
+  const { label, tooltip } = extensionTabTitle(extensionSurfaceStore.said(null, slot), itemId && !installedExtensionsStore.isChatFile(tabKind, title) ? title : (installedExtensionsStore.tabTitle(tabKind) ?? title));
   const corners = screenLayout.corners(blockId);
   const multi = screenLayout.order.length > 1;
   const putBack = () => {

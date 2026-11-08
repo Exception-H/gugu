@@ -223,6 +223,8 @@ export interface ExtensionHostContext {
   locale: string;
   /** Whether the host is currently painting light or dark. */
   themeMode: 'light' | 'dark';
+  /** The person's color theme, when one is on: `--em-*` palette values the runtime applies over ui.css. Not for pages to read: they use the `--em-*` names. */
+  themeColors?: Readonly<Record<string, string>>;
   /** What this extension may actually do right now, after any revocations, on this host. */
   capabilities: readonly ExtensionCapability[];
   /** How the host is showing this surface at the moment. Absent on a page nobody draws. */

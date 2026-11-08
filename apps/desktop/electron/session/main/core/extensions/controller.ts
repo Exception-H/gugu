@@ -1,5 +1,5 @@
 import { getMainWindow } from '@main/app/window';
-import type { ChatFileRef } from '@shared/extensions/app-files-core';
+import type { ChatFileRef, MemberChange } from '@shared/extensions/app-files-core';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { app } from 'electron';
@@ -12,6 +12,7 @@ import {
 } from '@main/core/extensions/extension-session';
 import {
   chatMembersChanged,
+  chatsWithPages,
   bindExtensionSurface,
   retargetExtensionSurface,
   notifyGroupWorkspaceChanged,
@@ -468,12 +469,19 @@ export const extensionsController = createRPCController({
       return { success: false as const, error: error instanceof Error ? error.message : String(error), code: (error as { code?: string }).code };
     }
   },
-  /** 摩擦单 F36: the window saw rows of these chats' members change (who, left or not); the pages sitting in them are told when that moved who is there. */
-  chatMembersChanged: async (args: { changes: { chatId: string; memberId: string | null; left: boolean }[] }) => {
-    const byChat = new Map<string, { memberId: string | null; left: boolean }[]>();
+  /**
+   * 摩擦单 F36: the window saw rows of these chats' members change (who, left or not), or these people renamed (`renamed`:
+   * no chat named, so every chat a page sits in hears it); the pages are told when that moved who is there.
+   */
+  chatMembersChanged: async (args: { changes?: { chatId: string; memberId: string | null; left: boolean }[]; renamed?: string[] }) => {
+    const byChat = new Map<string, MemberChange[]>();
     for (const change of Array.isArray(args?.changes) ? args.changes : []) {
       if (typeof change?.chatId !== 'string') continue;
       byChat.set(change.chatId, [...(byChat.get(change.chatId) ?? []), { memberId: typeof change.memberId === 'string' ? change.memberId : null, left: change.left === true }]);
+    }
+    const renamed = (Array.isArray(args?.renamed) ? args.renamed : []).filter((id): id is string => typeof id === 'string' && id !== '');
+    if (renamed.length > 0) {
+      for (const chatId of chatsWithPages()) byChat.set(chatId, [...(byChat.get(chatId) ?? []), ...renamed.map((memberId) => ({ memberId, left: false, renamed: true }))]);
     }
     await Promise.all([...byChat].map(([chatId, changes]) => chatMembersChanged(chatId, changes)));
     return { success: true as const };

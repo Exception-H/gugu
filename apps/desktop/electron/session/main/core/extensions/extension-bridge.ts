@@ -1094,6 +1094,8 @@ export interface ExtensionBridgeHost {
   presentation(): {
     locale: string;
     themeMode: 'light' | 'dark';
+    /** The person's color theme, when one is on (`ExtensionHostContext.themeColors`). */
+    themeColors?: Readonly<Record<string, string>>;
     fullscreen: boolean;
     /**
      * Whether gugu's window is in the foreground.
@@ -1227,6 +1229,11 @@ function chatRead(chatId: string, includeMembers = true): Promise<void> {
 const unread = (chatId: string) => (error: unknown) =>
   log.warn('The chat could not be read', { chatId, message: error instanceof Error ? error.message : String(error) });
 
+/** The chats some page is drawn in: where a change to a person, which names no chat, may move who is shown. */
+export function chatsWithPages(): string[] {
+  return [...new Set([...bindings.values()].flatMap((binding) => (binding.conversation ? [binding.conversation] : [])))];
+}
+
 /** A row of this chat's members changed: if that moved who is in it (`rosterMoved`), read them again and tell its pages. */
 export async function chatMembersChanged(chatId: string, changes: readonly MemberChange[]): Promise<void> {
   // No page drawn for it: nobody keeps its members current, so they are forgotten — read afresh when a page is (`pushContext`).
@@ -1325,7 +1332,7 @@ function personOperator(): ExtensionContextOperator {
 
 function contextFor(binding: SurfaceBinding, workspace: ExtensionWorkspace | undefined): ExtensionHostContext {
   const capabilities = extensionsService().grantedCapabilities(binding.extensionId);
-  const { locale, themeMode, fullscreen } = requireHost().presentation();
+  const { locale, themeMode, themeColors, fullscreen } = requireHost().presentation();
   const drawnIn = binding.conversation ? chatsDrawnIn.get(binding.conversation) : undefined;
   const file = handedFileOf(binding);
   return {
@@ -1342,6 +1349,8 @@ function contextFor(binding: SurfaceBinding, workspace: ExtensionWorkspace | und
     operator: binding.operator.kind === 'person' ? personOperator() : binding.operator,
     locale,
     themeMode: binding.themeMode ?? themeMode,
+    // A page shown in a theme of its own (`showAgentPageInTheme`) is a picture of that palette, not of the person's.
+    ...(themeColors && !binding.themeMode ? { themeColors } : {}),
     capabilities,
     layout: { ...binding.metrics, fullscreen },
   };
@@ -2311,7 +2320,9 @@ export function registerExtensionBridge(): void {
   // The theme a page loads in, for its first paint (EXTENSION_THEME_CHANNEL): what its context will say. The page is
   // loading, so it may not be bound yet — then the host's theme, which is what its context says too.
   ipcMain.on(EXTENSION_THEME_CHANNEL, (event) => {
-    event.returnValue = bindings.get(event.sender.id)?.themeMode ?? requireHost().presentation().themeMode;
+    const { themeMode, themeColors } = requireHost().presentation();
+    const own = bindings.get(event.sender.id)?.themeMode;
+    event.returnValue = { theme: own ?? themeMode, ...(themeColors && !own ? { themeColors } : {}) };
   });
 }
 

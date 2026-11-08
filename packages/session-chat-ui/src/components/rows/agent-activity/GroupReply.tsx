@@ -6,8 +6,7 @@ import * as styles from './activity.css';
 
 export function GroupReply(props: { message: ChatMessage }) {
   const t = useChatTranslator(), commands = useCommands();
-  const label = () => t('transcript.activityReplyToYou', { name: props.message.groupReply!.name,
-    text: props.message.text.trim().split(/\n|(?<=[。！？.!?])\s/)[0] });
+  const label = () => t('transcript.activityReplyToYou', { name: props.message.groupReply!.name });
   return <div class={styles.groupReply} data-group-reply={props.message.id}><button type="button" class={styles.groupReplyButton}
     onClick={() => {
       const group = props.message.groupReply!.target;
