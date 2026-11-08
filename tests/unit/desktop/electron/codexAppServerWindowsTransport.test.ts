@@ -1040,6 +1040,60 @@ while :; do sleep 1; done
     })
   })
 
+  it('starts the managed codex.exe directly when developer instructions exceed the cmd.exe line limit', () => {
+    const launcher = String.raw`C:\Users\tester\gugu-home\agents\mise-bin\codex.cmd`
+    const exe = String.raw`C:\Users\tester\gugu-home\agents\mise-bin\..\mise\data\installs\http-gugu-codex\0.155.1\vendor\x86_64-pc-windows-msvc\bin\codex.exe`
+    const shimReader: WindowsShimReader = {
+      readShim: (path) => path.toLowerCase() === launcher.toLowerCase()
+        ? '@echo off\r\nrem gugu-release: 0.155.1\r\n"%~dp0..\\mise\\data\\installs\\http-gugu-codex\\0.155.1\\vendor\\x86_64-pc-windows-msvc\\bin\\codex.exe" %*\r\n'
+        : null,
+      exists: (path) => path.toLowerCase() === exe.toLowerCase(),
+    }
+    const args = [
+      'app-server',
+      '--listen',
+      'ws://127.0.0.1:3210',
+      '-c',
+      `developer_instructions=${JSON.stringify('你是咕咕里的一位成员。'.repeat(2_000))}`,
+    ]
+    const comSpec = { ComSpec: String.raw`C:\Windows\System32\cmd.exe` }
+
+    const launch = resolveCodexAppServerSpawn(launcher, args, 'win32', comSpec, shimReader)
+    expect(launch).toEqual({ command: exe, args })
+
+    // A launcher that only cmd.exe can run gets a readable error instead of cmd's one-line path complaint.
+    const opaque: WindowsShimReader = { readShim: () => '@echo off\r\nmise x -- codex %*\r\n', exists: () => false }
+    expect(() => resolveCodexAppServerSpawn(launcher, args, 'win32', comSpec, opaque)).toThrow(/8191/)
+    const short = resolveCodexAppServerSpawn(launcher, args.slice(0, 3), 'win32', comSpec, opaque)
+    expect(short.command).toBe(comSpec.ComSpec)
+    expect(short.args.join(' ').length).toBeLessThanOrEqual(8191)
+  })
+
+  it('resolves the managed launcher under a home path with spaces and non-ASCII characters', () => {
+    const home = String.raw`C:\Users\张 三\gugu home\agents`
+    const launcher = `${home}\\mise-bin\\codex.cmd`
+    const exe = `${home}\\mise-bin\\..\\mise\\data\\installs\\http-gugu-codex\\0.167.0\\vendor\\x86_64-pc-windows-msvc\\bin\\codex.exe`
+    const shimReader: WindowsShimReader = {
+      readShim: (path) => path === launcher
+        ? '@echo off\r\nrem gugu-release: 0.167.0\r\n"%~dp0..\\mise\\data\\installs\\http-gugu-codex\\0.167.0\\vendor\\x86_64-pc-windows-msvc\\bin\\codex.exe" %*\r\n'
+        : null,
+      exists: (path) => path === exe,
+    }
+    const args = ['app-server', '--listen', 'ws://127.0.0.1:3210']
+    expect(resolveCodexAppServerSpawn(launcher, args, 'win32', {}, shimReader)).toEqual({ command: exe, args })
+  })
+
+  it.each(['linux', 'darwin'] as const)('leaves %s launches untouched, without reading the launcher', (platform) => {
+    const readShim = vi.fn(() => null)
+    const exists = vi.fn(() => false)
+    const args = ['app-server', '-c', `developer_instructions=${JSON.stringify('x'.repeat(20_000))}`]
+    for (const codexBin of ['/home/tester/.gugu/agents/mise-bin/codex', '/usr/local/bin/codex', '/tmp/odd/codex.cmd']) {
+      expect(resolveCodexAppServerSpawn(codexBin, args, platform, {}, { readShim, exists })).toEqual({ command: codexBin, args })
+    }
+    expect(readShim).not.toHaveBeenCalled()
+    expect(exists).not.toHaveBeenCalled()
+  })
+
   it.runIf(process.platform === 'win32')(
     'preserves config argv through a generic batch launcher on Windows',
     () => {

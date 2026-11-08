@@ -11,6 +11,7 @@ import {
   diskWindowsShimReader,
   escapeCmdCommand,
   escapeCmdShimArgument,
+  resolveWindowsHandoffExecutable,
   resolveWindowsNodeScriptLaunch,
   type WindowsShimReader,
 } from '@gugu/session-core/exec'
@@ -264,6 +265,15 @@ export interface CodexAppServerSpawn {
 // cmd.exe 会先解析一次，npm 风格 batch shim 的 `%*` 再转发一次 —— 两层转义的那份算法现在
 // 收在 `@gugu/session-core/exec` 的 windows-launcher 里，探测路与这条路共用同一份（#5719）。
 
+/**
+ * cmd.exe 一条命令行最多 8191 个字符。app-server 的 argv 带着进程级 `-c developer_instructions=…`
+ * (codexThreadConfigProcessArgs),实测两万多字符:经 cmd 起,cmd 直接 exit 1,stderr 只有一句
+ * 本地代码页的「系统找不到指定的路径」,会话「没能启动」、重试也一样。
+ * ⇒ 壳能换成真程序的一律不经 cmd(咕咕托管的 codex 启动器就是一行 `"%~dp0…\codex.exe" %*`);
+ *   换不出来又超长的,当场说清楚,❌ 交给 cmd 换一句乱码。
+ */
+export const CMD_COMMAND_LINE_LIMIT = 8191
+
 /** Resolve a Windows launcher into an argv-only child_process spawn. */
 export function resolveCodexAppServerSpawn(
   codexBin: string,
@@ -274,6 +284,14 @@ export function resolveCodexAppServerSpawn(
 ): CodexAppServerSpawn {
   if (platform !== 'win32' || /\.(?:com|exe)$/i.test(codexBin)) {
     return { command: codexBin, args }
+  }
+  if (/\.(?:cmd|bat|ps1)$/i.test(codexBin)) {
+    const program = resolveWindowsHandoffExecutable(codexBin, {
+      platform,
+      readShim: shimReader.readShim,
+      exists: shimReader.exists,
+    })
+    if (program) return { command: program, args }
   }
   if (/\.ps1$/i.test(codexBin)) {
     return {
@@ -288,9 +306,17 @@ export function resolveCodexAppServerSpawn(
   }
 
   const commandLine = [escapeCmdCommand(codexBin), ...args.map(escapeCmdShimArgument)].join(' ')
+  const cmdArgs = ['/d', '/s', '/c', `"${commandLine}"`]
+  const length = cmdArgs.join(' ').length
+  if (length > CMD_COMMAND_LINE_LIMIT) {
+    throw new Error(
+      `codex 启动器 ${codexBin} 只能经 cmd.exe 起,而这条命令行有 ${length} 个字符,超过 cmd 的上限 `
+      + `${CMD_COMMAND_LINE_LIMIT}。请改用 codex.exe 或 npm 安装的 codex(咕咕会绕过 cmd 直接起它们)。`,
+    )
+  }
   return {
     command: env.ComSpec ?? env.COMSPEC ?? 'C:\\Windows\\System32\\cmd.exe',
-    args: ['/d', '/s', '/c', `"${commandLine}"`],
+    args: cmdArgs,
     windowsVerbatimArguments: true
   }
 }
