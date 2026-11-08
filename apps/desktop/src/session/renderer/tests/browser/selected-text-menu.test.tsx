@@ -84,7 +84,6 @@ it('keeps endpoints available for a viewport-spanning range', async () => {
   expect(popup.bottom).toBeLessThanOrEqual(innerHeight);
 });
 
-
 it.each([390, 1100])('excludes the real selection-menu positioning layer from native hits at width %s', async width => {
   await page.viewport(width, 844);
   await openSelectedTextMenu();
@@ -137,7 +136,7 @@ it.each(['light', 'dark'] as const)('renders the selection menu in the %s test t
   document.documentElement.style.backgroundColor = 'var(--bg)';
   document.documentElement.style.color = 'var(--text-primary)';
   try {
-    const { selection, node } = await openSelectedTextMenu();
+    const { selection } = await openSelectedTextMenu();
     await act(async () => window.scrollTo(0, 0));
     const label = harness.container.appendChild(document.createElement('div'));
     label.textContent = `测试环境渲染，未经真机验证，原因：无真机\n${import.meta.env.VITE_SELECTION_SOURCE ?? 'regression test'}`;
