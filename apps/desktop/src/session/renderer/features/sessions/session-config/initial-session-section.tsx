@@ -108,7 +108,7 @@ import { rpcOn } from '@renderer/lib/ipc';
 import { toast } from '@renderer/lib/hooks/use-toast';
 import { asMounted, getProjectStore } from '@renderer/features/projects/stores/project-selectors';
 import { pushTaskDirectory, taskAttachmentUsesSsh } from '@/lib/taskAttachmentTarget';
-import { droppedDirectoryMention } from '@renderer/lib/drag-files';
+import { droppedDirectoryMention, pathMention } from '@renderer/lib/drag-files';
 import {
   createLocalSessionMentionProvider,
   localSessionMentionHiddenContext,
@@ -1493,6 +1493,12 @@ export function InitialSessionField({
   const { dataDropTypes, onDataDropped } = useSessionMentionDrop({
     provider: localSessionMentionProvider,
     editorApiRef,
+    // Defined below with the composer's other drop paths; called only when something is dropped.
+    attachFiles: enableAttachments ? (files) => handleFiles(files) : undefined,
+    dropFolder: (path) => {
+      if (remoteMachine) toast({ title: translate('chat.folderDropUnsupportedTitle'), variant: 'destructive' });
+      else editorApiRef.current?.insertMention(pathMention(path));
+    },
     onMentionResolved: useCallback((item: MentionItem) => {
       const known = new Map(localMentionItemsRef.current.map((entry) => [entry.label, entry]));
       known.set(item.label, item);
