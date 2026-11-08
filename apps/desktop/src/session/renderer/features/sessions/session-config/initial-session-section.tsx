@@ -119,6 +119,7 @@ import { useSessionMentionDrop } from '@renderer/lib/chat/use-session-mention-dr
 import { remoteHostsStore } from '@renderer/features/remote-hosts/remote-hosts-store';
 import { useComposerFileUploads, type TaskAttachmentTarget } from '@renderer/features/sessions/acp/use-composer-file-uploads';
 import type { TurnFileRef } from '@gugu/session-core/session-record/contract';
+import { guguReasonInText } from '@gugu/session-core/session-record/contract';
 import type { ComposerDraft, SubmittedComposerDraft } from '../composer-drafts';
 import {
   guguCatalogNotice,
@@ -1037,7 +1038,10 @@ export function useInitialSessionState(
   //    而那时咕咕的模型明明对 X 开着,是界面自己没去读。
   // 宿主报的是原因码,这里按界面语言说成人话;认不出的原文(老版本宿主)❌ 上屏。
   // 机器没连上时同理:咕咕模型的目录也是问那台机器要的,问不到是机器离线的结果,❌ 说成「模型列表尚未就绪」再给个「重试」。
-  const platformCatalogNotice = machineUnreachable ? null : guguCatalogNotice(platformCatalog.catalogError, translate);
+  // The sentence explains an empty picker. A harness with its own models and no Gugu group (Kiro, Antigravity) is not one.
+  const ownModelsOnly = guguReasonInText(platformCatalog.catalogError ?? '') === 'not-routable'
+    && harnessCatalogState.kind === 'ready' && harnessCatalogState.models.length > 0;
+  const platformCatalogNotice = machineUnreachable || ownModelsOnly ? null : guguCatalogNotice(platformCatalog.catalogError, translate);
   const platformNotice = platformCatalogNotice?.text ?? null;
   // 失败细节 ❌ 不拼进上面那句内联文案:那是 composer 工具栏,而 reason 是长度不可控的外部串,拼进去会把
   // 工具栏撑破、溢出到卡片外(真机上就是这么炸的)。工具栏留一句定性(「读取 X 的模型失败」),原因就地

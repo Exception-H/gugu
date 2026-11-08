@@ -13,7 +13,7 @@ describe('上架闸的 model 维(#6335)', () => {
       const model = provider.capabilities.sessionBundle?.units.model;
       return model?.kind === 'none' && model.degraded.code === 'unsupported-channel';
     });
-    expect(unsupportedModel.map((provider) => provider.metadata.id).filter((id) => id !== 'antigravity' && !withheld.has(id)))
+    expect(unsupportedModel.map((provider) => provider.metadata.id).filter((id) => id !== 'antigravity' && id !== 'kiro' && !withheld.has(id)))
       .toEqual([]);
   });
 });
@@ -24,7 +24,8 @@ describe('上架名单', () => {
   // owner 2026-10-18「zcode 这条线该端上来就端上来」⇒ zcode 上架,第 10 家(#7385)。
   // owner 2026-10-19「1 上架」⇒ CodeBuddy Code 上架,第 11 家(#7525)。
   // owner 2026-11-05「上架成第 12 家:同意」⇒ DeepSeek Harness 上架,第 12 家。
-  it('owner 拍板的 12 家', () => {
+  // owner 2026-11-08 approved Kiro: model `unsupported-channel`, the user's own Kiro credits, same as antigravity. 13th.
+  it('owner 拍板的 13 家', () => {
     expect(listUserExposedPlugins().map((provider) => provider.metadata.id).sort()).toEqual([
       'antigravity',
       'claude',
@@ -33,6 +34,7 @@ describe('上架名单', () => {
       'copilot',
       'dsh',
       'hermes',
+      'kiro',
       'mimocode',
       'opencode',
       'pi',
