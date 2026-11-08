@@ -1,5 +1,6 @@
 import { withTranscriptTurnIdentity } from '@shared/core/sessions/transcript-turn-identity';
 import { projectRejectedSessionInputs } from '@/lib/pendingSessionInput';
+import { messageFailureNotice, type MessageFailureAttempt } from '@/lib/messageFailureNotice';
 import type { TurnFileRef } from '@gugu/session-core/session-record/contract';
 import type {
   ChatContext,
@@ -156,6 +157,9 @@ export class AcpChatStore {
   historyLoading = true;
   /** A failure of opening / attaching this page; a failed session-life view says its own (`loadError`). */
   private _loadError: AcpLoadError | null = null;
+  private _draftSubmissionId = crypto.randomUUID();
+  get draftSubmissionId(): string { return this._draftSubmissionId; }
+  renewDraftSubmission(): void { this._draftSubmissionId = crypto.randomUUID(); }
   /** Life views up to this version answered an earlier attempt: a retry does not show them again. */
   private _lifeRetriedVersion = 0;
   private _unwatchLife: (() => void) | null = null;
@@ -1407,18 +1411,22 @@ export class AcpChatStore {
    * Both sends take the one custody path (sender outbox → host session_pending), persisted session or side chat;
    * the host decides whether the input runs now or queues.
    */
-  async submitPrompt(text: string, attachments: AcpPromptAttachment[] = [], files: TurnFileRef[] = []): Promise<void> {
+  async submitPrompt(text: string, attachments: AcpPromptAttachment[] = [], files: TurnFileRef[] = [], submissionId: string = crypto.randomUUID()): Promise<void> {
+    const failure = messageFailureNotice(['acp', machineRegistry.machineOf(this.runtimeSessionId) ?? 'local', this.runtimeSessionId, submissionId]);
+    const attempt = failure.begin();
     try {
       if (this.reverting || this.messageEdit) throw new Error('A message is being edited; send or cancel the edit first');
       await sendThroughCustody(this, text, attachments, files);
+      attempt.succeeded();
     } catch (error) {
       // The one toast of a failed send; the caller keeps its words.
-      this._toastError('acpFailure.sendMessage', error);
+      this._toastError('acpFailure.sendMessage', error, undefined, attempt);
       throw error;
     }
   }
 
   setDraftText(text: string): void {
+    this.renewDraftSubmission();
     if (text === this.draftText) return;
     this.draftText = text;
     this._draftRev += 1;
@@ -3160,17 +3168,19 @@ export class AcpChatStore {
   }
 
   /** Keep the failure reason visible through the existing one-line sanitizer, and persist its full detail. */
-  private _toastError(title: AcpFailureTitle, error: unknown, displayReason?: string): void {
+  private _toastError(title: AcpFailureTitle, error: unknown, displayReason?: string, attempt?: MessageFailureAttempt): void {
     const cause = describeFailureCause(error);
     const errorType = error && typeof error === 'object' && 'type' in error ? error.type : undefined;
     log.error('ACP chat action failed', { sessionId: this.sessionId, title, errorType, error: cause });
-    toast({
+    const notice = {
       title: translateSessionMessage(title),
       description: errorType === 'conversation_not_found'
         ? translateSessionMessage('acpFailure.sessionUnavailable')
         : failureText(displayReason ?? cause ?? '', translateSessionMessage),
-      variant: 'destructive',
-    });
+      variant: 'destructive' as const,
+    };
+    if (attempt) attempt.failed(notice);
+    else toast(notice);
   }
 }
 
