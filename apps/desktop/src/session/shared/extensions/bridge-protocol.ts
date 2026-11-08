@@ -673,6 +673,11 @@ export interface VerbFacts {
    * from every machine.
    */
   machine?: true | 'place';
+  /**
+   * It only reads, on the machine it follows: done or not, nothing there changed. Such a call to another machine goes
+   * out while the cloud computer's state is still being read (a paused one refuses it after); any other call waits for it.
+   */
+  reads?: true;
 }
 
 /**
@@ -795,8 +800,8 @@ export const BRIDGE_VERBS = {
    */
   readAgentHistory: { needs: 'agents:history' },
   /** External CLI history is every session, never only the agents this App started. */
-  sessionsIndex: { needs: 'agents:history:all', machine: true },
-  sessionsRead: { needs: 'agents:history:all', machine: true },
+  sessionsIndex: { needs: 'agents:history:all', machine: true, reads: true },
+  sessionsRead: { needs: 'agents:history:all', machine: true, reads: true },
   /**
    * Stopping one of the agents this App reaches (starting one, telling one: `dispatch`).
    *
@@ -811,9 +816,9 @@ export const BRIDGE_VERBS = {
    * reachable by nothing else, and removed with it. Storage only: a program that wants
    * pages to notice what it wrote sends a notification.
    */
-  readData: { needs: null, machine: true },
+  readData: { needs: null, machine: true, reads: true },
   writeData: { needs: null, machine: true },
-  listData: { needs: null, machine: true },
+  listData: { needs: null, machine: true, reads: true },
   /**
    * A tool of this extension's own MCP program whose visibility includes `app` (MCP Apps).
    * No capability of its own, like `sendToBackground`: the extension is talking to itself.
@@ -838,9 +843,9 @@ export const BRIDGE_VERBS = {
   filesOpen: { needs: null },
   filesReopen: { needs: null },
   filesClose: { needs: null },
-  filesList: { needs: 'files:read', machine: 'place' },
+  filesList: { needs: 'files:read', machine: 'place', reads: true },
   /** Up to 512 KB of a working copy's file at an offset (`f.read`): how a file of any size is read, on its own machine. */
-  filesRead: { needs: ({ ref }) => ref !== null && typeof ref === 'object' && 'workspace' in ref ? 'files:read' : null, machine: 'place' },
+  filesRead: { needs: ({ ref }) => ref !== null && typeof ref === 'object' && 'workspace' in ref ? 'files:read' : null, machine: 'place', reads: true },
   /** A working copy's text whole, and whether it is there, in those pieces: gated as filesOpen, in `app-files.ts`. */
   filesReadText: { needs: null },
   filesExists: { needs: null },
