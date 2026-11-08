@@ -5,7 +5,7 @@ import {
   isMissingGitExecutableError,
   missingGitExecutableError,
 } from '@main/core/utils/exec';
-import { execInProcessGroup, planDirectSpawn, spawnOwnedChild } from '@gugu/session-core/exec';
+import { execInProcessGroup, findWindowsCommandPaths, planDirectSpawn, spawnOwnedChild } from '@gugu/session-core/exec';
 import { NON_INTERACTIVE_GIT_ENV } from './non-interactive-git-env';
 import { buildExternalToolEnv } from '@main/utils/childProcessEnv';
 import type { ExecContextOptions, ExecResult, IExecutionContext } from '@gugu/session-core/exec';
@@ -38,6 +38,12 @@ export class LocalExecutionContext implements IExecutionContext {
 
   private resolveCommand(command: string): string {
     return command === 'git' ? getGitExecutable() : command;
+  }
+
+  findWindowsCommandPaths(command: string, env?: Record<string, string>): string[] | null {
+    if (process.platform !== 'win32') return null;
+    // 与 exec 同一份环境:找到的就是 exec 会跑的那个。
+    return findWindowsCommandPaths(command, { env: env ?? buildExternalToolEnv(), cwd: this.root || undefined });
   }
 
   exec(command: string, args: string[] = [], opts: ExecContextOptions = {}): Promise<ExecResult> {

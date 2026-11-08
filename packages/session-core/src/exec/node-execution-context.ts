@@ -4,7 +4,7 @@ import type { ExecContextOptions, IExecutionContext } from './execution-context'
 import type { ExecResult } from './types';
 import { spawnOwnedChild } from './owned-child';
 import { execInProcessGroup } from './process-group';
-import { planDirectSpawn } from './windows-launcher';
+import { findWindowsCommandPaths, planDirectSpawn } from './windows-launcher';
 import { anySignal } from '@gugu/core/shared/anySignal';
 
 const execFileAsync = promisify(execFile);
@@ -21,6 +21,11 @@ export class NodeExecutionContext implements IExecutionContext {
   }
 
   private readonly env: NodeJS.ProcessEnv | undefined;
+
+  findWindowsCommandPaths(command: string, env?: Record<string, string>): string[] | null {
+    if (process.platform !== 'win32') return null;
+    return findWindowsCommandPaths(command, { env: env ?? this.env, cwd: this.root || undefined });
+  }
 
   exec(command: string, args: string[] = [], opts: ExecContextOptions = {}): Promise<ExecResult> {
     // 调用方给的那份是**完整**的,照单全用(#5702)。

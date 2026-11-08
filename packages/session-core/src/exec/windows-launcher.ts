@@ -118,6 +118,70 @@ export function planDirectSpawn(
   return { command, args: [...args], spawnOverrides: PASSTHROUGH, wrapsShell: false };
 }
 
+// ── 在 PATH 上找程序 ─────────────────────────────────────────────────────────
+
+/**
+ * Windows 上「这个命令在哪」的进程内做法,替代解析 `where` 的输出。
+ *
+ * `where` 按控制台代码页输出(中文系统是 GBK),而 exec 一律按 UTF-8 解码 ⇒ 路径里只要有一个
+ * 非 ASCII 字符(中文用户名、`测试 目录`),拿回来的就是一串 `���� Ŀ¼`:依赖页「安装完成,但未检测到程序」,
+ * 会话卡在 `--version` 的 spawn ENOENT。在这里直接按 PATH × PATHEXT 读盘,路径从头到尾是 Node 的字符串,
+ * 没有解码这一步。
+ *
+ * 次序与 `where` 一致:先当前目录,再 PATH 各段;同一目录里先原名(带扩展名时),再按 PATHEXT 的次序。
+ * 带路径的命令(`C:\x\codex.cmd`)只在它那个目录里找 —— `where dir:pattern` 的语义。
+ * 命令里的 `%VAR%` 按 env 展开(厂商固定安装位置 `%LOCALAPPDATA%\…`);有一个展不开 = 没有,❌ 拿字面量去碰。
+ * 不带扩展名的同名文件(npm 给 POSIX 留的那份壳)不算:Windows 跑不了它。
+ */
+export function findWindowsCommandPaths(
+  command: string,
+  options: { env?: NodeJS.ProcessEnv; cwd?: string; isFile?: (candidate: string) => boolean } = {}
+): string[] {
+  const env = options.env ?? process.env;
+  const isFile = options.isFile ?? defaultIsFile;
+  let unresolved = false;
+  command = command.replace(/%([A-Za-z_][A-Za-z0-9_]*)%/g, (literal, name: string) => {
+    const value = windowsEnvValue(env, name);
+    if (value === undefined) unresolved = true;
+    return value ?? literal;
+  });
+  if (unresolved) return [];
+  const separator = Math.max(command.lastIndexOf('\\'), command.lastIndexOf('/'));
+  const name = command.slice(separator + 1);
+  if (!name) return [];
+  const directories = separator >= 0
+    ? [command.slice(0, separator + 1)]
+    : [options.cwd ?? process.cwd(), ...(windowsEnvValue(env, 'PATH') ?? '').split(';')];
+  const extensions = (windowsEnvValue(env, 'PATHEXT') ?? '.COM;.EXE;.BAT;.CMD;.VBS;.VBE;.JS;.JSE;.WSF;.WSH;.MSC')
+    .split(';')
+    .map((extension) => extension.trim().toLowerCase())
+    .filter((extension) => extension.startsWith('.'));
+  const names = [...(path.win32.extname(name) ? [name] : []), ...extensions.map((extension) => name + extension)];
+
+  const found: string[] = [];
+  const seen = new Set<string>();
+  for (const raw of directories) {
+    const directory = raw.trim().replace(/^"(.*)"$/, '$1');
+    if (!directory) continue;
+    for (const candidate of names) {
+      const full = path.win32.join(directory, candidate);
+      const key = full.toLowerCase();
+      if (seen.has(key) || !isFile(full)) continue;
+      seen.add(key);
+      found.push(full);
+    }
+  }
+  return found;
+}
+
+function defaultIsFile(candidate: string): boolean {
+  try {
+    return statSync(candidate).isFile();
+  } catch {
+    return false;
+  }
+}
+
 // ── 交给别人的进程去 spawn 的那条路径 ──────────────────────────────────────────
 
 /**
