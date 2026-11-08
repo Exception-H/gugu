@@ -42,6 +42,9 @@ function state(receipt: WindowCommitReceipt, index: CommitContainerIndex, input:
   }
   return { version: 1, sourceId: receipt.sourceId, buildId: index.buildId, page: input.page, member: input.member, done: input.done, facts };
 }
+export function resumeCommitRootState(receipt: WindowCommitReceipt, index: CommitContainerIndex, input: CommitRootState): CommitRootState {
+  return state(receipt, index, input);
+}
 function complete(s: CommitRootState): CommitRootFacts {
   if (!s.facts.turnId || !s.facts.referenceId || s.facts.storedSeq === undefined || !s.facts.items)
     throw new Error('Canonical root identity/items are incomplete');
