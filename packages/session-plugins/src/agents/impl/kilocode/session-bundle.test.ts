@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest';
+import { composeAgentSpawnEnv } from '@gugu/session-core/agents/agent-run-context';
+import { harnessPinnedEnv } from '@gugu/session-core/agents/plugins';
 import { kilocodeModelCredential } from './auth';
-import { materializeKilocodeSessionBundle } from './session-bundle';
+import { kilocodeSessionBundleDescriptor, materializeKilocodeSessionBundle } from './session-bundle';
 
 const GUGU_HOME = '/gugu-home-under-test';
 
@@ -33,23 +35,42 @@ describe('Kilo session bundle', () => {
     }
   });
 
-  it('keeps approval rules across modes because the session can switch to code live', () => {
-    for (const mode of ['plan', 'read-only', 'edit']) {
-      expect(materialize('acp', mode).config.permission.bash).toBe('ask');
+  it('keeps approvals on the code agent whatever the spawn mode, because the session can switch live', () => {
+    for (const mode of ['plan', 'read-only', 'edit', 'full-access']) {
+      expect(materialize('acp', mode).config.agent.code.permission.bash).toBe('ask');
     }
-    expect(materialize('acp', 'full-access').config.permission).toBe('allow');
   });
 
-  it('selects the guarded agent at session creation for the serve leg', () => {
+  it('declares full access as a real mode and keeps the top level open for subagents', () => {
+    const { config } = materialize('acp', 'full-access');
+    expect(config.permission).toBe('allow');
+    expect(config.agent['full-access'].permission).toEqual({ '*': 'allow' });
+    expect(config.agent.general).toBeUndefined();
+  });
+
+  it('denies gated tools in the ACP subagent, whose approval request Kilo would drop', () => {
+    expect(materialize('acp', 'edit').config.agent.general.permission.bash).toBe('deny');
+    expect(materialize('tui', 'edit').config.agent.general).toBeUndefined();
+    expect(materialize('tui', 'edit').config.permission.bash).toBe('ask');
+  });
+
+  it('selects the agent at session creation for the serve leg', () => {
     expect(materialize('tui', 'plan').out.sessionCreatePatch).toEqual({ agent: 'plan' });
     expect(materialize('tui', 'read-only').out.sessionCreatePatch).toEqual({ agent: 'ask' });
+    expect(materialize('tui', 'full-access').out.sessionCreatePatch).toEqual({ agent: 'full-access' });
     expect(materialize('tui', 'edit').out.sessionCreatePatch).toBeUndefined();
   });
 
-  it('keeps session transcripts and telemetry away from the vendor', () => {
-    const { env } = materialize('acp', 'edit').out;
-    expect(env.KILO_TELEMETRY_LEVEL).toBe('off');
-    expect(env.KILO_DISABLE_SESSION_INGEST).toBe('1');
+  it('keeps small requests on a Gugu model, and only then', () => {
+    const run = (model: string) => JSON.parse(materializeKilocodeSessionBundle(
+      { surface: 'acp', lifecycle: 'fresh', cwd: '/worktree' },
+      {
+        mcpServers: [], model: null, autonomy: null, promptBlocks: {}, packages: [],
+        env: { GUGU_HOME, KILO_CONFIG_CONTENT: JSON.stringify({ model }) },
+      } as never,
+    ).env.KILO_CONFIG_CONTENT!);
+    expect(run('gugu-platform/gpt-6-luna').small_model).toBe('gugu-platform/gpt-6-luna');
+    expect(run('kilo/auto').small_model).toBeUndefined();
   });
 
   it('retires the workspace plugin instead of writing it', () => {
@@ -71,5 +92,24 @@ describe('Kilo default model credential', () => {
 
   it('stays unknown for other providers when the snapshot is missing', async () => {
     expect(await kilocodeModelCredential(ctx({}), 'openai/gpt')).toBe('unknown');
+  });
+});
+
+describe('Kilo pinned env', () => {
+  it('reaches every process of the harness and wins over the user', () => {
+    const pinned = harnessPinnedEnv(kilocodeSessionBundleDescriptor);
+    expect(pinned).toEqual({
+      KILO_DISABLE_AUTOUPDATE: '1',
+      KILO_TELEMETRY_LEVEL: 'off',
+      KILO_DISABLE_SESSION_INGEST: '1',
+    });
+    const env = composeAgentSpawnEnv({
+      cli: { kind: 'unresolved', message: 'env-only' },
+      env: { KILO_TELEMETRY_LEVEL: 'all' },
+      configRootEnv: {},
+      pinnedEnv: { ...pinned },
+      extraArgs: [],
+    });
+    expect(env.KILO_TELEMETRY_LEVEL).toBe('off');
   });
 });

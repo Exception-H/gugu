@@ -1,4 +1,3 @@
-import { resolveSessionPermissionMode } from '@gugu/session-core/acp';
 import {
   definePlugin,
   registerPluginBehavior,
@@ -69,10 +68,9 @@ export const plugin = definePlugin(
       kind: 'supported',
       // Measured on one live session (7.8.27): model, effort and mode each read back after
       // set_config_option, and the next request carried the new model and reasoning effort.
-      // allowStartupDowngrade: full access is a config rule, not one of Kilo's reported modes.
       liveSettings: {
         model: HOT_SETTING,
-        permission: { ...HOT_SETTING, allowStartupDowngrade: true },
+        permission: HOT_SETTING,
         effort: HOT_SETTING,
       },
     },
@@ -172,7 +170,7 @@ export const provider = registerPluginBehavior(plugin, {
   prompt: {
     buildCommand: (ctx) =>
       buildStandardCommand(ctx, {
-        extraEnv: resolveSessionPermissionMode(ctx) === 'full-access' ? { KILO_PERMISSION: '{"*":"allow"}' } : {},
+        autoApproveFlag: '--agent full-access',
         planFlag: '--agent plan',
         readOnlyFlag: '--agent ask',
         initialPromptFlag: '--prompt',

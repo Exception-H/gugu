@@ -51,6 +51,7 @@ export const opencodeSessionBundleDescriptor = {
   injectionMode: 'runtime',
   platform: harnessPlatform,
   // ❌ `OPENCODE_CONFIG(_DIR)`:配置根归咕咕给(`configRootEnv`);`OPENCODE_SERVER_*` 只管 `opencode serve` / `web`,咕咕从不起这两个子命令。
+  projectConfigDisableEnv: 'OPENCODE_DISABLE_PROJECT_CONFIG',
   shellEnv: {
     passThrough: ['OPENCODE_MODEL'],
     denied: ['OPENCODE_CONFIG', 'OPENCODE_CONFIG_DIR', 'OPENCODE_SERVER_PASSWORD', 'OPENCODE_SERVER_USERNAME'],

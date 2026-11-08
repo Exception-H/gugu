@@ -27,13 +27,14 @@ export interface OpenCodeFamilySessionBrand {
   readonly permissionConfig: (
     autonomy: SessionCapabilityBundle['autonomy'],
     mcpServers: SessionCapabilityBundle['mcpServers'],
+    surface: HarnessSessionSurface,
   ) => Record<string, unknown>;
   readonly sessionCreatePatch: (autonomy: SessionCapabilityBundle['autonomy']) => Readonly<{ agent?: string }> | undefined;
   readonly eventModulePath: string;
   readonly eventModuleContent: string;
   readonly eventModuleRetiredReason: string;
-  /** Vendor switches Gugu pins for every session of this family member. */
-  readonly sessionEnv?: Readonly<Record<string, string>>;
+  /** When the session's model is on this provider, its small requests (titles) stay there too. */
+  readonly smallModelFollowsProvider?: string;
 }
 
 function report(
@@ -90,7 +91,7 @@ export function materializeOpenCodeFamilySession(
   const config = merge(
     merge(
       merge(baseConfig, brand.modelConfig(bundle.model)),
-      brand.permissionConfig(bundle.autonomy, bundle.mcpServers),
+      brand.permissionConfig(bundle.autonomy, bundle.mcpServers, ctx.surface),
     ),
     {
       // ⚠️ 这一句**必须留在这里求值**,❌ 不许提到上面去当局部变量:它在缺 Authorization 令牌时
@@ -122,8 +123,13 @@ export function materializeOpenCodeFamilySession(
     directive.kind === 'config-content'
       ? applyOpenCodeFamilyDisabledMcp(config, directive.disabled)
       : config;
-  const env = { ...definedEnv(bundle.env), ...brand.sessionEnv };
-  env[spec.configEnvKey] = JSON.stringify(configWithToggles);
+  const smallModel = brand.smallModelFollowsProvider
+    && typeof config.model === 'string'
+    && config.model.startsWith(`${brand.smallModelFollowsProvider}/`)
+    ? { small_model: config.model }
+    : {};
+  const env = definedEnv(bundle.env);
+  env[spec.configEnvKey] = JSON.stringify({ ...configWithToggles, ...smallModel });
   const createPatch = brand.sessionCreatePatch(bundle.autonomy);
 
   // @@@no-workspace-plugin-4895 — event module 不再投放到**任何** task surface。

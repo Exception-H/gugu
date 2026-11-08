@@ -39,6 +39,14 @@ const KILO_NATIVE_CONFIG = { kind: 'native', channel: 'process-config' } as cons
 export const kilocodeSessionBundleDescriptor = {
   injectionMode: 'runtime',
   platform: harnessPlatform,
+  // Kilo-Org/kilocode@03a6f07d053cd7e6aa88fa1e258e93510335259f packages/core/src/flag/flag.ts:131
+  projectConfigDisableEnv: 'KILO_DISABLE_PROJECT_CONFIG',
+  vendorDataOff: {
+    env: { KILO_TELEMETRY_LEVEL: 'off', KILO_DISABLE_SESSION_INGEST: '1' },
+    evidence:
+      'Kilo-Org/kilocode@03a6f07d053cd7e6aa88fa1e258e93510335259f packages/kilo-telemetry/src/telemetry.ts:125 env beats config;'
+      + ' packages/opencode/src/kilo-sessions/kilo-sessions.ts:312 ingest off',
+  },
   shellEnv: {
     denied: ['KILO_CONFIG', 'KILO_CONFIG_DIR', 'KILO_SERVER_PASSWORD', 'KILO_SERVER_USERNAME'],
   },
@@ -146,20 +154,21 @@ const KILO_PERMISSION_SPEC: OpenCodeFamilyPermissionSpec = {
   approvalGatedKeys: ['bash', 'webfetch', 'websearch', 'external_directory', 'doom_loop', 'notebook_execute'],
 };
 
-/** Kilo mode ids whose guard re-applies `<server>_*: ask` after the top-level `permission` rules. */
-const KILO_GUARDED_AGENTS = [KILOCODE_PERMISSION_MODES.plan.id, KILOCODE_PERMISSION_MODES['read-only'].id];
+const KILO_MODES = KILOCODE_PERMISSION_MODES;
+/** Kilo's guard re-applies `<server>_*: ask` after the top-level `permission` rules in these modes. */
+const KILO_GUARDED_AGENTS = [KILO_MODES.plan.id, KILO_MODES['read-only'].id];
+/** The modes that follow the approval rules. Set per agent so that they still ask in a full-access spawn. */
+const KILO_APPROVAL_AGENTS = [KILO_MODES.edit.id, ...KILO_MODES.edit.aliases.filter((id) => id === 'debug')];
 
 function permissionConfig(
   autonomy: SessionCapabilityBundle['autonomy'],
   mcpServers: SessionCapabilityBundle['mcpServers'],
+  surface: HarnessSessionSurface,
 ): Record<string, unknown> {
   if (!autonomy) return {};
-  // The rules stay the same in plan and read-only: those agents' own guards cannot be widened by them
-  // (kilocode/agent/index.ts `guarded`), and the session can switch to `code` live, where they do apply.
-  const rules = openCodeFamilyPermissionConfig(KILO_PERMISSION_SPEC, {
-    ...autonomy,
-    mode: (autonomy.permissionMode ?? autonomy.mode) === 'full-access' ? 'full-access' : 'approval-required',
-  });
+  const fullAccess = (autonomy.permissionMode ?? autonomy.mode) === 'full-access';
+  const approvalRules = openCodeFamilyPermissionConfig(KILO_PERMISSION_SPEC, { ...autonomy, mode: 'approval-required' })
+    .permission as Record<string, string>;
   // Without this every Gugu tool call, including a chat reply, waits for approval in plan and read-only:
   // `getMcpRules` asks for each server, and only `agent.<name>.permission` merges after that guard
   // (measured 7.8.27). Servers the user configured themselves keep asking.
@@ -168,17 +177,32 @@ function permissionConfig(
       .filter((server) => server.owner !== 'user')
       .map((server) => [`${server.name.replace(/[^a-zA-Z0-9_-]/g, '_')}_*`, 'allow']),
   );
+  // @@@kilo-subagent-approval — Kilo's ACP drops a subagent's permission request (`acp/permission.ts:54-55`:
+  // no session for the child id, return), so the turn hangs forever (measured 7.8.27). The top-level rules are what
+  // subagents follow, so: full access stays `allow`, and over ACP an approval tier denies those tools in the
+  // general subagent, which fails loud. The terminal leg can answer subagent prompts and keeps asking.
+  const subagentRules = !fullAccess && surface === 'acp'
+    ? { general: { permission: Object.fromEntries(Object.keys(approvalRules).map((key) => [key, 'deny'])) } }
+    : {};
   return {
-    ...rules,
-    agent: Object.fromEntries(KILO_GUARDED_AGENTS.map((id) => [id, { permission: guguTools }])),
+    permission: fullAccess ? 'allow' : approvalRules,
+    agent: {
+      ...Object.fromEntries(KILO_GUARDED_AGENTS.map((id) => [id, { permission: guguTools }])),
+      ...Object.fromEntries(KILO_APPROVAL_AGENTS.map((id) => [id, { permission: approvalRules }])),
+      // A real mode, so the pill shows full access and leaving it really brings approvals back.
+      [KILO_MODES['full-access'].id]: {
+        mode: 'primary',
+        description: 'Runs every tool without asking.',
+        permission: { '*': 'allow' },
+      },
+      ...subagentRules,
+    },
   };
 }
 
 function sessionCreatePatch(autonomy: SessionCapabilityBundle['autonomy']): Readonly<{ agent?: string }> | undefined {
-  const mode = autonomy?.permissionMode;
-  if (mode === 'plan') return { agent: KILOCODE_PERMISSION_MODES.plan.id };
-  if (mode === 'read-only') return { agent: KILOCODE_PERMISSION_MODES['read-only'].id };
-  return undefined;
+  const mode = autonomy?.permissionMode ?? (autonomy?.mode === 'full-access' ? 'full-access' : undefined);
+  return mode === 'plan' || mode === 'read-only' || mode === 'full-access' ? { agent: KILO_MODES[mode].id } : undefined;
 }
 
 const KILO_SESSION_BRAND: OpenCodeFamilySessionBrand = {
@@ -191,12 +215,11 @@ const KILO_SESSION_BRAND: OpenCodeFamilySessionBrand = {
   sessionCreatePatch,
   eventModulePath: KILOCODE_GUGU_EVENT_MODULE_PATH,
   eventModuleContent: KILOCODE_PLUGIN_CONTENT,
+  // With a Kilo login, title and other small requests go to Kilo's gateway even on a Gugu model (measured 7.8.27).
+  smallModelFollowsProvider: 'gugu-platform',
   eventModuleRetiredReason:
     'Kilo treats any workspace .kilo/plugins/*.js as a plugin origin and reaches for the npm registry at startup; '
     + 'neither session surface consumes the module, so it is retired rather than materialized.',
-  // A Kilo login would otherwise upload session transcripts, which hold Gugu chat content, to Kilo's cloud
-  // (kilo-sessions.ts:289,312), and PostHog telemetry is on by default (kilo-telemetry/src/telemetry.ts:125).
-  sessionEnv: { KILO_TELEMETRY_LEVEL: 'off', KILO_DISABLE_SESSION_INGEST: '1' },
 };
 
 export function materializeKilocodeSessionBundle(

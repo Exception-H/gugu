@@ -717,7 +717,7 @@ export function makeStartInput(
       cli: { kind: 'resolved', path: '/usr/local/bin/claude' },
       env: { HOME: '/home/test', PATH: '/bin' },
       configRootEnv: {},
-      selfUpdateEnv: {},
+      pinnedEnv: {},
       extraArgs: [],
     },
     ...overrides,
