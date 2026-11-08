@@ -122,10 +122,7 @@ export function prewarmEmdashAssets(): void {
   void getEmdashAssets().catch(() => undefined)
 }
 
-// 会话页的两套 token 命名空间都由挂载元素上的 emlight/emdark 类驱动;此桥接把两套的
-// 原始色阶 + 少量「原色型」语义 token 映射到 gugu 语义 token。规则设在 .gugu-skin(挂载
-// 元素)上,经继承覆盖整棵会话页子树。❌ 引用 var(--border):会话页亦有同名 token
-// (= var(--neutral-6))会撞名,故一律用 gugu 的 --border-color / --border-strong。
+// 会话页的中性色在 session/renderer/index.css 里就接着 gugu token,这里只留挂载元素自己的几条皮肤规则。
 const GUGU_SKIN_BRIDGE_CSS = `
 .gugu-skin {
   color-scheme: light dark;

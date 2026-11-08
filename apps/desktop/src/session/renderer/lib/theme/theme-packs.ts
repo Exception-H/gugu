@@ -78,12 +78,12 @@ export function packModes(pack: Pick<ThemePack, 'modes'>): ThemeMode[] {
 /**
  * 可读性下限,以及每个角色要对哪些表面成立(取最差那个)。
  * 正文 6(长时间读的字,比 AA 留余量);次级字 / 链接(--live 兼做链接色)/ 危险字 / 警告字 4.5(正文 AA);
- * 装饰字只要不消失:2.5(咕咕默认浅色自己的 --faint-fg 是 2.68,tokens.css 的 Semantic theme tokens 一节写着它不承载信息)。
+ * 图标 / 装饰字:3(WCAG 1.4.11,和默认主题 theme-contrast-floors.test.tsx 同一条)。
  */
 export const CONTRAST_FLOORS: Record<PaletteRole, { min: number; on: ReadonlyArray<'page' | 'bg' | 'card' | 'muted'> }> = {
   fg: { min: 6, on: ['page', 'bg', 'card', 'muted'] },
   mutedFg: { min: 4.5, on: ['page', 'bg', 'card', 'muted'] },
-  faintFg: { min: 2.5, on: ['bg', 'card'] },
+  faintFg: { min: 3, on: ['page', 'bg', 'card', 'muted'] },
   live: { min: 4.5, on: ['page', 'bg', 'card', 'muted'] },
   dangerFg: { min: 4.5, on: ['page', 'bg', 'card', 'muted'] },
   warnFg: { min: 4.5, on: ['page', 'bg', 'card', 'muted'] },
@@ -187,7 +187,7 @@ export function paletteDeclarations(p: ResolvedPalette, mode: ThemeMode): string
   const lines = [
     d('page', p.page), d('bg', p.bg), d('card', p.card), d('popover', p.card),
     d('fg', p.fg), d('muted', p.muted), d('muted-fg', p.mutedFg), d('faint-fg', p.faintFg),
-    // --live 本身由根上的 .emdark/.emlight 指向这两档之一,所以覆盖的是档位,不是 --live。
+    // --live 本身由 tokens.css 按主题指向这两档之一,所以覆盖的是档位,不是 --live。
     d(mode === 'dark' ? 'live-dark' : 'live-light', p.live),
     d('danger', p.danger), d('danger-fg', p.dangerFg), d('warn', p.warn), d('warn-fg', p.warnFg),
   ];
@@ -200,7 +200,7 @@ export function paletteDeclarations(p: ResolvedPalette, mode: ThemeMode): string
 
 /**
  * 两个槽位(深色时用哪族、浅色时用哪族)→ 一段样式表。
- * `:root[data-theme='dark']`(0,2,0)压过 tokens.css 的 `:root` / `[data-theme="light"]` / 根上的 `.emdark`(都是 0,1,0)。
+ * `:root[data-theme='dark']`(0,2,0)压过 tokens.css 的 `:root` / `[data-theme="light"]`(都是 0,1,0)。
  */
 export function themePackStylesheet(slots: Partial<Record<ThemeMode, ThemePack>>): string {
   return (['dark', 'light'] as const)

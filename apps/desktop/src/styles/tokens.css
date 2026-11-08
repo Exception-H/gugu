@@ -809,7 +809,7 @@
   --sidebar-bg: rgba(237,237,237,0.85);
   --nav-rail: var(--page); /* #7333 rail 与会话列表同在窗口底层 */
   --topbar-bg: rgba(249,249,249,0.85);
-  --input-bg: rgba(255,255,255,0.6);
+  --input-bg: color-mix(in oklab, var(--card) 60%, transparent);
   --input-card-bg: rgba(255,255,255,0.78);
   --text-primary: var(--fg);
   --text-secondary: var(--muted-fg);
@@ -1003,16 +1003,12 @@
 
    权重说明:下面第一条 (0,2,0) 压得过 [data-theme="light"] (0,1,0),所以浅色必须由第二条
    (0,3,0) 接住 —— 少了它浅色主题会拿到深色那一档。 */
-:root[data-sidebar-tint='on'] {
-  /* #7333 起 rail 与会话列表默认同在窗口底层(#121212),内容 #181818。打开这一项,会话列表取两者之间那一档,
-     三栏重新成一条阶梯;仍压在卡片面 --card(#212121)之下,侧栏里的卡片不会消失。 */
-  --sidebar: #151515;
-}
-
+:root[data-sidebar-tint='on'],
 :root[data-theme='light'][data-sidebar-tint='on'] {
-  /* 浅色:rail 与会话列表默认都是 --page(#f9f9f9),内容 #fff。打开这一项,会话列表取两者之间的 #fcfcfc。
-     次级文字 --muted-fg(#68696b)在它上面 5.4:1(tests/unit/desktop/styles/textContrast7333.test.ts 钉着)。 */
-  --sidebar: #fcfcfc;
+  /* #7333 起 rail 与会话列表默认同在窗口底层,内容高一档。打开这一项,会话列表取两者正中那一档(默认深色 #151515、浅色 #fcfcfc),
+     三栏重新成一条阶梯;仍压在卡片面 --card 之下,侧栏里的卡片不会消失。式子跟着种子走,主题包也一样。
+     次级文字 --muted-fg(默认浅色 #68696b)在它上面 5.4:1(tests/unit/desktop/styles/textContrast7333.test.ts 钉着)。 */
+  --sidebar: color-mix(in oklab, var(--page) 50%, var(--bg));
 }
 
 /* ── @@@window-material-css (#7333) 窗口底层材质 ─────────────────────────────────────────────
@@ -1435,7 +1431,7 @@ body.barcode-scanner-active #root {
   --ta-app-bg: linear-gradient(180deg, #14171c 0%, #17181b 60%, #1b1916 100%);
   --ta-panel-bg: linear-gradient(180deg, #1f2c3d 0%, #23283a 45%, #2a2531 70%, #33271f 100%);
   --ta-panel-border: rgba(255, 255, 255, 0.08);
-  --ta-glass: rgba(255, 255, 255, 0.1);
+  --ta-glass: var(--accent-glow-soft); /* 种子算出来的:墨色 11%,和原来白 10% 差 ΔE 0.005 */
   --ta-glass-strong: rgba(255, 255, 255, 0.16);
   --ta-glass-hover: rgba(255, 255, 255, 0.14);
   --ta-glass-edge: rgba(255, 255, 255, 0.2);
@@ -1466,7 +1462,7 @@ body.barcode-scanner-active #root {
   --ta-tint-ink: color-mix(in oklab, var(--ta-tint) 85%, var(--fg));
   --ta-panel-bg: linear-gradient(180deg, #a9c9ea 0%, #c5d8ef 30%, #e2e5f3 60%, #f4e6dc 80%, #fcd9b5 100%);
   --ta-panel-border: rgba(255, 255, 255, 0.6);
-  --ta-glass: rgba(255, 255, 255, 0.6);
+  --ta-glass: color-mix(in oklab, var(--card) 60%, transparent);
   --ta-glass-strong: rgba(255, 255, 255, 0.78);
   --ta-glass-hover: rgba(255, 255, 255, 0.72);
   --ta-glass-edge: rgba(255, 255, 255, 0.55);

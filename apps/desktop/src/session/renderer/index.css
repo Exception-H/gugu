@@ -704,8 +704,8 @@
 /* 会话页两套 token 命名空间(上面那份会话页自己的变量、session-ui 生成的 --em-*)接到咕咕的 token 上。
    原来这段是 EmdashSessionFrame 往 .gugu-skin 上注入的桥,只管会话页挂载点里面;同一份 index.css 的
    utility(text-foreground-muted…)、session-ui 的 portal、聊天面板在挂载点外面也在用,那里取到的是
-   会话页自带的 Radix P3 色阶,不跟咕咕主题。现在挂在 .emlight / .emdark 上 —— <html> 本身就带着
-   跟随咕咕主题的那一个(lib/providers/theme-provider.tsx),所以文档里哪里都是同一套值。
+   会话页自带的 Radix P3 色阶,不跟咕咕主题。现在挂在 .emlight / .emdark 上 —— 挂载元素和
+   SessionUiTheme 带的都是跟随咕咕主题的那一个,所以哪里都是同一套值。
    不分层:压过上面 @layer base 与 session-ui @layer tokens 里的同名默认值。 */
 .emlight,
 .emdark {
