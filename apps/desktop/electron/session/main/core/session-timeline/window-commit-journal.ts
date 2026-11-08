@@ -1,13 +1,5 @@
-export type WindowLiveCursor = { workerEpoch: string; storeEpoch: string; sequence: number };
-export type WindowCommitReference = {
-  referenceId: string; projectionId: string;
-  rowId: string; storedSeq: number;
-  latestRevisionCursor: WindowLiveCursor;
-} & ({ kind: 'insert'; firstCommitCursor: WindowLiveCursor }
-  | { kind: 'update'; firstCommitCursor: WindowLiveCursor | null });
-export type WindowCommitPage = {
-  entries: readonly Readonly<WindowCommitReference>[]; next: Readonly<WindowLiveCursor>; hasMore: boolean;
-};
+import type { WindowLiveCursor, WindowCommitReference, WindowCommitPage } from '@gugu/session-wire/session-window-live';
+export type { WindowLiveCursor, WindowCommitReference, WindowCommitPage } from '@gugu/session-wire/session-window-live';
 type Fault = Error & { code: string };
 const fault = (code: string, message: string): Fault => Object.assign(new Error(message), { code });
 const LIMITS = { entries: 64, bytes: 4 * 1024 * 1024, pageEntries: 8, pageBytes: 48 * 1024 };
