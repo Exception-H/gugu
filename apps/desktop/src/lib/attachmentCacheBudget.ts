@@ -24,30 +24,16 @@ export async function trimCacheToBytes(cache: Cache, maxBytes: number, roleOf: (
 }
 
 /**
- * 磁盘保护:剩余空间低于 `bytes` 时,缓存按差额收紧(还是先删最旧的),不把用户的盘塞满。`free` 读不到(null)就不收紧。
- */
-export type KeepDiskFree = { bytes: number; free: () => Promise<number | null> }
-
-/**
  * 有上限的缓存的唯一写入口。比整个上限还大的那一份不进缓存(进了就得把别的全挤掉)。写入后不每次都扫:记着上次裁完的字节数加上
- * 之后写入的,只在本次运行第一次写、超了上限、或者盘上剩的不够 `keepFree` 时才裁(裁着的时候又来的写入合成下一轮)。
+ * 之后写入的,只在本次运行第一次写、或者超了上限时才裁(裁着的时候又来的写入合成下一轮)。
  */
-export function budgetedCacheWriter(open: () => Promise<Cache>, maxBytes: number, roleOf: (url: string, response: Response) => CacheEntryRole, onError: (error: unknown) => void, keepFree?: KeepDiskFree) {
+export function budgetedCacheWriter(open: () => Promise<Cache>, maxBytes: number, roleOf: (url: string, response: Response) => CacheEntryRole, onError: (error: unknown) => void) {
   let knownBytes: number | null = null
   let trimming: Promise<void> | null = null, again = false
-  const shortOfDisk = async () => {
-    const free = keepFree ? await keepFree.free() : null
-    return free === null ? 0 : Math.max(0, keepFree!.bytes - free)
-  }
   const trim = (): Promise<void> => {
     if (trimming) { again = true; return trimming }
     trimming = (async () => {
-      do {
-        again = false
-        const cache = await open()
-        const kept = await trimCacheToBytes(cache, maxBytes, roleOf), short = await shortOfDisk()
-        knownBytes = short > 0 ? await trimCacheToBytes(cache, Math.max(0, kept - short), roleOf) : kept
-      } while (again)
+      do { again = false; knownBytes = await trimCacheToBytes(await open(), maxBytes, roleOf) } while (again)
     })().finally(() => { trimming = null })
     return trimming
   }
@@ -56,7 +42,7 @@ export function budgetedCacheWriter(open: () => Promise<Cache>, maxBytes: number
       if (body.size > maxBytes) return
       await (await open()).put(request, new Response(body))
       if (knownBytes !== null) knownBytes += body.size
-      if (knownBytes === null || knownBytes > maxBytes || await shortOfDisk() > 0) void trim().catch(onError)
+      if (knownBytes === null || knownBytes > maxBytes) void trim().catch(onError)
     },
     /** 等在跑的那一次裁剪(没有就立即返回);不新起。 */
     idle: (): Promise<void> => trimming ?? Promise.resolve(),
