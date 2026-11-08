@@ -103,6 +103,11 @@ interface SurfaceBinding {
    * cannot change it. With `itemId`, the one file it may open without a capability (`ctx.file`).
    */
   filePath: string | null;
+  /**
+   * A person opened `filePath`, named absolute, from the host's UI (`@@@outside-file`): its machine lets the page read it,
+   * read-only, even outside its working copy. Not for the host opening it for an agent or an App, nor a page an agent works.
+   */
+  personOpened?: true;
   /** The chat file the host handed this surface (`ctx.file`). */
   itemId: string | null;
   /**
@@ -203,6 +208,7 @@ function pageCaller(binding: SurfaceBinding, webContentsId: number, gesture: boo
     pageId: webContentsId,
     extensionId: binding.extensionId,
     handed: handedFileOf(binding),
+    ...(binding.personOpened ? { personOpened: true as const } : {}),
     boundChat: binding.conversation,
     ...(binding.operator.kind === 'agent' ? { asAgent: binding.operator.id.replace(/^user:/, '') } : {}),
   });
@@ -534,6 +540,11 @@ async function workspaceRelativeFile(place: WorkspacePlace | null, filePath?: st
   return relative.split(path.sep).join('/');
 }
 
+/** @@@outside-file - a page bound to a file named absolute that a person opened, not the host for an agent or an App. */
+function personOpened(filePath: string | null, byHost: boolean | undefined, operator: ExtensionOperator | undefined): { personOpened?: true } {
+  return filePath && path.isAbsolute(filePath) && !byHost && operator?.kind !== 'agent' ? { personOpened: true } : {};
+}
+
 /**
  * 谁在等自己的绑定落地。
  *
@@ -586,6 +597,8 @@ export async function bindExtensionSurface(input: {
   tabKind: string;
   /** Set only when the tab was opened for a file of its workspace this extension claimed. */
   filePath?: string;
+  /** The host opened `filePath` for an agent or an App (`open_in_tab`, `files.openWith`, an App's link), not a person. */
+  byHost?: boolean;
   itemId?: string;
   /** Who works it: the person unless main binds it for an agent (`app_check`); never the renderer's to say. */
   operator?: ExtensionOperator;
@@ -642,6 +655,7 @@ export async function bindExtensionSurface(input: {
     navigation: input.navigation,
     tabName,
     filePath,
+    ...personOpened(filePath, input.byHost, input.operator),
     itemId: input.itemId ?? null,
     embedderId: contents.hostWebContents?.id ?? null,
     operator: input.operator ?? { kind: 'person' },
@@ -825,6 +839,7 @@ export async function retargetExtensionSurface(input: {
   viewState?: Record<string, unknown>;
   navigation?: { canBack: boolean; canForward: boolean; backToConversation?: boolean };
   filePath?: string;
+  byHost?: boolean;
   itemId?: string;
 } & Partial<AppWhere>): Promise<void> {
   const binding = bindings.get(input.webContentsId);
@@ -858,6 +873,8 @@ export async function retargetExtensionSurface(input: {
   binding.viewState = input.viewState;
   binding.navigation = input.navigation;
   binding.filePath = filePath;
+  delete binding.personOpened;
+  Object.assign(binding, personOpened(filePath, input.byHost, binding.operator));
   binding.itemId = input.itemId ?? null;
   binding.opening = input.opening;
   if (folderChanged) {
