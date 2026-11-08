@@ -614,9 +614,9 @@ export default {
     "emptyStateSubtitle": "Connect your health data to see sleep, recovery, activity and more in one place.",
     "state": {
       "noPhone": "Allow health data access in My → Permissions.",
-      "oldApp": "咕咕 on {{device}} is too old to read health data. Update it and try again.",
-      "offline": "{{device}} is offline (last seen {{time}}). Open 咕咕 on the phone and try again.",
-      "offlineNever": "{{device}} is offline. Open 咕咕 on the phone and try again.",
+      "oldApp": "Gugu on {{device}} is too old to read health data. Update it and try again.",
+      "offline": "{{device}} is offline (last seen {{time}}). Open Gugu on the phone and try again.",
+      "offlineNever": "{{device}} is offline. Open Gugu on the phone and try again.",
       "notGranted": "On {{device}}, open My → Permissions and allow health data access.",
       "osPermission": "{{device}} hasn't allowed 咕咕 to read health data in Health Connect yet.",
       "unsupported": "{{device}} has no Health Connect (built in from Android 14), so health data can't be read.",
@@ -624,12 +624,12 @@ export default {
       "errorTitle": "Couldn't load your health data",
       "errorBody": "Check your connection and try again.",
       "unreadableTitle": "Couldn't read this data",
-      "unreadable": "The \"{{problem}}\" field from the phone is wrong. Update 咕咕 on the phone and try again."
+      "unreadable": "The \"{{problem}}\" field from the phone is wrong. Update Gugu on the phone and try again."
     },
     "phone": {
       "thisPhone": "this phone",
-      "notAndroid": "Health data can only be read in the 咕咕 Android app.",
-      "oldApp": "咕咕 on this phone is too old to read health data. Update it and try again.",
+      "notAndroid": "Health data can only be read in the Gugu Android app.",
+      "oldApp": "Gugu on this phone is too old to read health data. Update it and try again.",
       "unsupported": "This phone has no Health Connect (built in from Android 14), so health data can't be read.",
       "notGranted": "Allow health data access in My → Permissions.",
       "osPermission": "System access is not granted. Manage it in My → Permissions.",
@@ -954,7 +954,7 @@ export default {
   "channels": {
     "title": "Connect chat apps",
     "note": "Reach {{name}} from WeChat and other chat apps too",
-    "desktopOnly": "Chat apps are kept connected by the 咕咕 cloud, so {{name}} gets them even with your computer off."
+    "desktopOnly": "Chat apps are kept connected by the Gugu cloud, so {{name}} gets them even with your computer off."
   },
   "railEntry": {
     "claim": "Claim your Gugu",

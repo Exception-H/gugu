@@ -1,5 +1,5 @@
 import { requireAgentFileAccess } from '@gugu/core/local/state/agentFileBoundary';
-import { taskName } from './task-name';
+import { taskName, taskNameFor } from './task-name';
 import { assistantWorkIntentSchema,type AssistantWorkIntent } from '@gugu/core/shared/assistantWorkIntent';
 import { SessionArchivedError } from '@gugu/core/shared/sessionArchival';
 import { assistantWorkLedgerContext } from '../../../../sessionpage/assistant-work-ledger';
@@ -1056,7 +1056,8 @@ async function createChildSession(input: {
   }
   const prompt = withActivitySource(input.prompt, input.sourceLink);
   const mark = (stage: string, extra?: Record<string, unknown>) => ledger.mark(stage, extra);
-  const title = input.title?.trim() || undefined;
+  // Binding the identity first binds the name the task carries, so it is named here, by the one rule (task-name.ts).
+  const title = input.bindIdentityFirst ? await taskNameFor(provider, input.title) : input.title?.trim() || undefined;
   // A gugu-spawned child is a chat member, not a session-page session with a person present to answer
   // permission prompts. Its autonomy is therefore decided here, once, before either transport sees it.
   // Keep the session-page composer's durable choice unchanged; only this delegated child is fully automatic.
@@ -1249,14 +1250,17 @@ async function newSessionEngine(memory: NewSessionMemory): Promise<AgentProvider
     availabilityKnown: true,
   });
   if (!selection.providerId || selection.createDisabled) {
-    throw new Error('no agent on this computer can start a session: install one, or pass harness (session_list_harnesses)');
+    // Read by the person the App is working for, not an agent: what to do next, in the product's words.
+    throw new Error('No agent is installed on this computer yet. Install one from New task, then try again.');
   }
   return selection.providerId;
 }
 
 /**
- * The model a spawn names, else — on the engine last started — the one it started with, as the box restores it; a
- * remembered model this computer no longer offers falls back to the engine's own default (the box drops it too).
+ * The model a spawn names, else — on the engine last started — the one it started with, as the box restores it; else the
+ * box's default for a new session (`defaultCreateModel`: the engine's factory Gugu model, so someone with no CLI sign-in
+ * is not sent to a sign-in wall). A remembered model this computer no longer offers falls back to the engine's own
+ * default (the box drops it too).
  */
 async function spawnModelSelection(
   provider: AgentProviderId,
@@ -1264,9 +1268,20 @@ async function spawnModelSelection(
   requestedModel: string | undefined,
   last: NewSessionMemory['lastStarted'],
 ): Promise<Awaited<ReturnType<typeof resolveSpawnModelSelection>>> {
-  const remembered = last ? (last.platformModel ? platformOptionId(last.platformModel) : last.model) : undefined;
-  if (requestedModel || !remembered) return await resolveSpawnModelSelection(provider, transport, requestedModel);
-  return await resolveSpawnModelSelection(provider, transport, remembered).catch(() => ({ kind: 'harness' as const, model: undefined }));
+  if (requestedModel) return await resolveSpawnModelSelection(provider, transport, requestedModel);
+  const fallback = last ? (last.platformModel ? platformOptionId(last.platformModel) : last.model) : await newSessionModel(provider, transport);
+  if (!fallback) return { kind: 'harness', model: undefined };
+  return await resolveSpawnModelSelection(provider, transport, fallback).catch(() => ({ kind: 'harness' as const, model: undefined }));
+}
+
+/** The new-session box's default model on this engine: the remote and phone create forms' one rule (`defaultCreateModel`). */
+async function newSessionModel(provider: AgentProviderId, transport: SessionRuntime): Promise<string | undefined> {
+  const [{ createModels }, { defaultCreateModel }] = await Promise.all([
+    import('../session-timeline/create-session'),
+    import('../../../../../src/lib/createModelDefault'),
+  ]);
+  const models = await createModels({ harness: provider, sessionView: transport === 'pty' ? 'code' : 'general' });
+  return (models.ok ? defaultCreateModel(models.value) : null) ?? undefined;
 }
 
 /**
