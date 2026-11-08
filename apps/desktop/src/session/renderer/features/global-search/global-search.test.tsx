@@ -197,12 +197,23 @@ describe('global search sender avatars', () => {
 })
 
 describe('global search panel', () => {
+  it('shows only a group reply destination when a search hit was sent to the owner in a group', async () => {
+    remote.turns.mockResolvedValue([{ ...turn, excerpt: 'private owner group reply', activity: { kind: 'sent', id: 'send', addresses: {
+      target: { kind: 'chat', conversationId: GROUP, whisper: false, threadRootId: null }, recipients: ['user:me-1'], confirmed: true, chatKind: 'group', replyTo: null,
+    } } }])
+    await render('private')
+    expect(host.innerHTML).not.toContain('private owner group reply')
+    expect(host.textContent).not.toContain('private owner group reply')
+    expect(options()[1]!.textContent).toContain('搜索测试群甲')
+  })
+
   it('keeps an activity search hit without rendering its body in text, title or accessible labels', async () => {
     const { readDeliveryEnvelope } = await import('@gugu/core/local/agent/deliveryEnvelope')
     const facts = readDeliveryEnvelope('<gugu_delivery route="chat" from="Worker" from_id="user:worker" from_type="agent"><![CDATA[private folded body]]></gugu_delivery>')!.segments.map(part => part.facts)
     remote.turns.mockResolvedValue([{ ...turn, role: 'user', excerpt: 'private folded body', activity: { kind: 'received', id: 'input', facts } }])
     await render('private')
     expect(host.innerHTML).not.toContain('private folded body')
+    expect(host.textContent).not.toContain('private folded body')
     expect(options()).toHaveLength(3)
     expect(options()[1]!.textContent).toContain('Worker')
     await act(async () => options()[1]!.click())

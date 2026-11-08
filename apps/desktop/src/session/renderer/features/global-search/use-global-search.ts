@@ -176,7 +176,7 @@ export function useGlobalSearch(text: string, chips: readonly SearchChip[], face
   const taskHits: SearchHit[] = !tasks || inChat || from || kinds.length > 0 || !query ? [] : (turns.data?.hits ?? [])
     .filter((hit) => !inTask || hit.sessionId === inTask.taskId)
     .map((hit) => {
-      const activity = activityPreviewLabel(hit.activity, { actor: chatActor, chatName: chatDisplayName,
+      const activity = activityPreviewLabel(hit.activity, { actor: chatActor, viewerId: me ?? undefined, chatName: chatDisplayName,
       chatKind: id => readChatSummary(resolveChatId(id) ?? id)?.kind ?? null, translate: translateSessionMessage });
       return { kind: 'task', id: `t:${hit.sessionId}:${hit.itemId}`, group: `task:${hit.sessionId}`, taskId: hit.sessionId, projectId: hit.projectId,
       title: hit.title, itemId: hit.itemId, role: hit.role, text: activity ?? hit.excerpt, activity: activity !== null, at: hit.at } })

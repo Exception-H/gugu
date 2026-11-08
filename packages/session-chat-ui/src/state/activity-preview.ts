@@ -3,7 +3,7 @@ import { messageReferenceId } from '@gugu/session-core/acp/client';
 import type { SendAddresses } from '@gugu/session-core/session-record/send-addresses';
 import type { SegmentCtx } from '../core/units';
 import type { ChatMessage, TranscriptTurn } from '../model';
-import { incomingActivity, outgoingActivity } from './agent-activity';
+import { incomingActivity, outgoingActivity, viewerGroupReply } from './agent-activity';
 import { activitySummary, activitySummaryText } from './activity-summary';
 import { conversationOutput } from './conversation-process';
 import { planConversationSegments } from './conversation-segments';
@@ -38,10 +38,12 @@ export function activityPreviewSource(turn: TranscriptTurn, reference: string): 
 }
 
 /** Use exactly the transcript's identity classification and semantic summary. */
-export function activityPreviewLabel(source: ActivityPreviewSource | null | undefined, ctx: Pick<SegmentCtx, 'actor' | 'chatKind' | 'chatName' | 'translate'>): string | null {
+export function activityPreviewLabel(source: ActivityPreviewSource | null | undefined, ctx: Pick<SegmentCtx, 'actor' | 'chatKind' | 'chatName' | 'translate' | 'viewerId'>): string | null {
   if (!source) return null;
   const event = source.kind === 'sent' ? outgoingActivity(source.id, source.addresses, ctx)
     : incomingActivity({ kind: 'message', id: source.id, seq: 0, role: 'user', text: '',
       guguDelivery: { body: '', segments: source.facts.map(facts => ({ facts, body: '' })) } } as ChatMessage, ctx);
-  return event ? activitySummaryText(activitySummary({ id: event.id, events: [event] }, ctx.translate)) : null;
+  if (event) return activitySummaryText(activitySummary({ id: event.id, events: [event] }, ctx.translate));
+  const group = source.kind === 'sent' ? viewerGroupReply({ sentAddresses: source.addresses } as ChatMessage, ctx) : null;
+  return group ? ctx.translate('transcript.activityReplyToYou', { name: group.name }) : null;
 }

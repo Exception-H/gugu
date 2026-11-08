@@ -82,7 +82,7 @@ export function hasUnconfirmedSend(items: readonly TranscriptItem[], turn: Trans
 }
 
 /** Proven group reply to the viewer: preserve one original source link, no session notification. */
-export function viewerGroupReply(message: ChatMessage, ctx: SegmentCtx): ActivityActor | null {
+export function viewerGroupReply(message: ChatMessage, ctx: ActivityContext & Pick<SegmentCtx, 'viewerId'>): ActivityActor | null {
   const addresses = message.sentAddresses;
   const viewer = ctx.viewerId?.replace(/^user:/, '');
   if (!viewer || !addresses?.confirmed || !addresses.recipients?.some(id => id === `user:${viewer}`)) return null;

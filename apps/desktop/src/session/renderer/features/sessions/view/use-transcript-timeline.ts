@@ -41,7 +41,7 @@ export function useTranscriptTimeline<T>(
           return identity?.type;
         },
       };
-      const activityContext = { actor: chatActor, chatName: chatDisplayName, translate: translateSessionMessage,
+      const activityContext = { get viewerId() { return selfIdentity()?.userId; }, actor: chatActor, chatName: chatDisplayName, translate: translateSessionMessage,
         chatKind: (id: string) => readChatSummary(resolveChatId(id) ?? id)?.kind ?? null };
       // Streaming only reprojects the active turn, not the entire history.
       const committed = createMemo(() => {

@@ -42,3 +42,11 @@ describe('folded activity search previews', () => {
     expect(activityPreviewLabel(activityPreviewSource(direct, 'narration'), ctx)).toBeNull();
   });
 });
+
+it('hides a group-reply-to-owner preview while keeping a direct owner answer readable', () => {
+  const addresses = { target: { kind: 'chat' as const, conversationId: 'group', whisper: false, threadRootId: null },
+    recipients: [owner], confirmed: true, chatKind: 'group', replyTo: null };
+  const viewer = { ...ctx, viewerId: owner.slice(5) };
+  expect(activityPreviewLabel({ kind: 'sent', id: 'reply', addresses }, viewer)).toBe('Replied to you in Test group');
+  expect(activityPreviewLabel({ kind: 'sent', id: 'direct', addresses: { ...addresses, chatKind: 'ai' } }, viewer)).toBeNull();
+});
