@@ -1,6 +1,6 @@
 import { existsSync, readFileSync, realpathSync, statSync } from 'node:fs';
 import path from 'node:path';
-import type { WindowsShimReader } from './windows-node-entry';
+import { readShimSets, type WindowsShimReader } from './windows-node-entry';
 
 /**
  * Windows 上「已经解析出一个程序路径，现在要直接把它 spawn 起来」这件事的**唯一一份**做法。
@@ -147,7 +147,7 @@ function isDirectlySpawnableOnWindows(command: string): boolean {
  * 必须是**整行只有这一个程序 + `%*`**:`node "…\cli.js" %*` 那种多一个参数的不匹配 ——
  * 匹配上就会把 `node.exe` 当成目标,丢掉真正要跑的那个脚本。
  */
-const CMD_SHIM_SINGLE_PROGRAM = /^\s*"([^"\r\n]+\.(?:exe|com))"\s+%\*\s*$/im;
+const CMD_SHIM_SINGLE_PROGRAM = /^\s*@?"([^"\r\n]+\.(?:exe|com))"\s+%\*\s*$/im;
 
 /** 壳里的 `%dp0%` / `%~dp0` = 壳自己所在目录(带尾分隔符)。 */
 function expandShimDirectory(template: string, shimPath: string): string {
@@ -180,14 +180,19 @@ export function resolveWindowsHandoffExecutable(
   const extension = path.win32.extname(command).toLowerCase();
   if (extension !== '.cmd' && extension !== '.bat' && extension !== '.ps1') return null;
 
-  // npm 三个壳(`name` / `name.cmd` / `name.ps1`)是一起写下的,`.cmd` 那份格式最稳,统一读它。
-  const shimPath = extension === '.cmd'
+  // npm 三个壳(`name` / `name.cmd` / `name.ps1`)是一起写下的,`.cmd` 那份格式最稳:`.ps1` 读它;`.bat` 读自己。
+  const shimPath = extension === '.cmd' || extension === '.bat'
     ? command
     : `${command.slice(0, command.length - extension.length)}.cmd`;
 
   const readShim = options.readShim ?? defaultReadShim;
   const text = readShim(shimPath);
   if (!text) return null;
+
+  // 壳除了 `dp0` / `_prog` / `PATHEXT` 还设了别的(用户自己写的 `set CODEX_HOME=…` 再调 exe):绕过壳直接起 exe
+  // 就悄悄丢了那份设置,程序换了一套配置与登录 ⇒ 不换,照旧经壳起。判据与 node 那条链同一份(readShimSets)。
+  const sets = readShimSets(text, shimPath);
+  if (!sets || sets.pathPin !== undefined || sets.nodePath !== undefined) return null;
 
   const match = CMD_SHIM_SINGLE_PROGRAM.exec(text);
   if (!match) return null;

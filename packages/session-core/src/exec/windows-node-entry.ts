@@ -81,9 +81,9 @@ function expandShimDirectory(template: string, shimPath: string): string {
  */
 const SHIM_SET = /(?:^|&)\s*@?SET\s+(?:"([^="\r\n]+)=([^"\r\n]*)"|([^="\s&]+)=([^&\r\n]*))/gim;
 
-type ShimSets = { variables: Map<string, string>; pathPin?: string; nodePath?: string };
+export type ShimSets = { variables: Map<string, string>; pathPin?: string; nodePath?: string };
 
-function readShimSets(text: string, shimPath: string): ShimSets | null {
+export function readShimSets(text: string, shimPath: string): ShimSets | null {
   const sets: ShimSets = { variables: new Map() };
   for (const match of text.matchAll(SHIM_SET)) {
     const key = (match[1] ?? match[3])!.toLowerCase();

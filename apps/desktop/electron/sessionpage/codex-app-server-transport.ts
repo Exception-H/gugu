@@ -310,8 +310,8 @@ export function resolveCodexAppServerSpawn(
   const length = cmdArgs.join(' ').length
   if (length > CMD_COMMAND_LINE_LIMIT) {
     throw new Error(
-      `codex 启动器 ${codexBin} 只能经 cmd.exe 起,而这条命令行有 ${length} 个字符,超过 cmd 的上限 `
-      + `${CMD_COMMAND_LINE_LIMIT}。请改用 codex.exe 或 npm 安装的 codex(咕咕会绕过 cmd 直接起它们)。`,
+      `codex 启动脚本 ${codexBin} 只能经 cmd.exe 运行,而这条命令行有 ${length} 个字符,超过 cmd 的上限 `
+      + `${CMD_COMMAND_LINE_LIMIT}。请把 Codex 的程序来源指向 codex.exe 本身,或改用咕咕安装的 Codex。`,
     )
   }
   return {

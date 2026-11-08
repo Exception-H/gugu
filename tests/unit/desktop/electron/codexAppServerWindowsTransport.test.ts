@@ -1069,6 +1069,40 @@ while :; do sleep 1; done
     expect(short.args.join(' ').length).toBeLessThanOrEqual(8191)
   })
 
+  it('starts the exe directly only when the launcher sets nothing the program would see', () => {
+    const dir = String.raw`C:\Tools`
+    const exe = String.raw`C:\Tools\bin\codex.exe`
+    const reader = (scripts: Record<string, string>): WindowsShimReader => ({
+      readShim: (path) => scripts[path] ?? null,
+      exists: (path) => path === exe,
+    })
+    const args = ['app-server', '--listen', 'ws://127.0.0.1:3210']
+    const comSpec = { ComSpec: String.raw`C:\Windows\System32\cmd.exe` }
+
+    // yarn classic / scoop write the line with a leading `@`; a .bat is read itself.
+    for (const [launcher, script] of [
+      [`${dir}\\codex.cmd`, '@echo off\r\n@"%~dp0\\bin\\codex.exe" %*\r\n'],
+      [`${dir}\\codex.bat`, '@echo off\r\n"%~dp0\\bin\\codex.exe" %*\r\n'],
+    ] as const) {
+      expect(resolveCodexAppServerSpawn(launcher, args, 'win32', comSpec, reader({ [launcher]: script })))
+        .toEqual({ command: exe, args })
+    }
+
+    // A .ps1 is resolved through the .cmd npm writes next to it.
+    expect(resolveCodexAppServerSpawn(`${dir}\\codex.ps1`, args, 'win32', comSpec,
+      reader({ [`${dir}\\codex.cmd`]: '@echo off\r\n"%~dp0\\bin\\codex.exe" %*\r\n' })))
+      .toEqual({ command: exe, args })
+
+    // A user's own launcher that sets CODEX_HOME (or PATH) first keeps running through cmd, setting and all.
+    for (const set of ['set CODEX_HOME=D:\\codex-work', 'set "PATH=C:\\Tools\\extra;%PATH%"']) {
+      const launcher = `${dir}\\codex.cmd`
+      const launch = resolveCodexAppServerSpawn(launcher, args, 'win32', comSpec,
+        reader({ [launcher]: `@echo off\r\n${set}\r\n"%~dp0\\bin\\codex.exe" %*\r\n` }))
+      expect(launch.command).toBe(comSpec.ComSpec)
+      expect(launch.args[3]).toContain('codex.cmd')
+    }
+  })
+
   it('resolves the managed launcher under a home path with spaces and non-ASCII characters', () => {
     const home = String.raw`C:\Users\张 三\gugu home\agents`
     const launcher = `${home}\\mise-bin\\codex.cmd`
