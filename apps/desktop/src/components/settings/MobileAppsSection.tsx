@@ -64,6 +64,13 @@ const MobileAppsContent = observer(function MobileAppsContent({ appDetail }: { a
   const [tab, setTab] = useState<'market' | 'installed'>('market')
   const [view, setView] = useState<MarketBrowsePage>('market')
   const [manage, setManage] = useState<string | null>(null)
+  // Asked for from an App's settings page: back from the market page returns there, as on the desktop.
+  const [marketFrom, setMarketFrom] = useState<string | null>(null)
+  const closeDetail = () => {
+    setDetail(null)
+    if (marketFrom) setManage(marketFrom)
+    setMarketFrom(null)
+  }
   const offered = useOfferedVersions()
   const [query, setQuery] = useState('')
   const [chip, setChip] = useState<'all' | MarketCategory>('all')
@@ -200,7 +207,7 @@ const MobileAppsContent = observer(function MobileAppsContent({ appDetail }: { a
         </div>
       )}
       {detail ? (
-        <Sheet fullScreenMobile onClose={() => setDetail(null)} testId="phone-app-product" ariaLabel={localizedManifestText(detail.manifest, locale).name}>
+        <Sheet fullScreenMobile onClose={closeDetail} testId="phone-app-product" ariaLabel={localizedManifestText(detail.manifest, locale).name}>
           <div className={`${skin} phone-app-product`}>
             <SessionUiTheme theme={theme} skin>
               {error}
@@ -209,8 +216,9 @@ const MobileAppsContent = observer(function MobileAppsContent({ appDetail }: { a
                 subject={{ manifest: grantableBy(detail.manifest, PHONE_CAPABILITIES), installedVersion: installed?.version, cloud: detail.cloud, installRef: detail.ref }}
                 lifecycle={lifecycleOf(detail.manifest.id, detail)} pending={pending[detail.manifest.id]}
                 locale={locale} translate={translate} api={phoneProductApi} onOpenExternal={(url) => { window.open(url, '_blank', 'noopener,noreferrer') }}
-                onBack={() => setDetail(null)} onLifecycle={() => act(detail)} onInstallVersion={install}
-                onManage={installed && !store.isPreinstalled(installed.id) ? () => setManage(installed.id) : undefined}
+                backLabel={marketFrom ? translate('extensions.appSettings') : undefined}
+                onBack={closeDetail} onLifecycle={() => act(detail)} onInstallVersion={install}
+                onManage={installed && !store.isPreinstalled(installed.id) ? () => { setMarketFrom(null); setManage(installed.id) } : undefined}
                 backgroundSupported={false}
                 phoneAgentCapabilities={detail.manifest.permissions?.capabilities?.filter((capability) => PHONE_CAPABILITY_SUPPORT[capability] === 'agent')}
               />
@@ -226,8 +234,10 @@ const MobileAppsContent = observer(function MobileAppsContent({ appDetail }: { a
           onClose={() => setManage(null)}
           onViewInMarket={() => {
             const item = phoneMarketRows(catalog.data?.entries ?? [], '').find((row) => row.manifest.id === manage)
-            if (item) setDetail(item)
-            else setFailed({ title: translate('extensions.marketUnavailable'), cause: manage })
+            if (item) {
+              setMarketFrom(manage)
+              setDetail(item)
+            } else setFailed({ title: translate('extensions.marketUnavailable'), cause: manage })
             setManage(null)
           }}
         />
