@@ -32,19 +32,15 @@ export async function sessionMachine(sessionId: string): Promise<SessionMachine 
   if (await agentSessionContext(sessionId)) return null;
   const known = machines.get(sessionId);
   if (known) return known;
-  const { sessionsElsewhere } = await import('@main/core/extensions/extension-agents');
-  const { rows, unreached } = await sessionsElsewhere();
-  for (const { session, deviceId, deviceLabel } of rows) {
-    if (!deviceId) continue;
-    machines.set(session.conversationId, {
-      deviceId,
-      deviceLabel,
-      projectId: session.projectId || null,
-      agentId: session.agent ? `user:${session.agent.userId}` : null,
-    });
+  const { otherMachines } = await import('@main/core/sessions/session-family');
+  const { found, unreached } = await otherMachines().sessionHome(sessionId);
+  if (found?.listsAgents) {
+    const { deviceId, label, session } = found;
+    const machine = { deviceId, deviceLabel: label, projectId: session.projectId || null, agentId: session.agent ? `user:${session.agent.userId}` : null };
+    machines.set(sessionId, machine);
+    return machine;
   }
-  const found = machines.get(sessionId);
-  if (found) return found;
+  if (found) unreached.push({ deviceId: found.deviceId, label: found.label, detail: `"${found.label}" (device:${found.deviceId}) runs a gugu too old to list its agents; it updates itself when idle` });
   const tail = unreached.length ? ` (not asked: ${unreached.map((machine) => machine.label ?? machine.detail).join(', ')})` : '';
   throw Object.assign(new Error(`Session ${sessionId} is not on this computer or on your other online computers${tail}`), {
     code: unreached.length ? 'unavailable' : 'not-found',

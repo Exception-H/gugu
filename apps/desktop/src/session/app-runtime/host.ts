@@ -107,6 +107,12 @@ export interface GuguHost extends ProjectionHost {
     list(): Promise<unknown>;
     members(args: Record<string, unknown>): Promise<unknown>;
   };
+  /** `gugu.prompts` (34, `prompts`): the person's own prompts (`prompt-library.ts`). */
+  readonly prompts?: {
+    list(args?: Record<string, unknown>): Promise<unknown>;
+    save(args: Record<string, unknown>): Promise<unknown>;
+    delete(id: string): Promise<unknown>;
+  };
   /** `gugu.cloud` (31, `app-cloud-core.ts`): `on` is composed of subscribe and `onCloudHeard`; a program writes with `programWrite`. */
   readonly cloud?: {
     read(name: string, args?: Record<string, unknown>): Promise<unknown>;
