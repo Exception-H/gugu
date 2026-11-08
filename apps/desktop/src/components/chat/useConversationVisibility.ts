@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useRef, useState } from 'react'
+import { useLayoutEffect, useRef, useState } from 'react'
 
 /** A retained desktop slot stays mounted while another shell page covers it. */
 export function useConversationVisibility(requested: boolean) {
@@ -21,15 +21,4 @@ export function useConversationVisibility(requested: boolean) {
     return () => { live = false; observer.disconnect(); document.removeEventListener('visibilitychange', publish) }
   }, [requested])
   return { ref, shown: requested && intersects }
-}
-
-/** True once `shown` has held for a moment: something scrolled past on its way elsewhere never gets there. */
-export function useStayedInView(shown: boolean, ms = 180) {
-  const [stayed, setStayed] = useState(false)
-  useEffect(() => {
-    if (!shown) { setStayed(false); return }
-    const timer = setTimeout(() => setStayed(true), ms)
-    return () => clearTimeout(timer)
-  }, [shown, ms])
-  return shown && stayed
 }

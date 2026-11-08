@@ -6,7 +6,7 @@ import { createReactHarness } from '../../../support/testHarness'
 import { SentMessageSurface, widgetTabId } from '../../../../apps/desktop/src/components/chat/sentMessageSurface'
 import { offerSentMessageSlot } from '../../../../apps/desktop/src/components/chat/sentMessageSlots'
 import { SentMessageBodyHost } from '../../../../apps/desktop/src/components/chat/SentMessageBodyHost'
-import { useStayedInView } from '../../../../apps/desktop/src/components/chat/useConversationVisibility'
+import { useStayedInView } from '../../../../apps/desktop/src/components/chat/useStayedInView'
 
 const open = vi.hoisted(() => ({ file: vi.fn(), draws: 0 }))
 vi.mock('@/components/chat/MessageBody', () => ({
@@ -101,7 +101,7 @@ it('opens a working-folder link in the task, the way the timeline opens it', asy
   await act(async () => take())
 })
 
-it('a widget in view starts its page only once it stays, so scrolling past starts none', async () => {
+it('a widget in view starts its page only once it stays and nothing is scrolling', async () => {
   vi.useFakeTimers()
   let stayed = false
   function Probe({ shown }: { shown: boolean }) { stayed = useStayedInView(shown); return null }
@@ -112,7 +112,11 @@ it('a widget in view starts its page only once it stays, so scrolling past start
   await act(async () => { vi.advanceTimersByTime(1000) })
   expect(stayed).toBe(false)
   await harness.render(<Probe shown />)
-  await act(async () => { vi.advanceTimersByTime(180) })
+  await act(async () => { vi.advanceTimersByTime(150) })
+  window.dispatchEvent(new Event('scroll'))
+  await act(async () => { vi.advanceTimersByTime(150) })
+  expect(stayed).toBe(false)
+  await act(async () => { vi.advanceTimersByTime(40) })
   expect(stayed).toBe(true)
   await harness.render(<Probe shown={false} />)
   expect(stayed).toBe(false)
