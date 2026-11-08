@@ -49,7 +49,7 @@ function canExpand(item: ConversationStepData, ctx: MeasureCtx): boolean {
   return conversationTextOverflow(text, ctx, width, 12);
 }
 /** The strip sits on the label's column, like the disclosed text below it. */
-const STRIP_INSET = 20;
+export const STRIP_INSET = 20;
 function pictureStrip(item: ConversationStepData, ctx: MeasureCtx) {
   return toolThumbStrip(item.pictures.imageCount ?? item.pictures.images?.length ?? 0, ctx.width - STRIP_INSET);
 }

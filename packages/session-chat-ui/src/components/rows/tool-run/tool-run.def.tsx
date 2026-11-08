@@ -9,10 +9,16 @@
 import { HEADER_ROW_EXTRA_H } from '@session-chat/components/engine/row-metrics';
 import { CollapseHeader } from '@session-chat/components/primitives/CollapseHeader';
 import { defineUnit } from '@session-chat/core/units';
+import { Show } from 'solid-js';
 import type { ToolRunItem } from '@session-chat/model';
 import { toolRunNowLabel } from '@session-chat/state/tool-run';
 import { readableLabel, rowTranslator } from '../readable-label';
+import { ToolThumbs } from '../tools/tool/Tool';
+import { toolThumbStrip } from '../tools/tool/tool-images';
+import { toolPictures } from '../tools/tool/tool.def';
 import { turnProcessHeaderSlot, turnProcessLine, turnProcessRow } from '../turn-process/turn-process.css';
+import { pictures as picturesInset } from '../conversation-step/conversation-step.css';
+import { STRIP_INSET } from '../conversation-step/conversation-step.def';
 
 function summaryLayout(data: ToolRunItem, ctx: import('@session-chat/core/define').MeasureCtx) {
   const now = data.now ? ` · ${toolRunNowLabel(data.now, rowTranslator(ctx))}` : '';
@@ -22,16 +28,29 @@ function summaryLayout(data: ToolRunItem, ctx: import('@session-chat/core/define
   return { ...label, rowHeight: Math.max(ctx.theme.fonts.body.lineHeight + HEADER_ROW_EXTRA_H, label.height + 8) };
 }
 
+/**
+ * The only folded line that shows something of what it folds: a step's pictures are what it was for (tool-images.ts:
+ * seen without opening the row), so folded, the line carries the strip of its last step that has any, on the same
+ * inset the step itself draws it.
+ */
+function pictureStrip(data: ToolRunItem, ctx: import('@session-chat/core/define').MeasureCtx) {
+  if (!data.pictureStep) return null;
+  const pictures = toolPictures(data.pictureStep);
+  const strip = toolThumbStrip(pictures.imageCount ?? pictures.images?.length ?? 0, ctx.width - STRIP_INSET);
+  return strip && { strip, item: { id: data.pictureStep.id, ...pictures } };
+}
+
 export const toolRunUnitDef = defineUnit<ToolRunItem, { extraH: number }>({
   kind: 'tool-run',
   margin: { top: 2, bottom: 2 },
   vars: { extraH: HEADER_ROW_EXTRA_H },
 
-  measure(data, ctx) { return summaryLayout(data, ctx).rowHeight; },
+  measure(data, ctx) { return summaryLayout(data, ctx).rowHeight + (pictureStrip(data, ctx)?.strip.stripH ?? 0); },
 
   Render(props) {
     const layout = () => summaryLayout(props.data, props.ctx.measureCtx!());
     const height = () => layout().rowHeight;
+    const pictures = () => pictureStrip(props.data, props.ctx.measureCtx!());
     // ViewState keeps the inverted flag inherited from the original store:
     // `isCollapsed(id) === true` means expanded (see view-state.ts).
     const expanded = () => props.ctx.viewState.isCollapsed(props.data.id);
@@ -43,7 +62,7 @@ export const toolRunUnitDef = defineUnit<ToolRunItem, { extraH: number }>({
         data-live={props.data.live ? 'true' : 'false'}
         data-expanded={expanded() ? 'true' : 'false'}
         class={turnProcessRow}
-        style={{ height: `${height()}px` }}
+        style={{ height: `${height() + (pictures()?.strip.stripH ?? 0)}px` }}
       >
         <div class={turnProcessLine} data-slot="tool-timeline-line">
           <div class={turnProcessHeaderSlot}>
@@ -59,6 +78,7 @@ export const toolRunUnitDef = defineUnit<ToolRunItem, { extraH: number }>({
             </CollapseHeader>
           </div>
         </div>
+        <Show when={pictures()}>{(value) => <div class={picturesInset}><ToolThumbs item={value().item} strip={value().strip} /></div>}</Show>
       </div>
     );
   },
