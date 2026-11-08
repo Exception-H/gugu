@@ -372,7 +372,7 @@ const FAILURE_CONTENT: Record<AgentFailureReason, string> = {
   generic: 'This reply could not be completed. Please try again later.',
   notAdmitted: '消息已保留，助理就绪后回复。',
   deliveryRejected: 'This message did not reach the assistant and will not be resent automatically.',
-  outcomeUnknown: 'Delivery result unknown: the message may have reached the assistant, and it was not resent.',
+  outcomeUnknown: 'Failed to send this message.',
   undelivered: 'Not delivered yet: no running Gugu instance on this device holds this agent. The message stays unread until that instance is open.',
   appUnavailable: 'Not delivered: this came from an App that cannot run where this agent lives.',
 }
