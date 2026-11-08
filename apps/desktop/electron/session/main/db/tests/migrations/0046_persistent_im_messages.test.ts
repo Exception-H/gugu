@@ -62,8 +62,8 @@ describe('0046 migration', () => {
   it('follows the published migration sequence and the previous unpublished timestamp', () => {
     expect(migration).toBeDefined()
     expect(migration.tag).toBe('0046_persistent_im_messages')
-    const preceding = all.slice(0, all.indexOf(migration))
-    expect(migration.when).toBeGreaterThan(Math.max(previousUnpublishedWhen, ...preceding.map(entry => entry.when)))
+    const others = all.filter(entry => entry.tag < migration.tag)
+    expect(migration.when).toBeGreaterThan(Math.max(previousUnpublishedWhen, ...others.map(entry => entry.when)))
   })
 
   it('rejects an obsolete message schema instead of silently skipping its replacement', () => {
