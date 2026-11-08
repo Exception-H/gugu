@@ -7,7 +7,9 @@ import { assertWindowCommitSource } from './window-commit-source';
 type Range = { start: number; end: number };
 type Facts = { turnId?: string; referenceId?: string; storedSeq?: number; items?: Range; terminals?: Range };
 export type CommitRootState = { version: 1; sourceId: string; buildId: string; page: number; member: number; done: boolean; facts: Facts };
-export type CommitRootFacts = Facts & { turnId: string; referenceId: string; storedSeq: number; items: Range };
+export type CommitRootFacts = Readonly<Facts & { sourceId: string; turnId: string; referenceId: string; storedSeq: number; items: Range }>;
+const issued = new WeakSet<CommitRootFacts>();
+export const isIssuedCommitRootFacts = (facts: CommitRootFacts) => issued.has(facts);
 const position = (n: number) => Number.isSafeInteger(n) && n >= 0;
 const small = (s: string) => typeof s === 'string' && s.length > 0 && s.length <= 2048 && Buffer.byteLength(s) <= 2048;
 function anchor(receipt: WindowCommitReceipt, index: CommitContainerIndex) {
@@ -43,7 +45,10 @@ function state(receipt: WindowCommitReceipt, index: CommitContainerIndex, input:
 function complete(s: CommitRootState): CommitRootFacts {
   if (!s.facts.turnId || !s.facts.referenceId || s.facts.storedSeq === undefined || !s.facts.items)
     throw new Error('Canonical root identity/items are incomplete');
-  return { ...s.facts, turnId: s.facts.turnId, referenceId: s.facts.referenceId, storedSeq: s.facts.storedSeq, items: { ...s.facts.items } };
+  const facts: CommitRootFacts = Object.freeze({ ...s.facts, sourceId: s.sourceId, turnId: s.facts.turnId,
+    referenceId: s.facts.referenceId, storedSeq: s.facts.storedSeq, items: Object.freeze({ ...s.facts.items }),
+    ...(s.facts.terminals ? { terminals: Object.freeze({ ...s.facts.terminals }) } : {}) });
+  issued.add(facts); return facts;
 }
 
 /** Read exactly one root member per step. Canonical ids come from the stored
