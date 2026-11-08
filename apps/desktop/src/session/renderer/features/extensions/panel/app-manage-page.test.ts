@@ -91,6 +91,7 @@ describe('App 设置页', () => {
     });
     const plain = { ...(notes as object), settings: undefined, permissions: undefined, contributes: { tabs: [] } };
     await render({ manifest: plain }, async (document) => {
+      expect(document.querySelector('[data-testid="app-manage-version"]')).toBeNull();
       expect(document.querySelector('[data-testid="app-manage-agents"]')).toBeNull();
       expect(document.querySelector('[data-testid="app-manage-pages"]')).toBeNull();
       expect(document.querySelector('[data-testid="app-manage-settings"]')).toBeNull();

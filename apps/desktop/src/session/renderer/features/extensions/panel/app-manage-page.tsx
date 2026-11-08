@@ -274,7 +274,9 @@ export function AppManagePage({
       {onOpenInWindow ? <Row title={translate('tabs.openInWindow')}><Button type="button" variant="outline" size="sm" onClick={onOpenInWindow}>{translate('extensions.open')}</Button></Row> : null}
     </> });
   }
-  sections.push({ id: 'version', label: translate('extensions.manageVersion'), body: <>
+  // The version itself is in the head; this section is what can be done about it, so one gugu ships has none.
+  const versionManaged = autoUpdate || onInstallVersion || (variants && variants.variants.length > 1 && onSwitchVariant) || (resource && onViewInMarket);
+  if (versionManaged) sections.push({ id: 'version', label: translate('extensions.manageVersion'), body: <>
     {autoUpdate ? (
       <Row title={translate('extensions.autoUpdate')} note={autoUpdate.on ? translate('extensions.pinHint') : translate('extensions.pinnedAt', { version: manifest.version })} testId="app-manage-auto-update">
         <Switch size="sm" checked={autoUpdate.on} disabled={readOnly} aria-label={translate('extensions.autoUpdate')} onCheckedChange={autoUpdate.onToggle} />

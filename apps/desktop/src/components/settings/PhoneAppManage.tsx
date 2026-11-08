@@ -86,7 +86,7 @@ export const PhoneAppManage = observer(function PhoneAppManage({ extensionId, up
             readOnly={busy}
             backLabel={translate('extensions.tabInstalled')}
             notice={notice}
-            origin={phoneApps.originOf(extensionId) ?? undefined}
+            origin={builtIn ? 'preinstalled' : phoneApps.originOf(extensionId) ?? undefined}
             autoUpdate={autoUpdate === null ? undefined : { on: autoUpdate, onToggle: (on) => void run(translate('extensions.switchFailed'), () => phoneApps.setAutoUpdate(extensionId, on)) }}
             onBack={onClose}
             onLifecycle={() => {

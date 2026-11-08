@@ -206,6 +206,8 @@ describe('「App」 on the phone: an App’s settings page', () => {
       await until('its settings page', () => page('[data-testid="app-manage-page"]') !== null)
       expect(page('[data-testid="app-manage-switch"]')).toBeNull()
       expect(page('[data-testid="app-manage-uninstall"]')).toBeNull()
+      expect(page('[data-testid="app-manage-version"]')).toBeNull()
+      expect(page('[data-testid="app-manage-origin"]')?.textContent).toContain('咕咕自带')
     } finally {
       delete origins.vote
     }
