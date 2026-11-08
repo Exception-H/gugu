@@ -319,6 +319,7 @@ const enUSCoreMessages = {
   'extensions.fullDisclosureInfoLabel': "More about keeping tools in agents' tool lists",
   'extensions.disclosureFailed': 'Could not change how its tools are offered to agents',
   'extensions.permissionsNotifications': 'Show system notifications',
+  'extensions.permissionsPrompts': 'Read and change your prompts',
   // Host-provided, on a tab opened by a file-type claim. The escape hatch that
   // keeps an install from making a file type unopenable.
   // 「用哪个打开」: several Apps claim this kind of file (真源 §2.4, 主人 09-29).
@@ -603,7 +604,7 @@ const enUSCoreMessages = {
   'chat.folderDropUnsupportedDescription':
     'This computer has no SSH connection. Attach individual files, or add this computer using SSH to send a folder.',
   'chat.commands': 'Commands',
-  'chat.prompts': 'Prompts',
+  'chat.prompts': 'My prompts',
   'chat.thisAgent': 'This agent',
   'chat.signIn': 'Sign in',
   'chat.signInDone': "I've signed in",
@@ -1413,6 +1414,7 @@ const zhCNCoreMessages: Record<CoreSessionMessageKey, string> = {
   'extensions.fullDisclosureInfoLabel': '关于常驻工具列表的说明',
   'extensions.disclosureFailed': '工具的提供方式没能改动',
   'extensions.permissionsNotifications': '发系统通知',
+  'extensions.permissionsPrompts': '读取和修改你的提示词',
   'extensions.openWithTitle': '用哪个打开「{name}」',
   'extensions.openWithAlways': '这类文件始终用它',
   'extensions.permissionChangeFailed': '这项权限没能改动',
@@ -1677,7 +1679,7 @@ const zhCNCoreMessages: Record<CoreSessionMessageKey, string> = {
   'chat.folderDropUnsupportedDescription':
     '这台机器没有 SSH 连接，文件夹传不过去。请逐个附上文件，或用 SSH 添加这台机器。',
   'chat.commands': '命令',
-  'chat.prompts': '提示词',
+  'chat.prompts': '我的提示词',
   'chat.thisAgent': '此智能体',
   'chat.signIn': '登录',
   'chat.signInDone': '我已登录',

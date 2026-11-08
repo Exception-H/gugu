@@ -8,7 +8,7 @@ import {
   type ExtensionManifest,
   type ExtensionTabKind
 } from '@shared/extensions/manifest';
-import { localizedManifestText, localizedTabText } from '@shared/extensions/catalog';
+import { localizedManifestText, localizedPromptText, localizedTabText } from '@shared/extensions/catalog';
 import type { MarketUpdatesSummary } from '@shared/extensions/market';
 import type { ExtensionOrigin } from '@shared/extensions/upgrade';
 import { SIDE_PAGE_WIDTH_PX } from '@renderer/features/tabs/side-width';
@@ -115,6 +115,21 @@ export class InstalledExtensionsStore {
   tabTitle(kind: string): string | undefined {
     const tab = this.allTabContributions.find((entry) => entry.kind === kind);
     return tab && (this.mainTabOf(tab.extensionId)?.kind === kind ? tab.extensionName : tab.title);
+  }
+
+  /**
+   * The prompts enabled Apps offer in the composer's `/` menu (`contributes.prompts`), in the reader's language, with the
+   * App's name to group them under and the titles in its other languages for search.
+   */
+  get appPrompts(): { key: string; appName: string; title: string; prompt: string; otherTitles: string[] }[] {
+    return this.manifests.filter((manifest) => this.isEnabled(manifest.id)).flatMap((manifest) => {
+      const appName = localizedManifestText(manifest, this.locale).name;
+      return (manifest.contributes.prompts ?? []).map((prompt) => {
+        const text = localizedPromptText(manifest, prompt, this.locale);
+        const titles = [prompt.title, ...Object.values(manifest.localized ?? {}).map((entry) => entry.prompts?.[prompt.name]?.title)];
+        return { key: `${manifest.id}/${prompt.name}`, appName, ...text, otherTitles: [...new Set(titles)].filter((title): title is string => !!title && title !== text.title) };
+      });
+    });
   }
 
   /** How wide this App page is beside another (`sideWidth`); undefined: half, a peer. */

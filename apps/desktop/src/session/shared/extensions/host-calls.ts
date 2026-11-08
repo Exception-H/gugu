@@ -56,6 +56,10 @@ export const HOST_CALLS = {
   'cloud.programWrite': { verb: 'cloudProgramWrite', pack: (name: string, args?: Record<string, unknown>) => ({ name, args }) },
   'cloud.subscribe': { verb: 'cloudSubscribe', pack: (topic: string, event: string) => ({ topic, event }) },
   'cloud.unsubscribe': { verb: 'cloudUnsubscribe', pack: (topic: string, event: string) => ({ topic, event }) },
+  // `gugu.prompts` (34, `prompts`): the person's own prompts; a delete is shown to the person with its undo.
+  'prompts.list': { verb: 'promptsList', pack: (args: Record<string, unknown> = {}) => args },
+  'prompts.save': { verb: 'promptsSave' },
+  'prompts.delete': { verb: 'promptsDelete', pack: (id: string) => ({ id }) },
   pickAgent: { verb: 'pickAgent' },
   readData: { verb: 'readData', pack: (path: string) => ({ path }) },
   writeData: { verb: 'writeData', pack: (path: string, content: string) => ({ path, content }) },

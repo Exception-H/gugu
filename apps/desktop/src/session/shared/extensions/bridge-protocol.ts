@@ -87,7 +87,8 @@ export const EXTENSION_TOOL_CONFINEMENT_API_VERSION = 29;
 // 30: source-aware page history; navigation.go(-1|1) and context navigation availability.
 // 31: `gugu.cloud` (app-cloud-core.ts), an App's own part of the cloud, and `gugu.pickAgent`, the person's pick of one of their agents.
 // 32: a person's `getContext().operator` carries their own `guguNumber`.
-export const EXTENSION_API_VERSION = 32;
+// 34: `contributes.prompts` (the App's prompts in the composer's `/` menu) and `gugu.prompts`, the person's own prompts (`prompts`).
+export const EXTENSION_API_VERSION = 34;
 
 /**
  * The page `app_check` runs is started with this argument (摩擦单 F5, F69): it says how often it wrote, set presence and
@@ -771,6 +772,13 @@ export const BRIDGE_VERBS = {
    * do what. A read is anyone's. A write is the person's press on a page, and on a page an agent works it is not done; a
    * program writes for the agent whose call it runs, the agent named by what gugu stamped on that call.
    */
+  /**
+   * `gugu.prompts` (34): the person's own prompts, the 「我的」 group of the composer's `/` menu (prompt-library.ts). An App's
+   * prompts are listed, never written; a delete is shown to the person at once with its undo.
+   */
+  promptsList: { needs: 'prompts' },
+  promptsSave: { needs: 'prompts' },
+  promptsDelete: { needs: 'prompts' },
   cloudRead: { needs: null },
   cloudWrite: { needs: null, gesture: true, only: 'page', toAgent: { answer: null } },
   cloudProgramWrite: { needs: null, only: 'program' },
