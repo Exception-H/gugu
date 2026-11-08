@@ -137,10 +137,11 @@ it.each(['light', 'dark'] as const)('renders the selection menu in the %s test t
   document.documentElement.style.backgroundColor = 'var(--bg)';
   document.documentElement.style.color = 'var(--text-primary)';
   try {
-    const { selection } = await openSelectedTextMenu();
+    const { selection, node } = await openSelectedTextMenu();
+    await act(async () => window.scrollTo(0, 0));
     const label = harness.container.appendChild(document.createElement('div'));
     label.textContent = `测试环境渲染，未经真机验证，原因：无真机\n${import.meta.env.VITE_SELECTION_SOURCE ?? 'regression test'}`;
-    label.style.cssText = 'position:fixed;inset:8px 8px auto;white-space:pre-wrap;overflow-wrap:anywhere;font-size:var(--font-caption);user-select:none';
+    label.style.cssText = 'position:fixed;inset:auto 8px 8px;white-space:pre-wrap;overflow-wrap:anywhere;font-size:var(--font-caption);user-select:none';
     const phase = import.meta.env.VITE_SELECTION_CAPTURE;
     if (phase) await page.screenshot({ path: `__screenshots__/selection-1751-${phase}-${theme}.png` });
     expect(selection.toString()).toBe('harbor');
