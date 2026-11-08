@@ -206,18 +206,34 @@ describe('approved A2A activity', () => {
     expect(t.head()!.getAttribute('data-live')).toBe('false');
     expect(t.button().getAttribute('aria-expanded')).toBe('false');
   });
-  it('shows the viewer group reply as one source-linked line without unfolding A2A or manufacturing a message', async () => {
+  it('shows the viewer group reply without its former sentence preview or an extra message', async () => {
     const base: ChatMessage = { ...ordinary('reply:sent:receipt'), text: 'I answered your question.',
       sentAddresses: { target: { kind: 'chat', conversationId: 'group', whisper: false, threadRootId: null },
         recipients: [`user:${me}`], confirmed: true, chatKind: 'group', replyTo: null } };
     const t = await mount(800, [turn('a', [delivery('incoming')]), turn('reply', [base])]);
-    const reply = t.host.querySelector<HTMLElement>('[data-group-reply]')!;
-    expect(reply.textContent).toContain('Replied to you in gugu');
+    const reply = t.host.querySelector<HTMLElement>('[data-sent-receipt]')!;
+    expect(reply.textContent).toBe('Replied to you in gugu ›');
+    expect(t.host.innerHTML).not.toContain('I answered your question.');
     expect(reply.getBoundingClientRect().height).toBe(32);
     expect(t.host.querySelector('[data-user-card="reply:sent:receipt"]')).toBeNull();
     reply.querySelector('button')!.click();
     expect(t.open).toHaveBeenCalledWith({ kind: 'chat', chatId: 'group', messageId: 'receipt' });
     expect(t.state.transcript.state.committedTurns[1].items).toHaveLength(1);
+  });
+  it('shows a human-directed send as a destination-only receipt with the original chat link', async () => {
+    const base: ChatMessage = { ...ordinary('sent:sent:receipt'), text: 'Private body. Second sentence.',
+      sentTo: { kind: 'chat', conversationId: 'group', whisper: false, threadRootId: null },
+      sentAddresses: { target: { kind: 'chat', conversationId: 'group', whisper: false, threadRootId: null },
+        recipients: ['user:other-person'], confirmed: true, chatKind: 'group', replyTo: null } };
+    const t = await mount(800, [turn('activity', [delivery('incoming')]), turn('send', [base])]);
+    const receipt = t.host.querySelector<HTMLElement>('[data-sent-receipt]')!;
+    expect(receipt.textContent).toContain('Sent to gugu');
+    expect(t.host.innerHTML).not.toContain('Private body');
+    expect(receipt.getBoundingClientRect().height).toBe(32);
+    expect(t.host.querySelector('[data-user-card]')).toBeNull();
+    receipt.querySelector('button')!.click();
+    expect(t.open).toHaveBeenCalledWith({ kind: 'chat', chatId: 'group', messageId: 'receipt' });
+    expect(t.state.transcript.state.committedTurns[1].items[0]).toMatchObject({ text: base.text });
   });
   it('keeps an opened group and source identity when older adjacent messages are prepended', async () => {
     const t = await mount(800, [turn('a', [delivery('incoming')]), turn('p', [ordinary('Panel answer')])]);

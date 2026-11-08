@@ -128,9 +128,9 @@ export type ChatMessage = {
   /**
    * View-only split of one agent-conversation reply (owner 0 号图): `head` draws the name and the
    * process line, each `body` only a bubble. The process steps go between them, so they never land
-   * under the bubble; every output of the turn (message_send ones too) is its own bubble.
+   * under the bubble. Human-directed chat sends use a source-linked `sent-receipt` row instead.
    */
-  conversationPart?: 'head' | 'body' | 'group-reply';
+  conversationPart?: 'head' | 'body' | 'sent-receipt';
   groupReply?: import('./state/agent-activity').ActivityActor;
   /** A `body`'s head row — background tasks still hang on that process line. */
   conversationHead?: string;
