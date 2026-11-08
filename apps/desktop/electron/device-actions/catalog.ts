@@ -66,6 +66,8 @@ export interface ActionDef {
   succeedsWithoutPermission?: true
   /** This action uses a different OS permission from its group's legacy actions; cache its status separately. */
   osPermissionScope?: 'action'
+  /** A single-picture result keeps data.width/height in sync with transport resizing; an omitted image is a failure. */
+  singlePictureResult?: true
   /**
    * 这台电脑做不了它时说为什么(缺咕咕没带的组件、缺用户该装的工具……);回 null = 做得了。
    * 做不了的照样登记(动作表在各平台保持完整),但标 unsupported、调不了 —— ❌ 登记一个一调就失败的动作冒充能用。

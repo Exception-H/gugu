@@ -114,4 +114,19 @@ describe('additive generic screen capture', () => {
     captureScreenNative.mockRejectedValue(new NativeCallError('execution_failed', 'No primary display source'))
     expect(await invoke()).toEqual({ ok: false, code: 'execution_failed', message: 'No primary display source' })
   })
+
+  it('reports the delivered image dimensions after the shared picture transport resizes it', async () => {
+    const { invoke, captureScreenNative, deps } = setup()
+    captureScreenNative.mockResolvedValue({ mimeType: 'image/jpeg', data: 'x'.repeat(700_001), width: 1568, height: 1014, displays: 2 })
+    deps.shrinkImage = vi.fn(async (_image, { maxEdge }) => ({ mimeType: 'image/jpeg',
+      data: maxEdge === 1568 ? 'x'.repeat(700_001) : 'resized-image', width: maxEdge, height: maxEdge === 1568 ? 1014 : 662 }))
+    expect(await invoke()).toMatchObject({ ok: true, data: { width: 1024, height: 662, displays: 2,
+      pictures: [{ data: 'resized-image' }] } })
+  })
+
+  it('fails explicitly when the picture cannot fit the existing transport limit', async () => {
+    const { invoke, captureScreenNative } = setup()
+    captureScreenNative.mockResolvedValue({ mimeType: 'image/jpeg', data: 'x'.repeat(700_001), width: 1568, height: 1014, displays: 2 })
+    expect(await invoke()).toMatchObject({ ok: false, code: 'execution_failed', message: expect.stringContaining('too large') })
+  })
 })

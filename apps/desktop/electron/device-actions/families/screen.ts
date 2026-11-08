@@ -13,6 +13,7 @@ export function createScreenCaptureFamily(): ActionFamily {
       risk: 'medium',
       confirm: 'never',
       osPermissionScope: 'action',
+      singlePictureResult: true,
       input_schema: { type: 'object', properties: {}, additionalProperties: false },
       unsupportedReason: deps => deps.captureScreenNative ? null : 'This build of 咕咕 cannot capture the screen with Electron',
       async run(_args, ctx) {

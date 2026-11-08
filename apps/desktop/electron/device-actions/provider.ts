@@ -153,25 +153,31 @@ export function createDeviceActionsProvider(input: {
 
   const familyContext = (signal: AbortSignal, note: (text: string) => void): FamilyContext => ({ deps, granted: grantedSet, signal, note })
 
-  const shrinkPictures = async (outcome: Outcome): Promise<Outcome> => {
+  const shrinkPictures = async (outcome: Outcome, singlePictureResult = false): Promise<Outcome> => {
     if (!outcome.ok || !outcome.data || typeof outcome.data !== 'object' || !Array.isArray((outcome.data as { pictures?: unknown }).pictures)) return outcome
     const data = outcome.data as { pictures: Array<{ label: string; mimeType: string; data: string }> } & Record<string, unknown>
     const pictures: typeof data.pictures = []
     const omitted: string[] = []
+    let deliveredSize: { width: number; height: number } | undefined
     for (const picture of data.pictures) {
       let current = picture
       for (const maxEdge of [1568, 1024]) {
         if (current.data.length <= PICTURE_MAX_BASE64 || !deps.shrinkImage) break
         const small = await deps.shrinkImage(picture, { maxEdge, quality: 72 })
         current = { label: picture.label, mimeType: small.mimeType, data: small.data }
+        if (singlePictureResult) deliveredSize = { width: small.width, height: small.height }
       }
       if (current.data.length <= PICTURE_MAX_BASE64) pictures.push(current)
       else omitted.push(picture.label)
+    }
+    if (singlePictureResult && pictures.length !== 1) {
+      return { ok: false, code: 'execution_failed', message: 'The picture is too large to return even after resizing' }
     }
     return {
       ok: true,
       data: {
         ...data,
+        ...(deliveredSize ?? {}),
         pictures,
         ...(omitted.length > 0 ? { pictures_omitted: `${omitted.join(', ')}: too large to send back even after shrinking` } : {}),
       },
@@ -239,7 +245,7 @@ export function createDeviceActionsProvider(input: {
       const def = byName.get(action)
       if (!def) return { ok: false, code: 'unknown_action', message: `This computer has no action ${action}` }
       try {
-        const outcome = await shrinkPictures(await def.run(args, { ...familyContext(ctx.signal, ctx.note), callId: ctx.callId, ...(ctx.caller ? { caller: ctx.caller } : {}), ...(ctx.remainingMs ? { remainingMs: ctx.remainingMs } : {}) }))
+        const outcome = await shrinkPictures(await def.run(args, { ...familyContext(ctx.signal, ctx.note), callId: ctx.callId, ...(ctx.caller ? { caller: ctx.caller } : {}), ...(ctx.remainingMs ? { remainingMs: ctx.remainingMs } : {}) }), def.singlePictureResult)
         return def.succeedsWithoutPermission && outcome.ok ? outcome : markOs(permissionKeys(def), outcome)
       } catch (error) {
         return markOs(permissionKeys(def), outcomeOfError(error, def.titleEn))
