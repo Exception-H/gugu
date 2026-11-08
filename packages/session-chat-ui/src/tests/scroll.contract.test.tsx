@@ -378,6 +378,23 @@ describe('transcript scroll behaviour across the P3 row redraw', () => {
     expect(m.state.scroll.get().kind).toBe('anchor');
   });
 
+  it('does not read the browser pulling scrollTop back to the end as the reader scrolling up', async () => {
+    const m = await mountTranscript(120);
+    m.view.scrollToBottom();
+    await settled(m.scrollEl);
+    expect(m.state.scroll.get().kind).toBe('tail');
+    const before = m.scrollEl.scrollTop;
+    // The position we left stops existing: the browser moves scrollTop before any frame of ours runs.
+    m.host.style.height = '700px';
+    expect(m.scrollEl.scrollTop).toBeLessThan(before - 200);
+    await settled(m.scrollEl);
+    expect(m.state.scroll.get().kind).toBe('tail');
+    // A step up from the end still leaves it.
+    m.scrollEl.scrollTop -= 1;
+    await settled(m.scrollEl);
+    expect(m.state.scroll.get().kind).toBe('anchor');
+  });
+
   // #6401:视口之上的行长高,读者看着的那一行**任意一帧**都不动(±1px)—— 包括手指还在拖(落定窗口开着)的时候。
   it('keeps the reader\'s row still on every frame while a row above grows mid-drag', async () => {
     const { scrollEl, view, state } = await mountTranscript(120, { turns: growingRowHistory() });

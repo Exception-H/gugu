@@ -1476,6 +1476,13 @@ export function ChatRoot(props: ChatRootProps) {
     // entire frame: computeVisible/computePin consume them without re-reading.
     shadowScrollTop = st;
     shadowViewHeight = viewHeight();
+    // @@@clamp-is-not-a-reader — the position we left is past the end: content got shorter, or the end rounds below it, and the
+    // browser put scrollTop at the end. Nobody scrolled. A reader's step up from a position that still exists is a step up.
+    if (st < expectedScrollTop) {
+      const end = el.scrollHeight - el.clientHeight;
+      // `end` is scrollHeight rounded to a whole CSS pixel, so a position within half a pixel of it may still exist.
+      if (expectedScrollTop > end + 0.5 && st >= end - 1) expectedScrollTop = st;
+    }
     const userDelta = st - expectedScrollTop;
     setScrollVelocity(userDelta);
 
