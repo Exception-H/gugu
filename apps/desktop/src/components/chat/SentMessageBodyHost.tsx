@@ -9,5 +9,5 @@ import { sentMessageSlots, subscribeSentMessageSlots } from './sentMessageSlots'
  */
 export function SentMessageBodyHost() {
   const current = useSyncExternalStore(subscribeSentMessageSlots, sentMessageSlots)
-  return current.map(slot => createPortal(<SentMessageBody message={slot.message} commands={slot.commands()} onSize={slot.onSize} />, slot.root, `sent:${slot.message.id}`))
+  return current.map(slot => createPortal(<SentMessageBody slot={slot.id} message={slot.message} commands={slot.commands()} onSize={slot.onSize} />, slot.root, slot.id))
 }

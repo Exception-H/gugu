@@ -22,7 +22,7 @@ import { WidgetBubble } from './WidgetBubble'
  * One kind of message has this one renderer; a new kind is added here, not in a host.
  */
 export function MessageBody({
-  message: msg, compact, isGroup, authorIsAgent, senderName, time, mention, memberProfiles, onOpenTopic, onOpenFile,
+  message: msg, compact, isGroup, authorIsAgent, senderName, time, mention, memberProfiles, onOpenTopic, onOpenFile, onOpenWorkspaceFile,
 }: {
   message: MessageItem
   /** Phone layout. */
@@ -37,6 +37,8 @@ export function MessageBody({
   memberProfiles?: Record<string, MemberProfileCardModel>
   onOpenTopic?: (messageId: string) => void
   onOpenFile?: (meta: ParsedAttachment, message?: MessageItem) => void
+  /** A link to a file in the sender's working folder. Default: open it through the sender; a task timeline opens it in that task. */
+  onOpenWorkspaceFile?: (link: Extract<ReturnType<typeof classifyFileLink>, { kind: 'workspace-file' }>) => void
 }) {
   const { t } = useTranslation('messaging')
   const card = msg.content_type === 'card' ? parseComposerCard(msg.content) : null
@@ -87,7 +89,7 @@ export function MessageBody({
     // #1515 段内 Shift+Enter 软换行渲成 <br> 仅对人类手打消息;agent/LLM 内容保持 CommonMark(软换行=空格)。
     // @@@2017 群内定向消息:渲染注入 nonce marker 后的正文(mention.content),并把本次 marker 传下 →
     // 只有被 to_user_ids 背书的 @Name 才渲成 mention;非群/whisper → content=undefined 用原始 raw、marker 空。
-    return <Markdown trust="chat" content={partial ? raw : mention?.content ?? raw} onAccent={msg.is_mine} hardBreaks={!authorIsAgent} mentionMarker={mention?.mentionMarker} onOpenLink={(href) => { const link = classifyFileLink(href); if (link.kind !== 'workspace-file' || !msg.sender_user_id) return false; openSenderFile(msg.sender_user_id, isGroup ? msg.chat_id : undefined, link); return true }} />
+    return <Markdown trust="chat" content={partial ? raw : mention?.content ?? raw} onAccent={msg.is_mine} hardBreaks={!authorIsAgent} mentionMarker={mention?.mentionMarker} onOpenLink={(href) => { const link = classifyFileLink(href); if (link.kind === 'workspace-file' && onOpenWorkspaceFile) { onOpenWorkspaceFile(link); return true } if (link.kind !== 'workspace-file' || !msg.sender_user_id) return false; openSenderFile(msg.sender_user_id, isGroup ? msg.chat_id : undefined, link); return true }} />
   })()}</div>
 }
 

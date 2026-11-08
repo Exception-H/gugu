@@ -10,7 +10,7 @@ import { parseWidgetMessage } from '@gugu/core/shared/ui/widgetModels';
 import { useCommands } from '@session-chat/components/contexts/CommandsContext';
 import type { MeasureCtx } from '@session-chat/core/define';
 import { layoutBlockStack } from '@session-chat/core/layout/block-stack';
-import { For, createEffect, createSignal, onCleanup } from 'solid-js';
+import { Index, createEffect, createMemo, createSignal, onCleanup, untrack } from 'solid-js';
 
 /** Between two sent messages in one bubble (a group of files). */
 export const SENT_BODY_GAP = 8;
@@ -43,22 +43,29 @@ export function sentBodiesLayout(messages: readonly MessageItem[], ctx: MeasureC
 }
 
 export function SentMessageBodies(props: { messages: readonly MessageItem[]; ctx: () => MeasureCtx | undefined; width: number }) {
-  return <div data-sent-message-bodies style={{ display: 'flex', 'flex-direction': 'column', gap: `${SENT_BODY_GAP}px` }}>
-    <For each={props.messages}>{message => <SentMessageSlot message={message} ctx={props.ctx} width={props.width} />}</For>
+  // A send is rebuilt from its call on every pass over the transcript, so the same message arrives as a new object:
+  // Index keeps each slot, and its host content with it, instead of remounting a widget per streaming frame.
+  return <div data-sent-message-bodies style={{ display: 'flex', 'flex-direction': 'column', gap: `${SENT_BODY_GAP}px`, overflow: 'hidden' }}>
+    <Index each={props.messages}>{message => <SentMessageSlot message={message()} ctx={props.ctx} width={props.width} />}</Index>
   </div>;
 }
 
 function SentMessageSlot(props: { message: MessageItem; ctx: () => MeasureCtx | undefined; width: number }) {
   const commands = useCommands();
   const [root, setRoot] = createSignal<HTMLDivElement>();
+  const mount = createMemo(() => commands().onMessageBodyMount);
+  // What a sent message says never changes: the slot is offered once per message id, and again only for another message.
+  const id = createMemo(() => props.message.id);
   createEffect(() => {
-    const element = root(), mount = commands().onMessageBodyMount, message = props.message;
-    if (!element || !mount) return;
-    const cleanup = mount({ root: element, message });
+    const element = root(), offer = mount(), messageId = id();
+    if (!element || !offer || !messageId) return;
+    const cleanup = untrack(() => offer({ root: element, message: props.message }));
     if (cleanup) onCleanup(cleanup);
   });
   const size = () => { const ctx = props.ctx(); return ctx ? sentBodySize(props.message, ctx, props.width) : { width: props.width, height: 0 }; };
-  // The slot is the reserved box; the host's content decides its own width inside it and reports both.
+  // The slot is the row's whole inner width whatever the bubble is painted at now: the host's content decides its own
+  // width inside it and reports both, so a narrow estimate cannot hold the content narrow. The stack clips the slot to
+  // the bubble: the content is never wider than what it reported, so only empty slot is cut, and no scrollbar appears.
   return <div ref={setRoot} data-sent-message-body={props.message.id} data-content-type={props.message.content_type}
-    style={{ height: `${size().height}px`, 'max-width': `${props.width}px`, 'min-width': 0, overflow: 'hidden' }} />;
+    style={{ height: `${size().height}px`, width: `${props.width}px`, 'min-width': 0, overflow: 'hidden' }} />;
 }

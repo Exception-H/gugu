@@ -12,7 +12,7 @@ import { ExtensionBundleCard } from '../extensionBundle/ExtensionBundleCard'; im
 import { openImageFromThumb, registerFullImage } from '../../lib/imageViewer'
 import { Button } from '../ui/Button'
 import { FileAttachmentCard } from './FileAttachmentCard'
-import { LoadImagesOnMount } from './loadImagesOnMount'
+import { SentMessageSurface } from './sentMessageSurface'
 import { ExpiredAttachmentCard } from './ExpiredAttachmentCard'
 import { Markdown } from '../markdown/Markdown'
 import './mediaAttachmentBubble.css'
@@ -65,7 +65,7 @@ function InlineImage({ meta, messageId, chatId, isMine }: { meta: ParsedAttachme
   const { t } = useTranslation('messaging')
   // Observed in either state: a sending row is drawn from its local preview without ever being pending.
   const box = useRef<HTMLElement>(null)
-  const onMount = useContext(LoadImagesOnMount)
+  const onMount = useContext(SentMessageSurface) !== null
   const near = useNearViewport(box, !onMount) || onMount
   const view = useAttachmentObjectUrl(meta.source, 'thumb', near, meta.fileMetadata)
   const img = useRef<HTMLImageElement>(null)

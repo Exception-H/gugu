@@ -9,15 +9,18 @@ export type SentMessageSlot = {
   onSize: (size: { width: number; height: number }) => void
 }
 
-let slots: readonly SentMessageSlot[] = []
+/** `id`: this slot, apart from any other drawing the same message (one task open in two views). */
+let slots: readonly (SentMessageSlot & { id: number })[] = []
+let nextSlot = 0
 const listeners = new Set<() => void>()
 const changed = () => { for (const listener of listeners) listener() }
 
 /** The timeline (in whichever React root it runs) hands its slot over; the returned function takes it back. */
 export function offerSentMessageSlot(slot: SentMessageSlot): () => void {
-  slots = [...slots, slot]
+  const id = ++nextSlot
+  slots = [...slots, { ...slot, id }]
   changed()
-  return () => { slots = slots.filter(entry => entry !== slot); changed() }
+  return () => { slots = slots.filter(entry => entry.id !== id); changed() }
 }
 
 export const subscribeSentMessageSlots = (listener: () => void) => { listeners.add(listener); return () => { listeners.delete(listener) } }
