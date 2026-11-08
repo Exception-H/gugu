@@ -218,7 +218,7 @@ describe('「App」 on the phone: an App’s settings page', () => {
     await marketAnswered(1)
     await open('notes')
     expect(page('[data-testid="app-manage-agents"]')?.querySelector('[data-testid="given"]') ?? null).toBeNull()
-    expect(page('[data-testid="app-manage-permissions"]')?.textContent).not.toContain('收回')
+    expect(page('[data-testid="app-manage-permissions"]')?.querySelector('button')).toBeNull()
     expect(page('[data-testid="app-manage-data"]')).toBeNull()
     expect(page('[data-testid="app-manage-pages"]')?.querySelector('[role="switch"]') ?? null).toBeNull()
   })

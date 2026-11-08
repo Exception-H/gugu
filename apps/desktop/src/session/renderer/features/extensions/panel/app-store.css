@@ -939,7 +939,7 @@ button.mk-name:focus-visible {
 .mk-about.is-clamped {
   max-height: 80px;
   overflow: hidden;
-  mask-image: linear-gradient(to bottom, #000 55%, transparent);
+  mask-image: linear-gradient(to bottom, var(--foreground) 55%, transparent);
 }
 /* 它给 agent 的那一行:原文照引,人看得到 agent 读的是哪句。 */
 .mk-instructions {

@@ -428,7 +428,7 @@ export function AppManagePage({
   const pageRef = useRef<HTMLDivElement>(null);
   const clicked = useRef(false);
   // The box that scrolls outlives this page: arriving from anywhere starts at the top, not where the last page was left.
-  useEffect(() => { scrollParent(pageRef.current)?.scrollTo(0, 0); }, []);
+  useEffect(() => { const scroller = scrollParent(pageRef.current); if (scroller) scroller.scrollTop = 0; }, []);
   useEffect(() => {
     const scroller = scrollParent(pageRef.current);
     if (!scroller) return;
@@ -521,7 +521,7 @@ export function AppManagePage({
 /** The nearest box that scrolls: the page is drawn inside different ones on desktop and phone. */
 function scrollParent(node: HTMLElement | null): HTMLElement | null {
   for (let at = node?.parentElement ?? null; at; at = at.parentElement) {
-    if (/(auto|scroll)/.test(getComputedStyle(at).overflowY)) return at;
+    if (/(auto|scroll)/.test(at.ownerDocument.defaultView!.getComputedStyle(at).overflowY)) return at;
   }
   return null;
 }
