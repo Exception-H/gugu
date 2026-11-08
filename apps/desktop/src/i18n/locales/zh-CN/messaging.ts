@@ -187,7 +187,7 @@ export default {
     },
     "appEnable": {
       "devices": "装到哪几台电脑",
-      "devicesHint": "新装上的电脑，所有 agent 都能用；要改给谁，去「App」页。",
+      "devicesHint": "每台新装的电脑上，所有 agent 默认都能用；之后可以在 App 设置里改。",
       "addsChat": "这台电脑上已经装了、只给了部分 agent：这次只加上群「{{name}}」，别的不变。",
       "decline": "不装",
       "machine": "这台电脑",
@@ -213,7 +213,6 @@ export default {
       "done": "完成",
       "noPlaces": "你还没有 agent，也不在任何群里",
       "noMatch": "没有找到",
-      "used": "谁能用：",
       "hereAll": "本机所有 agent",
       "hereAllOn": "「{{machine}}」上所有 agent",
       "more": "{{names}} 等 {{count}} 处",

@@ -91,6 +91,7 @@ export function AppProductPage({
   api = rpc.extensions,
   readOnly = false,
   justInstalled = false,
+  backLabel,
   onBack,
   onLifecycle,
   onInstallVersion,
@@ -119,6 +120,8 @@ export function AppProductPage({
   readOnly?: boolean;
   /** 刚在这一页装好:头下面一句「装好了」和去哪找它。 */
   justInstalled?: boolean;
+  /** Where back goes, when not the market: the App's settings page. */
+  backLabel?: string;
   onBack: () => void;
   onLifecycle: () => void;
   onInstallVersion: (ref: MarketSourceRef) => void;
@@ -542,7 +545,7 @@ export function AppProductPage({
       {/* 那台机器离线 / server 太旧(#6264):照旧能看(翻截图、看简介、点类似 App),装、卸、收回、装某一版一起灰。 */}
       <button type="button" className="mk-back" onClick={onBack} data-testid="app-product-back">
         <ChevronLeft className="size-3.5" />
-        {translate('extensions.title')}
+        {backLabel ?? translate('extensions.title')}
       </button>
       <ResourceMenu resource={resource ?? { kind: 'app', target: { kind: 'app-detail', extensionId: manifest.id } }}><header className="mk-dh">
         <div className="mk-dh-main">

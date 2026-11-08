@@ -159,7 +159,7 @@ describe('「App」 on the phone: a row is a name and how it stands', () => {
 })
 
 describe('「App」 on the phone: an App’s settings page', () => {
-  const toggleEnabled = async () => { await act(async () => { page('[data-testid="app-manage-switch"]')!.click() }) }
+  const toggleEnabled = async () => { await act(async () => { (page('[data-testid="app-manage-switch"]') ?? page('[data-testid="app-manage-action"]'))!.click() }) }
 
   it('its switch asks phoneApps, the row says it is off; off is not gone; turned on again, the same way back', async () => {
     await harness.render(createElement(Apps))

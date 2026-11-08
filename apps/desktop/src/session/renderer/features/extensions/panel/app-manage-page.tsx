@@ -226,6 +226,7 @@ export function AppManagePage({
   // ── 页面:能关的一页一行;打开文件的和消息卡片关不了,各并成一行,不重复 App 的名字 ──
   const pageTabs = manifest.contributes.tabs.filter((tab) => !tab.hostPage);
   const ownPages = pageTabs.filter((tab) => isOwnPage(manifest, tab));
+  const allHidden = ownPages.length > 0 && ownPages.every((tab) => hiddenTabs.includes(tab.name));
   const listJoin = locale.startsWith('zh') ? '、' : ', ';
   const fileTypes = [...new Set(pageTabs.flatMap((tab) => [...claimedSuffixes(tab, 'session'), ...claimedSuffixes(tab, 'chat')]))]
     .map((suffix) => (suffix === '*' ? translate('extensions.manageAnyFile') : suffix));
@@ -272,10 +273,10 @@ export function AppManagePage({
   ].filter((entry): entry is { label: string; href: string } => Boolean(entry));
 
   const sections: { id: string; label: string; note?: string; body: ReactNode }[] = [];
-  if (onToggleEnabled || onToggleDock) {
+  if ((onToggleEnabled && enabled) || onToggleDock) {
     sections.push({ id: 'general', label: translate('extensions.manageGeneral'), body: <>
-      {onToggleEnabled ? (
-        <Row title={translate('extensions.manageEnabled')} note={enabled ? undefined : translate('extensions.manageEnabledOffNote')} testId="app-manage-enabled">
+      {onToggleEnabled && enabled ? (
+        <Row title={translate('extensions.manageEnabled')} testId="app-manage-enabled">
           <Switch size="sm" checked={enabled} disabled={readOnly || switching} aria-label={translate('extensions.switchLabel', { name: text.name })} onCheckedChange={onToggleEnabled} data-testid="app-manage-switch" />
         </Row>
       ) : null}
@@ -335,7 +336,7 @@ export function AppManagePage({
       ) : null}
     </> });
   }
-  if (pageRows.length > 0) sections.push({ id: 'pages', label: translate('extensions.managePages'), note: onSetTabHidden ? translate('extensions.managePagesNote') : undefined, body: pageRows });
+  if (pageRows.length > 0) sections.push({ id: 'pages', label: translate('extensions.managePages'), note: !onSetTabHidden ? undefined : translate(allHidden ? 'extensions.managePagesAllHidden' : 'extensions.managePagesNote'), body: pageRows });
   if (givesAgentTools(manifest)) {
     sections.push({ id: 'agents', label: translate('extensions.manageAgents'), body: <fieldset disabled={readOnly} className="contents">
       {agentStatus?.lastFailure ? (
@@ -411,18 +412,22 @@ export function AppManagePage({
     <Row title={translate('extensions.manageTechnical')} note={[manifest.id, translate('extensions.manageApi', { version: String(manifest.apiVersion) }), manifest.license && `${translate('extensions.infoLicense')} ${manifest.license}`].filter(Boolean).join(' · ')} testId="app-manage-technical">
       {links.map((link) => <Button type="button" variant="outline" size="sm" key={link.href} onClick={() => onOpenExternal(link.href)}>{link.label}</Button>)}
     </Row>
-    {onUninstall ? (
+  </> });
+  if (onUninstall) {
+    sections.push({ id: 'uninstall', label: translate('extensions.uninstallAction'), body: (
       <Row title={translate('extensions.manageUninstall')} note={translate('extensions.manageUninstallNote')} testId="app-manage-uninstall">
         <Button type="button" variant="destructive" size="sm" disabled={readOnly || pending !== undefined} onClick={onUninstall} data-testid="app-manage-uninstall-action">{translate('extensions.uninstallAction')}</Button>
       </Row>
-    ) : null}
-  </> });
+    ) });
+  }
 
   // 左边那一列标出正看着哪一节:滚到顶上的最后一节;到底了是最后一节。点了哪节就是哪节(到底了那节顶不到上面),直到人自己再滚。
   const [current, setCurrent] = useState(sections[0]!.id);
   const anchors = sections.map((section) => section.id).join(' ');
   const pageRef = useRef<HTMLDivElement>(null);
   const clicked = useRef(false);
+  // The box that scrolls outlives this page: arriving from anywhere starts at the top, not where the last page was left.
+  useEffect(() => { scrollParent(pageRef.current)?.scrollTo(0, 0); }, []);
   useEffect(() => {
     const scroller = scrollParent(pageRef.current);
     if (!scroller) return;
@@ -457,7 +462,7 @@ export function AppManagePage({
             <span className="mk-icon is-56"><ExtensionMonogram name={text.name} iconDataUrl={iconDataUrl} /></span>
             <div className="mg-head-tx">
               <h2 title={text.name}>{text.name}</h2>
-              <p>{[`v${manifest.version}`, machine, enabled ? undefined : translate('extensions.switchedOff')].filter(Boolean).join(' · ')}</p>
+              <p>{[`v${manifest.version}`, machine, origin === 'preinstalled' ? translate('extensions.manageBuiltIn') : enabled ? undefined : translate('extensions.switchedOff')].filter(Boolean).join(' · ')}</p>
             </div>
             <fieldset disabled={readOnly} className="mg-head-acts">
               <AppLifecycleButton state={lifecycle} pending={pending} percent={pendingPercent} disabled={readOnly} translate={translate} onClick={onLifecycle} testId="app-manage-action" />
@@ -465,6 +470,7 @@ export function AppManagePage({
             </fieldset>
           </header>
         </ResourceMenu>
+        {!enabled && onToggleEnabled ? <div className="mk-banner" data-testid="app-manage-off">{translate('extensions.manageEnabledOffNote')}</div> : null}
         {notice ? (
           <fieldset disabled={readOnly && notice.kind !== 'forkBehind'} className="contents">
             <div className={cn('mk-banner', notice.kind !== 'forkBehind' && notice.kind !== 'update' && notice.kind !== 'gone' && 'is-warn')} data-testid="app-manage-notice">
@@ -480,6 +486,7 @@ export function AppManagePage({
         ) : null}
       </div>
       <nav className="mg-anchors" aria-label={translate('extensions.appSettings')}>
+        <span className="mg-anchors-name" title={text.name}>{text.name}</span>
         {sections.map((section) => (
           <button
             type="button"

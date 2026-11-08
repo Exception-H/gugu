@@ -117,7 +117,7 @@ function VersionHistoryRow({
     ? translate('extensions.installAction')
     : compareExtensionVersions(entry.version, installedVersion) > 0
       ? translate('extensions.updateAction')
-      : translate('extensions.useVersion', { version: entry.version });
+      : translate('extensions.historyUse');
 
   return (
     <li data-testid={`extension-history-${extensionId}-${entry.version}`}>

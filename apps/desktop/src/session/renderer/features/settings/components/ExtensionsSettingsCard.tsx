@@ -1237,6 +1237,7 @@ export const ExtensionsSettingsCard = observer(function ExtensionsSettingsCard({
             api={api}
             readOnly={!!notice?.readOnly}
             justInstalled={justInstalled === manifest.id && Boolean(installed)}
+            backLabel={detail.from ? translate('extensions.appSettings') : undefined}
             onBack={() => {
               setDetail(detail.from ?? null);
               setJustInstalled(null);
@@ -1287,6 +1288,7 @@ export const ExtensionsSettingsCard = observer(function ExtensionsSettingsCard({
           revoked={revoked[managed.id] ?? []}
           pendingPermissions={pendingPermissionsOf(managed.id)}
           agentStatus={agentStatus[managed.id]}
+          permissionsNote={builtIn ? translate('extensions.permissionsNoteBuiltIn') : undefined}
           disclosure={builtIn ? undefined : store.disclosure[managed.id]}
           givenApi={builtIn ? undefined : api}
           docked={store.dock.includes(managed.id)}

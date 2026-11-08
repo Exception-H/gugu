@@ -186,6 +186,8 @@
   .mg-anchors {
     display: none;
   }
+}
+@container (max-width: 520px) {
   .mg-head {
     flex-wrap: wrap;
   }
@@ -199,4 +201,79 @@
   .mg-head-acts > :first-child {
     flex: 1;
   }
+  .mg-top .xp-note {
+    flex-wrap: wrap;
+  }
+}
+/* 「谁能用」是一行:名目在左,给了谁和箭头在右,和这一页别的可展开行一样。 */
+.mg-row .xp-row-details {
+  margin: 0;
+}
+.mg-row .xp-row-details-toggle {
+  display: flex;
+  width: 100%;
+  min-height: 24px;
+  justify-content: space-between;
+  gap: 16px;
+  color: var(--foreground);
+  font-size: var(--font-body);
+  text-align: left;
+}
+.mg-row .xp-row-details-toggle > svg {
+  order: 2;
+  width: 16px;
+  height: 16px;
+}
+.mg-given-to {
+  display: flex;
+  flex: 1;
+  min-width: 0;
+  justify-content: flex-end;
+  color: var(--foreground-muted);
+}
+.mg-row .xp-row-details-body {
+  padding: 0;
+  background: none;
+}
+/* 新版那一条:话在左,更新在右,是一个按钮。 */
+.mg-top .xp-note {
+  align-items: center;
+  flex-wrap: nowrap;
+  justify-content: space-between;
+  gap: 16px;
+  width: 100%;
+}
+.mg-top .xp-note > .xp-link {
+  flex: none;
+  height: 28px;
+  padding: 0 12px;
+  border-radius: var(--radius-control);
+  background: var(--foreground);
+  color: var(--background);
+  text-decoration: none;
+}
+.mg .xp-history-action .xp-link {
+  height: 24px;
+  padding: 0 8px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-control);
+  text-decoration: none;
+}
+.mg-anchors-name {
+  overflow: hidden;
+  padding: 0 10px 8px;
+  font-weight: var(--font-weight-semibold);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+/* 作者声明的字段和这一页别的行一样分开。 */
+.mg .tool-app-fields {
+  gap: 14px;
+}
+.mg .tool-app-fields > * + *:not(.tool-app-saved) {
+  padding-top: 14px;
+  border-top: 1px solid color-mix(in oklab, var(--border) 60%, transparent);
+}
+.mg .tool-app-toggle {
+  align-items: center;
 }

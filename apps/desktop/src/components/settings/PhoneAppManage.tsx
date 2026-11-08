@@ -85,7 +85,7 @@ export const PhoneAppManage = observer(function PhoneAppManage({ extensionId, up
             api={phoneProductApi}
             readOnly={busy}
             backLabel={translate('extensions.tabInstalled')}
-            permissionsNote={translate('extensions.permissionsNotePhone')}
+            permissionsNote={translate(builtIn ? 'extensions.permissionsNoteBuiltIn' : 'extensions.permissionsNotePhone')}
             notice={notice}
             origin={builtIn ? 'preinstalled' : phoneApps.originOf(extensionId) ?? undefined}
             autoUpdate={autoUpdate === null ? undefined : { on: autoUpdate, onToggle: (on) => void run(translate('extensions.switchFailed'), () => phoneApps.setAutoUpdate(extensionId, on)) }}

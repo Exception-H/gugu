@@ -23,7 +23,7 @@ function matchesSearch(item: PromptListItem, search: string) {
   return haystack.includes(search.toLowerCase());
 }
 
-type RowAction = { icon: IconComponent; label: string; onClick: () => void };
+type RowAction = { icon: IconComponent; label: string; word?: string; onClick: () => void };
 
 function PromptRow({
   item,
@@ -60,7 +60,9 @@ function PromptRow({
         </div>
       </button>
       <div className={cn('flex shrink-0 items-center gap-1', !actionsShown && 'opacity-100 sm:opacity-0 sm:transition-opacity sm:group-focus-within:opacity-100 sm:group-hover:opacity-100')}>
-        {actions.map(({ icon: Icon, label, onClick }) => (
+        {actions.map(({ icon: Icon, label, word, onClick }) => actionsShown ? (
+          <Button key={label} variant="outline" size="sm" onClick={onClick} disabled={disabled} aria-label={label}>{word ?? label}</Button>
+        ) : (
           <Button key={label} variant="ghost" size="icon-xs" onClick={onClick} disabled={disabled} aria-label={label} title={label}>
             <Icon />
           </Button>
@@ -79,9 +81,9 @@ function AppPromptBody({ prompt, actions, disabled, actionsShown }: { prompt: Ap
   const { translate } = useSessionMessages();
   const offered = APP_PROMPT_ACTIONS[prompt.state];
   const all = {
-    edit: { icon: Pencil, label: translate('prompts.editLabel', { title: prompt.title }), onClick: () => actions.editAppPrompt(prompt) },
-    hide: { icon: EyeOff, label: translate('prompts.hide'), onClick: () => actions.hideAppPrompt(prompt) },
-    restore: { icon: RotateCcw, label: translate('prompts.restore'), onClick: () => actions.restoreAppPrompt(prompt) },
+    edit: { icon: Pencil, label: translate('prompts.editLabel', { title: prompt.title }), word: translate('extensions.manageEdit'), onClick: () => actions.editAppPrompt(prompt) },
+    hide: { icon: EyeOff, label: translate('prompts.hide'), word: translate('prompts.hide'), onClick: () => actions.hideAppPrompt(prompt) },
+    restore: { icon: RotateCcw, label: translate('prompts.restore'), word: translate('prompts.restore'), onClick: () => actions.restoreAppPrompt(prompt) },
   };
   return (
     <PromptRow item={prompt} disabled={disabled} tag={prompt.state === 'modified' ? translate('prompts.modified') : prompt.state === 'hidden' ? translate('prompts.hidden') : undefined}
