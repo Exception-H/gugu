@@ -1047,8 +1047,11 @@ async function publishAvailableCommandsInner(cwd, extraRoots) {
   sessionUpdate({ sessionUpdate: 'available_commands_update', availableCommands })
 }
 
-/** Bigger files still get their row, just without the picture inline. */
-const VIEWED_IMAGE_MAX_BYTES = 10 * 1024 * 1024
+/**
+ * Bigger files still get their row, just without the picture inline. The picture rides in the ACP stream as base64 and
+ * again on every history replay, so the cap is what a thumbnail and the viewer need, not what a file can be.
+ */
+const VIEWED_IMAGE_MAX_BYTES = 2 * 1024 * 1024
 
 /**
  * The picture codex looked at, as an ACP image block. Its `imageView` item names only the file (`file://` URL in

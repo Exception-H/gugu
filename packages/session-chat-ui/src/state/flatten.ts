@@ -71,7 +71,7 @@ import { localDayKey } from '@session-chat/lib/day-boundary';
 import type { ChatItem, ChatMessage, FileChangeSummaryItem, SyntheticItem, ToolRunItem, TranscriptItem, TranscriptTurn } from '@session-chat/model';
 import { fileChangeSummary, isListedInSummary, successfulFileDiff } from '@session-chat/state/file-change-summary';
 import { collectOpenedOutputs, openedFilePath, openedOutputKey, outputsOfRun } from '@session-chat/state/opened-outputs';
-import { tallyToolRun, toolRunCategory, toolRunLabel, toolRunNow } from '@session-chat/state/tool-run';
+import { hasToolPictures, tallyToolRun, toolRunCategory, toolRunLabel, toolRunNow } from '@session-chat/state/tool-run';
 import { completedTurnResult, itemIsUser, pendingTurnHeader, placeholderTurnHeader, planTurnFoldRuns, turnFoldView, turnProcessExpanded } from '@session-chat/state/turn-fold';
 import { isEmptyAgentTurn } from './turn-visibility';
 import { processHookNotice } from '@session-chat/lib/hook-notice';
@@ -347,10 +347,7 @@ export function flattenTier(
       const expanded = ctx.revealAllFolds || (ctx.isTurnProcessExpanded?.(runId) ?? false);
       // Folded, a step's pictures would be out of sight: the line carries the last ones (tool-images.ts — seen unopened).
       // Open, each step below draws its own.
-      const pictureStep = expanded ? undefined : op.rows.findLast((row) => {
-        const step = row as { toolCallId?: string; images?: unknown[]; imageRefs?: unknown[] };
-        return step.toolCallId !== undefined && !!(step.images?.length || step.imageRefs?.length);
-      }) as ToolRunItem['pictureStep'];
+      const pictureStep = expanded ? undefined : op.rows.findLast(hasToolPictures) as ToolRunItem['pictureStep'];
       processItem({
         kind: 'tool-run',
         id: runId,

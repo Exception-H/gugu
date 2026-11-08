@@ -30,6 +30,8 @@ import { flattenTier, toolRunId, type ItemNode } from '@session-chat/state/flatt
 import { toolRunUnitDef } from '@session-chat/components/rows/tool-run/tool-run.def'
 import { unit, type ItemSegmenter, type SegmentCtx, type SegmentItem } from '@session-chat/core/units'
 import { describe, expect, it } from 'vitest'
+import { DEFAULT_THEME } from '@session-chat/core/theme'
+import { ROW_INSET_X } from '@session-chat/components/engine/row-metrics'
 import { makeContractCtx, renderAndMeasureUnit, type ContractInspector } from './contract'
 
 type Step = Parameters<typeof conversationStepData>[0]
@@ -74,6 +76,7 @@ const readStrip: ContractInspector = (host) => {
   const more = host.querySelector('[data-slot="tool-call-images-more"]')?.textContent ?? ''
   return {
     stripH: strip?.offsetHeight ?? 0,
+    left: strip ? strip.getBoundingClientRect().left - host.getBoundingClientRect().left : -1,
     boxes: boxes.length,
     maxBoxW: Math.max(0, ...boxes.map((b) => b.getBoundingClientRect().width)),
     maxBoxH: Math.max(0, ...boxes.map((b) => b.getBoundingClientRect().height)),
@@ -235,6 +238,52 @@ describe('transport picture loading', () => {
   })
 })
 
+describe('transport picture loading: a reseed while the fetch is out', () => {
+  it('asks again when the answer comes back empty after a reseed, and not when nothing moved', async () => {
+    const host = document.createElement('div')
+    Object.assign(host.style, { position: 'fixed', top: '0px', left: '0', width: '180px' })
+    document.body.appendChild(host)
+    const requests: string[] = []
+    const answers: ((value: string | null) => void)[] = []
+    const commands: ChatCommands = {
+      resolveToolImage: (id, index) => {
+        requests.push(id + ':' + index)
+        return new Promise<string | null>(resolve => answers.push(resolve))
+      },
+    }
+    const [item, setItem] = createSignal(tool('reseeded', { imageCount: 1 }))
+    const dispose = render(() => (
+      <CommandsContext.Provider value={() => commands}>
+        <Tool item={item()} collapsible={false} expanded={false}
+          thumbs={toolThumbStrip(1, NARROW_WIDTH)} payload={null} codeLineH={20} />
+      </CommandsContext.Provider>
+    ), host)
+    const paint = () => new Promise<void>(resolve => requestAnimationFrame(() => requestAnimationFrame(() => resolve())))
+    const state = () => host.querySelector('button')?.getAttribute('data-image-state')
+    try {
+      await expect.poll(() => requests).toEqual(['reseeded:0'])
+      // The store reloads its history while this fetch is out: the same call comes back as a new object, and the
+      // fetch that was out answers empty (the store drops answers from before its reload).
+      setItem(tool('reseeded', { imageCount: 1 }))
+      answers[0](null)
+      await expect.poll(() => requests).toEqual(['reseeded:0', 'reseeded:0'])
+      answers[1](four[0])
+      await expect.poll(state).toBe('ready')
+      // A call whose picture really is gone is asked once.
+      setItem(tool('gone', { imageCount: 1 }))
+      await expect.poll(() => requests.length).toBe(3)
+      answers[2](null)
+      await paint()
+      await paint()
+      expect(requests.length).toBe(3)
+      expect(state()).toBe('unavailable')
+    } finally {
+      dispose()
+      host.remove()
+    }
+  })
+})
+
 // The task page draws every tool call as a conversation step, so a call's pictures have to be there too.
 describe('conversation step: the same strip under the step line', () => {
   const translate = ((key: string) => key) as unknown as ChatTranslator
@@ -307,6 +356,22 @@ describe('folded steps: the line carries the pictures', () => {
     expect(reading.inspected.boxes).toBe(boxes)
     expect(reading.inspected.more).toBe(more)
     expect(reading.spill).toBe(0)
+  })
+
+  // Rows sit in their chrome: the tool-run line and a classic tool row are inset by ROW_INSET_X, a conversation step is not.
+  it('opening the line moves the strip down only: same column as the opened row, in both layouts', async () => {
+    const data = run(read('a', inline) as unknown as ToolNode)
+    const conversation = { ...DEFAULT_THEME, layout: { ...DEFAULT_THEME.layout, agentConversation: true } }
+    const foldedConversation = await renderAndMeasureUnit(toolRunUnitDef, data, makeContractCtx({ width: WIDTH, theme: conversation }), readStrip)
+    const step = conversationStepData({ kind: 'read-tool-call', id: 'a', toolCallId: 'a', title: 'Read', path: '/work/a.png',
+      status: 'done', ...inline } as unknown as Step, translate)
+    const openedStep = await renderAndMeasureUnit(conversationStepUnitDef, step, makeContractCtx({ width: WIDTH, theme: conversation }), readStrip)
+    expect(foldedConversation.inspected.left + ROW_INSET_X).toBe(openedStep.inspected.left)
+
+    const foldedClassic = await renderAndMeasureUnit(toolRunUnitDef, data, makeContractCtx({ width: WIDTH }), readStrip)
+    const openedTool = await renderAndMeasureUnit(toolUnitDef, tool('a', { images: [four[0]] }), makeContractCtx({ width: WIDTH }), readStrip)
+    expect(foldedClassic.inspected.left + ROW_INSET_X).toBe(openedTool.inspected.left + ROW_INSET_X)
+    for (const reading of [foldedConversation, foldedClassic]) expect(reading.dom).toBe(reading.computed)
   })
 
   it('narrow: still one strip, as many boxes as the width holds', async () => {

@@ -8,6 +8,7 @@ import { assignInlineVars } from '@vanilla-extract/dynamic';
 import { createMemo } from 'solid-js';
 import { toolCallLabel, toolImageUrl } from '@gugu/session-core/acp/client';
 import type { ChatToolCall, ToolNode } from '@session-chat/model';
+import { hasToolPictures } from '@session-chat/state/tool-run';
 import { deriveToolInputSummary } from '../tool-input-summary';
 import { Tool } from './Tool';
 import { toolRoot, toolVars, type ToolStyleVars } from './tool.css';
@@ -24,7 +25,7 @@ import {
 
 /** A call's pictures as the strip reads them: inline ones as URLs, ones the history left behind as a count. */
 export function toolPictures(item: ToolNode): Pick<ChatToolCall, 'images' | 'imageCount'> {
-  const base = 'toolCallId' in item ? item : null;
+  const base = 'toolCallId' in item && hasToolPictures(item) ? item : null;
   return {
     ...(base?.images?.length ? { images: base.images.map(toolImageUrl) } : {}),
     ...(base?.imageRefs?.length ? { imageCount: base.imageRefs.length } : {}),

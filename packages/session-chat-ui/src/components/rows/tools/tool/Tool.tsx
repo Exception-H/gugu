@@ -218,15 +218,19 @@ export function ToolThumbs(props: { item: Pick<ChatToolCall, 'id' | 'images' | '
   // Like committed attachment thumbnails, a Solid resource owns the fetched bytes.
   // The product's shared viewport observer delays fetching retained/offscreen rows.
   // A reseeded transcript hands the same call back as a new object; fetching again then would race the store's history
-  // reload and lose pictures already shown, so only a different call, count or inline set fetches again.
-  const source = createMemo(() => visible() && { id: props.item.id, shown: props.strip.shown, images: props.item.images },
+  // reload and lose pictures already shown, so only a different call, shown count or inline set fetches again. A reseed
+  // that lands while a fetch is out can make that fetch come back empty: then it is asked again (a few times at most).
+  let reseeds = 0;
+  const source = createMemo(() => (reseeds++, visible() && { id: props.item.id, shown: props.strip.shown, images: props.item.images }),
     undefined, { equals: (a, b) => !!a && !!b && a.id === b.id && a.shown === b.shown && a.images?.length === b.images?.length });
-  const [resolved] = createResource(
-    source,
-    ({ id, shown, images }) => Promise.all(Array.from({ length: shown }, (_, index) =>
-      images?.[index] ?? commands().resolveToolImage?.(id, index) ?? null
-    )).then(urls => ({ id, urls })),
-  );
+  const [resolved] = createResource(source, async ({ id, shown, images }) => {
+    for (let attempt = 0; ; attempt++) {
+      const asked = reseeds;
+      const urls = await Promise.all(Array.from({ length: shown }, (_, index) =>
+        images?.[index] ?? commands().resolveToolImage?.(id, index) ?? null));
+      if (urls.every(Boolean) || reseeds === asked || attempt === 2) return { id, urls };
+    }
+  });
   const urlAt = (index: number) => props.item.images?.[index]
     ?? (resolved()?.id === props.item.id ? resolved()?.urls[index] ?? undefined : undefined);
   return (

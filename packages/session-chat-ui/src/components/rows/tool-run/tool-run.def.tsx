@@ -15,8 +15,8 @@ import { toolRunNowLabel } from '@session-chat/state/tool-run';
 import { readableLabel, rowTranslator } from '../readable-label';
 import { ToolThumbs } from '../tools/tool/Tool';
 import { toolPictures, toolThumbsFor } from '../tools/tool/tool.def';
+import { STEP_STRIP_INSET } from '../tools/tool/tool-images';
 import { turnProcessHeaderSlot, turnProcessLine, turnProcessRow } from '../turn-process/turn-process.css';
-import { STRIP_INSET } from '../conversation-step/conversation-step.def';
 
 function summaryLayout(data: ToolRunItem, ctx: import('@session-chat/core/define').MeasureCtx) {
   const now = data.now ? ` · ${toolRunNowLabel(data.now, rowTranslator(ctx))}` : '';
@@ -29,15 +29,21 @@ function summaryLayout(data: ToolRunItem, ctx: import('@session-chat/core/define
 /**
  * The only folded line that shows something of what it folds: a step's pictures are what it was for (tool-images.ts:
  * seen without opening the row), so folded, the line carries the strip of its last step that has any. It sits on the
- * column the opened step draws it on, so opening the line moves the pictures down, never sideways: the line is inset
- * by its row chrome, the step is not.
+ * column the opened row draws it on, so opening the line moves the pictures down, never sideways. The line is inset by
+ * its row chrome; a conversation step is not (its strip is on its label), a classic tool row is (its strip is flush).
  */
-const PICTURES_INSET = STRIP_INSET - ROW_INSET_X;
 function pictureStrip(data: ToolRunItem, ctx: import('@session-chat/core/define').MeasureCtx) {
   if (!data.pictureStep) return null;
+  const inset = ctx.theme.layout.agentConversation ? STEP_STRIP_INSET - ROW_INSET_X : 0;
   const pictures = toolPictures(data.pictureStep);
-  const strip = toolThumbsFor(pictures, ctx.width - PICTURES_INSET);
-  return strip && { strip, item: { id: data.pictureStep.id, ...pictures } };
+  const strip = toolThumbsFor(pictures, ctx.width - inset);
+  return strip && { strip, inset, item: { id: data.pictureStep.id, ...pictures } };
+}
+
+function rowLayout(data: ToolRunItem, ctx: import('@session-chat/core/define').MeasureCtx) {
+  const summary = summaryLayout(data, ctx);
+  const pictures = pictureStrip(data, ctx);
+  return { summary, pictures, height: summary.rowHeight + (pictures?.strip.stripH ?? 0) };
 }
 
 export const toolRunUnitDef = defineUnit<ToolRunItem, { extraH: number }>({
@@ -45,12 +51,13 @@ export const toolRunUnitDef = defineUnit<ToolRunItem, { extraH: number }>({
   margin: { top: 2, bottom: 2 },
   vars: { extraH: HEADER_ROW_EXTRA_H },
 
-  measure(data, ctx) { return summaryLayout(data, ctx).rowHeight + (pictureStrip(data, ctx)?.strip.stripH ?? 0); },
+  measure(data, ctx) { return rowLayout(data, ctx).height; },
 
   Render(props) {
-    const layout = () => summaryLayout(props.data, props.ctx.measureCtx!());
+    const row = () => rowLayout(props.data, props.ctx.measureCtx!());
+    const layout = () => row().summary;
     const height = () => layout().rowHeight;
-    const pictures = () => pictureStrip(props.data, props.ctx.measureCtx!());
+    const pictures = () => row().pictures;
     // ViewState keeps the inverted flag inherited from the original store:
     // `isCollapsed(id) === true` means expanded (see view-state.ts).
     const expanded = () => props.ctx.viewState.isCollapsed(props.data.id);
@@ -62,7 +69,7 @@ export const toolRunUnitDef = defineUnit<ToolRunItem, { extraH: number }>({
         data-live={props.data.live ? 'true' : 'false'}
         data-expanded={expanded() ? 'true' : 'false'}
         class={turnProcessRow}
-        style={{ height: `${height() + (pictures()?.strip.stripH ?? 0)}px` }}
+        style={{ height: `${row().height}px` }}
       >
         <div class={turnProcessLine} data-slot="tool-timeline-line">
           <div class={turnProcessHeaderSlot}>
@@ -78,7 +85,7 @@ export const toolRunUnitDef = defineUnit<ToolRunItem, { extraH: number }>({
             </CollapseHeader>
           </div>
         </div>
-        <Show when={pictures()}>{(value) => <div style={{ 'padding-left': `${PICTURES_INSET}px` }}><ToolThumbs item={value().item} strip={value().strip} /></div>}</Show>
+        <Show when={pictures()}>{(value) => <div style={{ 'padding-left': `${value().inset}px` }}><ToolThumbs item={value().item} strip={value().strip} /></div>}</Show>
       </div>
     );
   },

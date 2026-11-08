@@ -13,6 +13,7 @@ import { conversationTextOverflow, conversationTextWidth } from '../message/conv
 import { CollapseHeader } from '@session-chat/components/primitives/CollapseHeader';
 import { ToolThumbs } from '../tools/tool/Tool';
 import { toolPictures, toolThumbsFor } from '../tools/tool/tool.def';
+import { STEP_STRIP_INSET } from '../tools/tool/tool-images';
 
 type Step = Exclude<ToolNode, { kind: 'tool-group' }>;
 type ConversationStepData = Step & { actionLabel: string; stateLabel: string | null; pictures: ReturnType<typeof toolPictures> };
@@ -47,10 +48,8 @@ function canExpand(item: ConversationStepData, ctx: MeasureCtx): boolean {
     - (item.stateLabel ? 8 + conversationTextWidth(item.stateLabel, ctx, 12) : 0);
   return conversationTextOverflow(text, ctx, width, 12);
 }
-/** The strip sits on the label's column, like the disclosed text below it. */
-export const STRIP_INSET = 20;
 function pictureStrip(item: ConversationStepData, ctx: MeasureCtx) {
-  return toolThumbsFor(item.pictures, ctx.width - STRIP_INSET);
+  return toolThumbsFor(item.pictures, ctx.width - STEP_STRIP_INSET);
 }
 
 /** Prototype toolRow(): an action stays whole; only clipped details have a disclosure. */
@@ -77,7 +76,7 @@ export const conversationStepUnitDef = defineUnit<ConversationStepData, Record<s
         <CollapseHeader id={conversationTextKey(props.data.id)} anchorId={props.data.id} height={32} wrap labelSize={12} labelLineHeight={18}
           collapsible={expandable()} expanded={expanded()}>{props.data.actionLabel}</CollapseHeader>
       </Show>
-      <Show when={strip()}>{value => <div class={styles.pictures}><ToolThumbs item={{ id: props.data.id, ...props.data.pictures }} strip={value()} /></div>}</Show>
+      <Show when={strip()}>{value => <div style={{ 'padding-left': `${STEP_STRIP_INSET}px` }}><ToolThumbs item={{ id: props.data.id, ...props.data.pictures }} strip={value()} /></div>}</Show>
       <ConversationTextBody data={text()} ctx={props.ctx} canExpand={expandable()} />
     </div>;
   },
