@@ -1,3 +1,4 @@
+import { folderBytes } from '@main/core/extensions/extension-data';
 import { session, webContents, type Session } from 'electron';
 import { log } from '@main/lib/logger';
 import { extensionPartition } from '@shared/extensions/partition';
@@ -138,6 +139,25 @@ export async function clearExtensionSessionData(extensionId: string): Promise<vo
   // Left registered, it would keep serving the uninstalled bundle's directory
   // and CSP to whatever gets installed next.
   teardownExtensionProtocol(ses);
+  await ses.clearStorageData();
+  await ses.clearCache();
+}
+
+/** Chromium's disposable caches in a session's folder: not what an App saved. */
+const SESSION_CACHES: ReadonlySet<string> = new Set(['Cache', 'Code Cache', 'GPUCache', 'DawnGraphiteCache', 'DawnWebGPUCache', 'Shared Dictionary', 'Dictionaries', 'blob_storage']);
+
+/** What an App keeps in browser storage (localStorage, IndexedDB and the like), in bytes. */
+export async function extensionSessionBytes(extensionId: string): Promise<number> {
+  const folder = (configured.get(extensionId)?.session ?? session.fromPartition(extensionPartition(extensionId))).getStoragePath();
+  return folder ? folderBytes(folder, SESSION_CACHES) : 0;
+}
+
+/**
+ * Empties an App's browser storage, which stays installed: its protocol handler and partition stay, so a card already showing in a
+ * message keeps loading. Uninstalling is `clearExtensionSessionData`.
+ */
+export async function clearExtensionStorage(extensionId: string): Promise<void> {
+  const ses = configured.get(extensionId)?.session ?? session.fromPartition(extensionPartition(extensionId));
   await ses.clearStorageData();
   await ses.clearCache();
 }

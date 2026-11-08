@@ -62,10 +62,26 @@ export function listExtensionData(root: string, relative: string): { path: strin
   }));
 }
 
-/** How much the App keeps in its folder, in bytes; a folder it never made is none. */
-export function extensionDataBytes(root: string): number {
-  if (!fs.existsSync(root)) return 0;
-  return fs.readdirSync(root, { recursive: true, withFileTypes: true }).reduce((total, entry) => (entry.isFile() ? total + fs.statSync(path.join(entry.parentPath, entry.name)).size : total), 0);
+/**
+ * How many bytes a folder holds; a folder that is not there holds none. Awaited a file at a time: an App can keep many, and this
+ * runs in the main process. A file that goes while it is counted is not counted. `skip`: top-level entries left out.
+ */
+export async function folderBytes(root: string, skip: ReadonlySet<string> = new Set()): Promise<number> {
+  let entries: fs.Dirent[];
+  try {
+    entries = await fs.promises.readdir(root, { withFileTypes: true });
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === 'ENOENT') return 0;
+    throw error;
+  }
+  let total = 0;
+  for (const entry of entries) {
+    if (skip.has(entry.name)) continue;
+    const child = path.join(root, entry.name);
+    if (entry.isDirectory()) total += await folderBytes(child);
+    else if (entry.isFile()) total += await fs.promises.stat(child).then((stat) => stat.size, () => 0);
+  }
+  return total;
 }
 
 export function removeExtensionData(root: string): void {

@@ -5,6 +5,8 @@ import * as path from 'node:path';
 import { app } from 'electron';
 import {
   clearExtensionSessionData,
+  clearExtensionStorage,
+  extensionSessionBytes,
   configureExtensionSession,
   reloadExtensionSurfaces,
 } from '@main/core/extensions/extension-session';
@@ -28,7 +30,7 @@ import {
 } from '@main/core/extensions/extensions-root';
 import type { ExtensionDisclosure } from '@main/core/extensions/extensions-service';
 import type { AppVariants } from '@shared/extensions/variants';
-import { extensionDataBytes, removeExtensionData } from '@main/core/extensions/extension-data';
+import { folderBytes, removeExtensionData } from '@main/core/extensions/extension-data';
 import { readExtensionSkills } from '../../../../extension-session-mcp';
 import { placeFor, placeLink } from '@shared/extensions/file-openers';
 import { removeUninstalledLeftovers } from '@main/core/extensions/extension-session-snapshot';
@@ -872,11 +874,12 @@ export const extensionsController = createRPCController({
     }
   },
 
-  /** What an App keeps on this device, in bytes: its data folder. */
+  /** What an App keeps on this device, in bytes: its data folder and its browser storage. */
   appData: async (args: { extensionId: string }) => {
     try {
       extensionsService().get(args.extensionId);
-      return { success: true as const, data: { bytes: extensionDataBytes(extensionDataRoot(args.extensionId)) } };
+      const [folder, storage] = await Promise.all([folderBytes(extensionDataRoot(args.extensionId)), extensionSessionBytes(args.extensionId)]);
+      return { success: true as const, data: { bytes: folder + storage } };
     } catch (error) {
       return { success: false as const, error: error instanceof Error ? error.message : String(error) };
     }
@@ -888,11 +891,13 @@ export const extensionsController = createRPCController({
    */
   clearAppData: async (args: { extensionId: string }) => {
     try {
-      const installed = extensionsService().get(args.extensionId);
+      const service = extensionsService();
+      const installed = service.get(args.extensionId);
+      if (service.origins()[args.extensionId] === 'preinstalled') throw new Error(`"${args.extensionId}" comes with gugu; its data is not cleared from here`);
       quitExtension(installed.manifest.id);
       events.emit(extensionsQuitChangedChannel, { quit: quitExtensions() });
       await retireExtensionPrograms(args.extensionId);
-      await clearExtensionSessionData(args.extensionId);
+      await clearExtensionStorage(args.extensionId);
       removeExtensionData(extensionDataRoot(args.extensionId));
       return { success: true as const, data: { bytes: 0 } };
     } catch (error) {
