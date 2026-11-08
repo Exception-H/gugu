@@ -93,6 +93,7 @@ vi.mock('@renderer/lib/ipc', () => ({ rpcOn: vi.fn() }));
 vi.mock('@renderer/lib/stores/app-state', () => ({ appState: {} }));
 vi.mock('./assistant-machine', () => ({ openAssistantMachine: vi.fn() }));
 
+import { refreshCloudComputer } from '@/lib/cloudComputerStore';
 import { assistantResumeStore } from '@/lib/assistantSetup';
 import { buildMoveDeps } from './assistant-move-wire';
 import type { MoveSide } from './assistant-move';
@@ -156,6 +157,32 @@ describe('retrying an adoption that has not finished', () => {
     await expect(adoptHere()).rejects.toThrow('still starting');
     expect(server.cancels).toEqual(['other-op']);
     expect(openRow()).toMatchObject([{ device_id: 'local' }]);
+  });
+});
+
+describe('moving to the cloud while another order is open', () => {
+  const toCloud = () => buildMoveDeps(env, 'to-cloud', {} as MoveSide, { kind: 'computer', deviceId: 'local' }).adopt();
+  const open = (device: string, status: string) => {
+    server.rows.push({ id: 'open', operation_id: 'open-op', device_id: device, member_key: 'assistant', owner_user_id: 'owner', existing_agent_user_id: 'agent', phase: 'failed', create_command_id: 'old' });
+    server.commands.set('old', status);
+    server.provisionCloud.mockRejectedValue(new Error('stop after the order check'));
+    vi.mocked(refreshCloudComputer).mockResolvedValue({ state: 'awake', deviceId: 'cloud' } as never);
+  };
+  it('cancels an order aimed at a computer', async () => {
+    open('elsewhere', 'error');
+    await expect(toCloud()).rejects.toThrow('stop after the order check');
+    expect(server.cancels).toEqual(['open-op']);
+  });
+  it('stops without calling the manager while that order is still creating', async () => {
+    open('elsewhere', 'running');
+    await expect(toCloud()).rejects.toThrow('still creating');
+    expect(server.provisionCloud).not.toHaveBeenCalled();
+  });
+  it('leaves the manager\'s own order for the manager to retry', async () => {
+    open('cloud', 'error');
+    await expect(toCloud()).rejects.toThrow('stop after the order check');
+    expect(server.cancels).toEqual([]);
+    expect(server.provisionCloud).toHaveBeenCalled();
   });
 });
 

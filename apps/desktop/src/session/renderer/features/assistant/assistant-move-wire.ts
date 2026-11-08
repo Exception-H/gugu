@@ -303,7 +303,6 @@ export function pendingMove(ownerUserId: string, assistantId?: string): MoveJour
   return journal;
 }
 
-/** 这一次搬的旧家:接着搬以日志为准;新开一次搬 = 此刻它住的地方。 */
 /** A `ready` adoption already switched homes and only missed its last step, so it must not block the next move. Returns the order still open. */
 async function openAdoption(env: MoveEnv) {
   const open = await findOpenAdoption(env.assistantId);
@@ -313,6 +312,12 @@ async function openAdoption(env: MoveEnv) {
   return null;
 }
 
+async function cancelAdoption(env: MoveEnv, operationId: string): Promise<void> {
+  await cancelProvisionOperation(operationId);
+  assistantResumeStore.forget(env.ownerUserId, operationId);
+}
+
+/** 这一次搬的旧家:接着搬以日志为准;新开一次搬 = 此刻它住的地方。 */
 function sourceHomeFor(env: MoveEnv, direction: MoveDirection): MoveHomeRef {
   const saved = pendingMove(env.ownerUserId, env.assistantId);
   if (saved && saved.direction === direction && saved.source) return saved.source;
@@ -366,7 +371,9 @@ export function buildMoveDeps(
         return !!cloud && (await homeDeviceOf(env.assistantId)) === cloud;
       },
       async adopt() {
-        await openAdoption(env);
+        // An order aimed at the cloud home is the manager's own and it retries that order itself; any other would block this move.
+        const open = await openAdoption(env);
+        if (open && open.device_id !== (await refreshCloudComputer())?.deviceId) await cancelAdoption(env, open.operation_id);
         try {
           await provisionCloudComputer({ assistant: { existingAgentUserId: env.assistantId } });
         } catch (error) {
@@ -428,8 +435,7 @@ export function buildMoveDeps(
         : undefined;
       if (open && !record) {
         // Aimed at another home, or this client lost its record. The database refuses while that create is running.
-        await cancelProvisionOperation(open.operation_id);
-        assistantResumeStore.forget(env.ownerUserId, open.operation_id);
+        await cancelAdoption(env, open.operation_id);
       }
       const shared = { resumeStore: assistantResumeStore, commandTimeoutMs: ADOPT_TIMEOUT_MS };
       const result = record
