@@ -205,7 +205,7 @@ img.details-picture { object-fit: contain; }
 
 /* Folders and the existing move/upload dialogs. */
 /* The path, one line of its own under the toolbar: it stays put, and the end of a long one (where you are) is what shows. */
-.crumbs { display: flex; flex: none; align-items: center; gap: 2px; min-height: 28px; padding: 0 8px; overflow-x: auto; scrollbar-width: none; white-space: nowrap; border-bottom: 1px solid var(--em-border); color: var(--em-foreground-muted); font-size: var(--em-font-caption); }
+.crumbs { display: flex; flex: none; align-items: center; gap: 2px; min-height: 28px; padding: 0 var(--em-spacing-sm); overflow-x: auto; scrollbar-width: none; white-space: nowrap; border-bottom: 1px solid var(--em-border); color: var(--em-foreground-muted); font-size: var(--em-font-caption); }
 .crumbs[hidden] { display: none; }
 .crumbs > * { flex: none; }
 .crumb { max-width: 180px; min-height: 22px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; padding-inline: var(--em-spacing-xs); border: 0; background: none; color: inherit; font-size: inherit; }
@@ -216,12 +216,13 @@ img.details-picture { object-fit: contain; }
 .crumbs-note { margin-inline-start: auto; padding-inline-start: var(--em-spacing-md); }
 @container (max-width: 600px) { .crumbs-note { display: none; } }
 .back { display: inline-flex; align-items: center; gap: 2px; min-height: 22px; padding-inline: 2px var(--em-spacing-xs); border: 0; background: none; color: var(--em-foreground-muted); font-size: inherit; }
-.back:disabled { opacity: .5; cursor: default; }
+.back:disabled { color: var(--em-foreground-passive, var(--em-foreground-muted)); cursor: default; }
 .file[data-dotfile] .file-open { opacity: 0.6; }
 .file-link { color: var(--em-foreground-muted); }
 .file-title:has(.file-link) .file-name { flex: 0 1 auto; }
 .file[data-system] .file-mark { color: var(--em-accent-11); }
 .file.drop-target, .crumb.drop-target { background: var(--em-selected); }
+.file[data-git='added'] .file-name { color: var(--em-foreground-success); }
 .file[data-git='modified'] .file-name { color: var(--em-foreground-warning); }
 .file[data-git='deleted'] .file-name { color: var(--em-foreground-destructive); text-decoration: line-through; }
 .file[data-git='renamed'] .file-name { color: var(--em-foreground-muted); }
@@ -342,6 +343,8 @@ body[data-state='doc'] .doc-message, body.gone .modes { display: none; }
 
 /* A folder and a document each have one content toolbar below the host tab strip. */
 .files-toolbar { flex-wrap: nowrap; min-height: 36px; padding: 2px 8px; gap: 4px; border-bottom: 1px solid var(--em-border); }
+/* The path line closes the bar: one rule under the two of them, not two. */
+.files-toolbar:has(~ .crumbs:not([hidden])) { border-bottom: 0; }
 .place-switch[hidden] { display: none; }
 .place-switch { display: flex; flex: none; gap: 2px; padding: 2px; border-radius: var(--em-radius-control); background: var(--em-background-3); }
 .place-switch button { display: inline-flex; align-items: center; gap: 4px; border: 0; min-height: 26px; padding: 2px 6px; white-space: nowrap; color: var(--em-foreground-muted); background: none; font-size: var(--em-font-caption); }

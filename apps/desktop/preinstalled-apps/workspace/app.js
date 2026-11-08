@@ -898,7 +898,10 @@ function wholeThen(next = () => {}) {
  */
 function readChatFolder(folderId) {
   if (folderId === '' && state.listed.has('')) return
+  const chat = state.ctx?.chat?.id
   void readFolders([folderId], null).catch((error) => {
+    // Late, for a list no longer on screen: it has no say in the one that is.
+    if (inWorkspace() || state.ctx?.chat?.id !== chat) return
     state.listError = error.code === 'denied' ? state.t.denied : fmt(state.t.failed, { e: error.message })
     showList()
   })
@@ -922,7 +925,7 @@ async function listFolder(folder, again = false) {
   try {
     listed = await gugu.files.list({ workspace, folder })
   } catch (error) {
-    if (state.ctx?.workspace?.id !== workspace) return
+    if (!inWorkspace() || state.ctx?.workspace?.id !== workspace) return
     state.listError = error.code === 'denied' ? state.t.denied : failureText(error)
     return showList()
   }
@@ -931,7 +934,8 @@ async function listFolder(folder, again = false) {
   state.listed.add(folder)
   // Where a tree is watched one folder at a time, a folder is heard once it is named.
   if (folder && !state.folderWatches.has(folder)) state.folderWatches.set(folder, gugu.files.onChanged({ workspace, folder }, heardIn('workspace')))
-  state.listError = null
+  // Another folder's answer says nothing of an error about the one on screen.
+  if (folder === (state.folder ?? '')) state.listError = null
   state.entries = [...state.entries.filter((entry) => (entry.parentId ?? null) !== parent), ...listed]
   showList()
 }
@@ -1368,8 +1372,10 @@ function renderCrumbs() {
     nav.replaceChildren()
     return
   }
+  // A search looks through everything read, not this folder: the line says so by stopping at the top.
+  const searching = !!state.filter.trim()
   const trail = []
-  for (let at = state.entries.find((e) => e.id === state.folder); at; at = state.entries.find((e) => e.id === at.parentId)) trail.unshift(at)
+  for (let at = searching ? null : state.entries.find((e) => e.id === state.folder); at; at = state.entries.find((e) => e.id === at.parentId)) trail.unshift(at)
   const up = document.createElement('button')
   up.type = 'button'
   up.className = 'back'
@@ -1398,10 +1404,13 @@ function renderCrumbs() {
     parts.push(Object.assign(document.createElement('span'), { className: 'crumb-sep', textContent: '/' }))
     parts.push(crumb(shownName(folder), folder.id, i === trail.length - 1))
   })
-  if (inTaskHome() && state.entries.length) parts.push(Object.assign(document.createElement('span'), { className: 'crumbs-note', textContent: t.taskHomeNote }))
+  if (inTaskHome() && !state.folder && state.entries.length) parts.push(Object.assign(document.createElement('span'), { className: 'crumbs-note', textContent: t.taskHomeNote }))
   nav.replaceChildren(...parts)
   nav.hidden = false
-  nav.scrollLeft = nav.scrollWidth
+  // Only a new path scrolls to its end: a redraw leaves the person's own scrolling alone.
+  const path = trail.map((folder) => folder.id).join('/')
+  if (nav.dataset.path !== path) nav.scrollLeft = nav.scrollWidth
+  nav.dataset.path = path
 }
 
 // What the top of this root is called: a working copy by its path, or on another machine by that machine.

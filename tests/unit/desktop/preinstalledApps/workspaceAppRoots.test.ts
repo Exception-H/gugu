@@ -187,13 +187,16 @@ describe('a session\'s tab: one folder, two roots', () => {
   })
 
   test('the folder tasks without a project share says what it is', async () => {
-    const before = { ...TREE }
+    const top = TREE['']!
     TREE[''] = []
-    contextChanged!({ ...context, chat: { ...context.chat, id: 'home' }, workspace: { id: 'session:home', sessionId: 'home', projectId: '00000000-0000-4000-8000-000000000001', root: '/data/task-home' } })
-    switchRoot('workspace')
-    await until('its top read', () => crumbs()?.[0] === '/data/task-home' && !$('files-empty').hidden)
-    expect($('files-empty-detail').textContent).toContain('没选项目的任务都在这个文件夹工作')
-    Object.assign(TREE, before)
+    try {
+      contextChanged!({ ...context, chat: { ...context.chat, id: 'home' }, workspace: { id: 'session:home', sessionId: 'home', projectId: '00000000-0000-4000-8000-000000000001', root: '/data/task-home' } })
+      switchRoot('workspace')
+      await until('its top read', () => crumbs()?.[0] === '/data/task-home' && !$('files-empty').hidden)
+      expect($('files-empty-detail').textContent).toContain('没选项目的任务都在这个文件夹工作')
+    } finally {
+      TREE[''] = top
+    }
     switchRoot('chat')
     contextChanged!(context)
     await until('back', () => names().includes('plan.md') || names().includes('README.md'))
@@ -214,6 +217,34 @@ describe('a session\'s tab: one folder, two roots', () => {
     expect(names()).toContain('README.md')
     expect($('files-empty').hidden).toBe(true)
     switchRoot('chat')
+    await until('the chat again', () => names().includes('plan.md'))
+  })
+
+  test('and the other way: the computer\'s late failure says nothing on the chat\'s list', async () => {
+    const place = 'session:late-3'
+    const real = gugu.files.list.getMockImplementation()!
+    let fail: (e: Error) => void = () => {}
+    // An empty chat: what the list says of itself is on screen, so a word from the other root would show.
+    gugu.files.list.mockImplementation((asked: { chat?: string; workspace?: string; folder?: string }) =>
+      asked.workspace === place ? new Promise((_, reject) => { fail = reject })
+        : asked.chat === 'late-3' ? Promise.resolve([]) : real(asked))
+    try {
+      contextChanged!({ ...context, chat: { ...context.chat, id: 'late-3' }, workspace: { ...context.workspace, id: place } })
+      await until('the chat read', () => !$('files-empty').hidden && $('files-empty-progress').hidden === true)
+      switchRoot('workspace')
+      await until('its read asked', () => gugu.files.list.mock.calls.some(([asked]) => asked.workspace === place))
+      switchRoot('chat')
+      await until('back on the chat', () => $('files-empty-progress').hidden === true)
+      const said = $('files-empty-message').textContent
+      fail(new Error('fetch failed'))
+      await new Promise((resolve) => setTimeout(resolve, 0))
+      expect($('files-empty-message').textContent).toBe(said)
+    } finally {
+      gugu.files.list.mockImplementation(real)
+    }
+    contextChanged!(context)
+    switchRoot('chat')
+    await until('settled on the chat', () => names().includes('plan.md'))
   })
 
   test('phone computer files stay read-only, with no desktop navigation or draggable rows', async () => {
