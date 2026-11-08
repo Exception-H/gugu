@@ -1,8 +1,7 @@
 import { useLayoutEffect, useRef } from 'react';
 import type { ChatCommands } from '@gugu/session-chat-ui';
 import type { MessageItem } from '@gugu/core/shared/types/chat';
-import type { ParsedAttachment } from '@gugu/core/shared/ui/attachmentModels';
-import { sentAttachmentLink } from '@gugu/session-core/session-record/send-receipt';
+import { openSentFile } from './sent-message-open';
 import { MessageBody } from '@/components/chat/MessageBody';
 import { SentMessageSurface } from '@/components/chat/sentMessageSurface';
 
@@ -33,16 +32,8 @@ export function SentMessageBody({ message, commands, onSize }: {
   const sessionId = commands?.conversationAgentSession?.() ?? null;
   const shown: MessageItem = { ...message, sender_user_id: commands?.conversationAgentUserId?.() ?? null,
     ...(message.session_file ? { session_file: { ...message.session_file, session_id: sessionId } } : {}) };
-  // Open a file the way this timeline already opens it: a chat file by its link, a session file through the session.
-  const openFile = (meta: ParsedAttachment) => {
-    if (meta.source.kind === 'session-file') {
-      commands?.onViewAttachment?.({ attachment: { id: `path:${meta.source.path}`, name: meta.fileName, kind: meta.kind }, itemId: message.id, source: 'user-message' });
-      return;
-    }
-    commands?.onOpenLink?.(meta.source.kind === 'item' ? `gugu-file://${meta.source.itemId}?v=${meta.source.version}` : sentAttachmentLink(message.id, message.chat_id || undefined));
-  };
   return <div ref={box} data-sent-message-body-content={message.id} style={{ width: 'fit-content', maxWidth: '100%', minWidth: 0 }}>
     <SentMessageSurface.Provider value><MessageBody message={shown} compact={false} isGroup={false} senderName={commands?.conversationAgentName?.() ?? ''}
-      time={null} onOpenFile={openFile} onOpenWorkspaceFile={link => commands?.onOpenFile?.({ path: link.path, itemId: message.id, source: 'prose-link', ...(link.at ? { at: link.at } : {}) })} /></SentMessageSurface.Provider>
+      time={null} onOpenFile={meta => openSentFile(meta, message, commands)} onOpenWorkspaceFile={link => commands?.onOpenFile?.({ path: link.path, itemId: message.id, source: 'prose-link', ...(link.at ? { at: link.at } : {}) })} /></SentMessageSurface.Provider>
   </div>;
 }

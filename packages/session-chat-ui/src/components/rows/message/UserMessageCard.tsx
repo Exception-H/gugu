@@ -61,7 +61,7 @@ export function UserMessageCard(props: { data: ChatMessage; ctx: RenderCtx; vars
   createEffect(() => {
     const root = textRoot(), bubble = menuRoot(), mount = textMount(), itemId = textMessageId();
     if (!props.conversation || !root || !mount) return;
-    const cleanup = mount({ root, menuRoot: bubble, itemId, message: () => props.data, sender: () => props.sender?.() ?? null });
+    const cleanup = mount({ root, menuRoot: bubble, itemId, message: () => props.data, sender: () => props.sender?.() ?? null, commands });
     if (cleanup) onCleanup(cleanup);
   });
   const turn = useTurnState();

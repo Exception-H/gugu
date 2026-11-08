@@ -46,7 +46,7 @@ export type ChatCommands = {
   canDiscardSend?: (itemId: string) => boolean;
   onDiscardSend?: (itemId: string) => void;
   /** A recycled row supplies live getters; the host returns its DOM-listener cleanup. */
-  onMessageTextMount?: (target: { root: HTMLElement; menuRoot?: HTMLElement; itemId: string; message: () => ChatMessage; sender?: () => string | null }) => void | (() => void);
+  onMessageTextMount?: (target: { root: HTMLElement; menuRoot?: HTMLElement; itemId: string; message: () => ChatMessage; sender?: () => string | null; commands?: () => ChatCommands }) => void | (() => void);
   /**
    * A slot for one message the agent sent to people (`ChatMessage.sentMessages`): the host draws it with the chat's
    * MessageBody inside `root` and reports the drawn size with `ChatState.session.setBodySize(message.id, …)`.

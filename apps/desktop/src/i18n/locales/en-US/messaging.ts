@@ -775,6 +775,13 @@ export default {
       "react": "React",
       "reply": "Reply",
       "quoteSelection": "Quote selection",
+      "quoteToComposer": "Quote in reply",
+      "quoteSelectionToComposer": "Quote selection",
+      "copySelection": "Copy selection",
+      "copyFileName": "Copy file name",
+      "openFile": "Open",
+      "editMessage": "Edit and resend",
+      "forkTask": "Fork this task",
       "select": "Select"
     },
     "attachment": "[Attachment]",

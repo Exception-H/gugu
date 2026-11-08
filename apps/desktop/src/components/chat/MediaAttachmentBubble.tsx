@@ -42,9 +42,9 @@ export function MediaAttachmentBubble({ meta, messageId, isMine, onOpenFile, sen
     enabled: near && !!user && managedFile,
   }, attachmentQueryClient)
   const caption = meta.caption ? <Markdown trust="chat" content={meta.caption} onAccent={isMine} /> : null
-  if (metadata.data?.status === 'missing') return <div ref={box} className={FIT_BUBBLE}><FileAttachmentCard file={meta} isMine={isMine} details={t('attachmentView.fileMissing')} />{caption}</div>
-  if (metadata.data?.status === 'expired') return <div ref={box} className={FIT_BUBBLE}><ExpiredAttachmentCard meta={meta} messageId={messageId} isMine={isMine} />{caption}</div>
-  if (metadata.data?.status === 'gone' || metadata.isError) return <div ref={box} className={FIT_BUBBLE}><FileAttachmentCard file={meta} isMine={isMine}
+  if (metadata.data?.status === 'missing') return <div ref={box} className={FIT_BUBBLE} data-attachment-unavailable><FileAttachmentCard file={meta} isMine={isMine} details={t('attachmentView.fileMissing')} />{caption}</div>
+  if (metadata.data?.status === 'expired') return <div ref={box} className={FIT_BUBBLE} data-attachment-unavailable><ExpiredAttachmentCard meta={meta} messageId={messageId} isMine={isMine} />{caption}</div>
+  if (metadata.data?.status === 'gone' || metadata.isError) return <div ref={box} className={FIT_BUBBLE} data-attachment-unavailable><FileAttachmentCard file={meta} isMine={isMine}
     details={t(metadata.isError ? 'attachmentView.fileUnavailable' : 'attachmentView.fileGone')} />{caption}</div>
   const renderable = isRenderableImage(meta.fileName, meta.mimeType)
   // A sending row owns an ephemeral blob preview, not a committed download capability.
@@ -90,9 +90,9 @@ function InlineImage({ meta, messageId, chatId, isMine }: { meta: ParsedAttachme
     // eslint-disable-next-line react-hooks/exhaustive-deps -- sourceKey 就是 meta.source 的身份
   }, [ready, sourceKey, meta.fileName, meta.mimeType, chatId, messageId])
 
-  if (view.status === 'gone') return <FileAttachmentCard file={meta} isMine={isMine} details={t('attachmentView.fileGone')} onOpen={() => undefined} />
+  if (view.status === 'gone') return <span className="contents" data-attachment-unavailable><FileAttachmentCard file={meta} isMine={isMine} details={t('attachmentView.fileGone')} onOpen={() => undefined} /></span>
   if (view.status === 'missing') return <FileAttachmentCard file={meta} isMine={isMine} details={t('attachmentView.fileMissing')} />
-  if (view.status === 'expired') return <ExpiredAttachmentCard meta={meta} messageId={messageId} isMine={isMine} />
+  if (view.status === 'expired') return <span className="contents" data-attachment-unavailable><ExpiredAttachmentCard meta={meta} messageId={messageId} isMine={isMine} /></span>
   if (view.status === 'failed') {
     return (
       <FileAttachmentCard
