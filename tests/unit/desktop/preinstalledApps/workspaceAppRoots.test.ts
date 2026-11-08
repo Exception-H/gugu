@@ -190,7 +190,7 @@ describe('a session\'s tab: one folder, two roots', () => {
     const top = TREE['']!
     TREE[''] = []
     try {
-      contextChanged!({ ...context, chat: { ...context.chat, id: 'home' }, workspace: { id: 'session:home', sessionId: 'home', projectId: '00000000-0000-4000-8000-000000000001', root: '/data/task-home' } })
+      contextChanged!({ ...context, chat: { ...context.chat, id: 'home' }, workspace: { id: 'session:home', sessionId: 'home', taskHome: true, root: '/data/task-home' } })
       switchRoot('workspace')
       await until('its top read', () => crumbs()?.[0] === '/data/task-home' && !$('files-empty').hidden)
       expect($('files-empty-detail').textContent).toContain('没选项目的任务都在这个文件夹工作')
@@ -200,6 +200,59 @@ describe('a session\'s tab: one folder, two roots', () => {
     switchRoot('chat')
     contextChanged!(context)
     await until('back', () => names().includes('plan.md') || names().includes('README.md'))
+  })
+
+  describe('a project group: its folders are its computer files', () => {
+    const group = { id: 'proj', name: 'P', kind: 'group', groupId: 'proj', members: [] }
+    const here = { workspace: 'folder:dev-a/w1', path: '/home/me/app', machine: 'Laptop', online: true, thisMachine: true }
+    const away = { workspace: 'folder:dev-b/w2', path: '/srv/data', machine: 'Server', online: false, thisMachine: false }
+    const rows = () => [...$('file-list').querySelectorAll('.file')].map((row) => row.querySelector('.file-meta')?.textContent)
+
+    test('one folder: no extra level', async () => {
+      contextChanged!({ ...context, workspace: undefined, chat: { ...group, folders: [here] } })
+      await until('the switch drawn', () => !$('place-switch').hidden)
+      switchRoot('workspace')
+      await until('its top', () => names().includes('README.md'))
+      expect(listed().at(-1)).toEqual({ workspace: here.workspace, folder: '' })
+      expect(crumbs()).toEqual(['/home/me/app'])
+    })
+
+    test('several: pick one, read it, and come back to pick another; another machine is read-only and says when it is out', async () => {
+      contextChanged!({ ...context, workspace: undefined, chat: { ...group, id: 'proj2', folders: [here, away] } })
+      await until('the switch drawn', () => !$('place-switch').hidden)
+      switchRoot('workspace')
+      await until('the choice', () => rows().length === 2)
+      expect(rows()).toEqual(['/home/me/app', 'Server · 离线 · /srv/data'])
+      expect(crumbs()).toEqual(['电脑文件'])
+      press('app')
+      await until('its top', () => names().includes('README.md'))
+      expect(crumbs()).toEqual(['电脑文件', '/home/me/app'])
+      ;($('crumbs').querySelector('.back') as HTMLButtonElement).click()
+      await until('back to the choice', () => rows().length === 2)
+      gugu.files.list.mockImplementationOnce(() => Promise.reject(Object.assign(new Error('offline'), { code: 'unavailable' })))
+      press('data')
+      await until('it says so', () => $('files-empty-message').textContent === 'Server 现在离线，上线后才能看这个文件夹。')
+      expect(($('upload') as HTMLButtonElement).hidden).toBe(true)
+      expect(crumbs()).toEqual(['电脑文件', 'Server · /srv/data'])
+      ;($('crumbs').querySelector('.back') as HTMLButtonElement).click()
+      await until('back again', () => rows().length === 2)
+      contextChanged!(context)
+      switchRoot('chat')
+      await until('back to the chat', () => names().includes('plan.md'))
+    })
+
+    test('a folder no longer on its machine says so', async () => {
+      gugu.files.list.mockImplementationOnce(() => Promise.reject(Object.assign(new Error('gone'), { code: 'not-found' })))
+      contextChanged!({ ...context, workspace: undefined, chat: { ...group, id: 'proj3', folders: [here] } })
+      await until('the switch drawn', () => !$('place-switch').hidden)
+      const calls = listed().length
+      gugu.files.list.mockImplementationOnce(() => Promise.reject(Object.assign(new Error('gone'), { code: 'not-found' })))
+      switchRoot('workspace')
+      await until('it says so', () => listed().length > calls && $('files-empty-message').textContent === '这个文件夹在 Laptop 上找不到了。')
+      contextChanged!(context)
+      switchRoot('chat')
+      await until('back', () => names().includes('plan.md'))
+    })
   })
 
   test('a read of the other root still on its way has no say in the list now shown', async () => {

@@ -213,8 +213,12 @@ img.details-picture { object-fit: contain; }
 .crumb-root { max-width: min(60ch, 70%); direction: rtl; }
 .crumb[aria-current='page'] { color: var(--em-foreground); font-weight: 600; cursor: default; }
 .crumb-sep { opacity: .6; }
+/* Picking one of a project's folders: nothing here yet to search, order or add to. */
+.files.choosing-folder .files-toolbar > :not(.place-switch), .files.choosing-folder .files-toolbar > #search-toggle { display: none; }
+.file[data-offline] .file-open { opacity: .6; }
 .crumbs-note { margin-inline-start: auto; padding-inline-start: var(--em-spacing-md); }
-@container (max-width: 600px) { .crumbs-note { display: none; } }
+@container (max-width: 600px) { .crumbs-note:not(.crumbs-read-only) { display: none; } }
+.folder-path { min-width: 0; overflow: hidden; text-overflow: ellipsis; direction: rtl; }
 .back { display: inline-flex; align-items: center; gap: 2px; min-height: 22px; padding-inline: 2px var(--em-spacing-xs); border: 0; background: none; color: var(--em-foreground-muted); font-size: inherit; }
 .back:disabled { color: var(--em-foreground-passive, var(--em-foreground-muted)); cursor: default; }
 .file[data-dotfile] .file-open { opacity: 0.6; }

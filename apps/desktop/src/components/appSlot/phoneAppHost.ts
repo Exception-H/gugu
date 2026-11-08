@@ -31,6 +31,7 @@ import {
   fileSearchOf,
   isWorkspace,
   sessionWorkspace,
+  workspaceFolder,
   workspaceSession,
   workspaceAppFileChunk,
   placeOf,
@@ -68,6 +69,7 @@ import { cachedPhoneAgents, phoneDispatch } from './phoneDispatch'
 import { onPhoneAppState, phoneAppState } from './phoneAppState'
 import { subscribeDeviceSessions } from '../../session/shared/remote-sessions/session-directory'
 import { callOnComputer } from './phoneProgramCall'
+import { isImplicitSessionHomeProjectId } from '../../session/shared/core/projects/session-home-project'
 import { openPhoneWorkingCopyFile, type ReadWorkingCopyChunk } from './phone-working-copy-file'
 import { appDeviceId, followsSessionMachine, notOnSessionMachine } from '../../session/shared/extensions/machine-call'
 import { HOSTED_PROGRAM_ELSEWHERE } from '../../session/shared/extensions/program-place'
@@ -497,7 +499,7 @@ export function hostAppFrame(
             sessionId: hosted.binding.session.id,
             deviceId: hosted.binding.session.deviceId,
             ...(hosted.binding.session.deviceLabel ? { deviceLabel: hosted.binding.session.deviceLabel } : {}),
-            ...(hosted.binding.session.projectId ? { projectId: hosted.binding.session.projectId } : {}),
+            ...(hosted.binding.session.projectId ? { projectId: hosted.binding.session.projectId, ...(isImplicitSessionHomeProjectId(hosted.binding.session.projectId) ? { taskHome: true as const } : {}) } : {}),
           },
         }
       : {}),
@@ -530,6 +532,13 @@ export function hostAppFrame(
       if (session && followsSessionMachine(manifest, method, args)) {
         return callOnComputer({ extensionId: manifest.id, extensionName: manifest.name, version: manifest.version }, session, method, args).then(computerReply)
       }
+    }
+    // A project's folder names its own machine, wherever this page is.
+    const folder = verbFacts(method)?.machine === 'place' ? workspaceFolder((args.place ?? args.ref) as { workspace?: string } | null) : null
+    if (folder) {
+      const manifest = installedExtensionsStore.manifestFor(hosted.binding.extensionId)
+      if (!manifest) refused('not-installed', `${hosted.binding.extensionId} is not installed on this phone`)
+      return callOnComputer({ extensionId: manifest.id, extensionName: manifest.name, version: manifest.version }, { deviceId: folder.deviceId, deviceLabel: null }, method, args).then(computerReply)
     }
     switch (method) {
       case 'linkTo': {

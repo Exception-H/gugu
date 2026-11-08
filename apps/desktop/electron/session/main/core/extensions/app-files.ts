@@ -26,7 +26,7 @@ import {
   fileSearchOf,
   folderOf,
   isWorkspace,
-  workspaceSession,
+  workspaceFolder, workspaceSession,
   workspaceTarget,
   placeKey,
   placeOf,
@@ -264,6 +264,13 @@ function chatSurface(page: DesktopFilePage): FileSurface {
  */
 export async function localRootOf(place: WorkspacePlace): Promise<{ workspaceRoot: string; projectId: string; workspaceId: string | null }> {
   const target = workspaceTarget(place);
+  if ('folder' in target) {
+    const { projectFolderOfWorkspace } = await import('@main/core/projects/operations/project-folders');
+    const folder = await projectFolderOfWorkspace(target.folder.workspaceId);
+    if (!folder) throw new AppFileError('not-found', 'This folder is no longer in a project on this computer');
+    const workspaceRoot = await fs.realpath(folder.path).catch(() => { throw new AppFileError('not-found', `${folder.path} is no longer on this computer`); });
+    return { workspaceRoot, projectId: folder.projectId, workspaceId: folder.workspaceId };
+  }
   if ('project' in target) {
     const { projectRootFolder } = await import('@main/core/projects/operations/project-folders');
     const root = await projectRootFolder(target.project);
@@ -580,10 +587,20 @@ async function sessionElsewhere(place: WorkspacePlace): Promise<{ sessionId: str
  * same `machineVerbs` that machine's own pages reach. `{ there: false }` for a working copy on this computer.
  */
 async function onItsMachine(page: DesktopFilePage, place: WorkspacePlace, method: PlaceVerb, args: Record<string, unknown>) {
+  const { callOnSessionMachine } = await import('./app-programs-elsewhere');
+  const folder = workspaceFolder(place);
+  if (folder) {
+    const { otherMachines } = await import('@main/core/sessions/session-family');
+    if (await otherMachines().isThisDevice(folder.deviceId)) return { there: false } as const;
+    if (!extensionsService().hasCapability(page.extensionId, 'files:read:all-machines')) {
+      throw new AppFileError('denied', 'Not permitted: a folder on another of your computers needs "files:read:all-machines"');
+    }
+    const manifest = extensionsService().get(page.extensionId).manifest;
+    return callOnSessionMachine({ extensionId: page.extensionId, manifest }, { deviceId: folder.deviceId }, method, args, page.asAgent != null);
+  }
   const session = workspaceSession(place);
   if (!session) return { there: false } as const;
   if (!(await elsewhereGated(page, place))) return { there: false } as const;
-  const { callOnSessionMachine } = await import('./app-programs-elsewhere');
   const manifest = extensionsService().get(page.extensionId).manifest;
   return callOnSessionMachine({ extensionId: page.extensionId, manifest }, session, method, args, page.asAgent != null, handedOf(page) ?? undefined);
 }
