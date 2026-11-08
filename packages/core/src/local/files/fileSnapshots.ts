@@ -10,6 +10,7 @@ import { attachmentDownloadName } from '../../shared/attachmentDownloadName.mjs'
 import { cloudFileProviders } from '../../cloud/fileProviders'
 import { createFileResolver, openFileBytes, type FileProviders, type FileContext, type FileHandle, type SavedFile } from '../../shared/fileResolver'
 import type { AttachmentsEndpoint } from '../../cloud/attachmentsApi'
+import { coreLogger } from '../../log'
 const cleanupRemoteFileDirectory = async (directory: string) => rm(await requireAgentFileTreeAccess(directory), { recursive: true, force: true })
 
 /** Raw resumable chunks share the existing private open-file cache and its stale-directory cleanup. */
@@ -45,6 +46,7 @@ export function createFileChunkCache(tempRoot: string): FileChunkCache {
  */
 export const fileStoreDirectory = (guguHome: string) => join(guguHome, 'file-store')
 const STORED_FILE_MODE = 0o444
+const storeLog = coreLogger('file-store')
 
 /** A private bounded staging file. Only a committed, read-only snapshot can leave this sink. */
 export async function createFileSink(tempRoot: string, size: number, destination?: string): Promise<FileSink & { blob(): Promise<Blob>; path(): string }> {
@@ -129,15 +131,20 @@ export function createFileSaver(providers: FileProviders): NonNullable<FileProvi
     }
     if (await holds(path)) return saved
     if (store && revision.sha256) {
-      // It no longer holds this sha (someone cleared the flag and edited it). Read-only can stop a rename on Windows.
-      await rm(path, { force: true })
+      // Under this sha, every name that no longer holds it (someone cleared the flag and edited it; hard-linked names change
+      // together) is moved aside, not deleted: it may be an agent's work. One that still holds it gives this name its bytes.
+      let good: string | null = null
       for (const name of await readdir(target).catch(error => { if (error.code === 'ENOENT') return [] as string[]; throw error })) {
         const same = join(target, name)
-        if (name.endsWith('.part') || !await holds(same)) continue
-        // A filesystem without hard links (exFAT, some network drives) stores this name as its own copy, below.
-        if (await link(await requireAgentFileAccess(same), path).then(() => true, error => error.code === 'EEXIST')) return saved
-        break
+        if (name.endsWith('.part')) continue
+        if (await holds(same)) { good ??= same; continue }
+        const aside = join(directory, '.changed', randomUUID())
+        await mkdir(aside, { recursive: true, mode: 0o700 })
+        await rename(same, join(aside, name)).catch(error => { if (error.code !== 'ENOENT') throw error })
+        storeLog.warn({ sha256: revision.sha256, name, aside }, 'stored file no longer holds its sha: moved aside')
       }
+      // A filesystem without hard links (exFAT, some network drives) stores this name as its own copy, below.
+      if (good && await link(await requireAgentFileAccess(good), path).then(() => true, error => error.code === 'EEXIST')) return saved
     }
     await mkdir(target, { recursive: true, mode: 0o700 })
     // The store commits by a link from a private name: two agents saving one new file both succeed, where a rename onto the
@@ -154,6 +161,9 @@ export function createFileSaver(providers: FileProviders): NonNullable<FileProvi
         if (done === false) { await rm(path, { force: true }); done = await placed() }
         if (done === null) await rename(written, path).catch(async error => { if (!await holds(path)) throw error })
         else if (!done) throw new Error('The stored file changed while it was saved')
+        // Windows clears the read-only flag on the file to delete a name of it, and the published name shares that file.
+        await rm(written, { force: true })
+        await chmod(path, STORED_FILE_MODE)
       }
       if (!revision.sha256) {
         const hash = createHash('sha256')
