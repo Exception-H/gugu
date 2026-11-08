@@ -420,7 +420,9 @@ export function ChatRoot(props: ChatRootProps) {
   const [viewHeight, setViewHeight] = createSignal(600);
   const [containerWidth, setContainerWidth] = createSignal(0);
 
-  const updateContentColumnGeometry = () => syncContentColumnGeometry(widthProbeEl, scrollEl, outerEl, setContainerWidth);
+  // Only the activity pin's backdrop reads this. A custom property on the root would restyle every row on each width change.
+  const [pinFrame, setPinFrame] = createSignal({ left: 0, width: 0 }, { equals: (a, b) => a.left === b.left && a.width === b.width });
+  const updateContentColumnGeometry = () => syncContentColumnGeometry(widthProbeEl, scrollEl, setContainerWidth, setPinFrame);
 
   const updateSlotPadBottom = () => {
     if (props.composer !== 'slot' || effectiveComposerPlacement() === 'center') {
@@ -2308,7 +2310,7 @@ export function ChatRoot(props: ChatRootProps) {
                                 style={isActivityPin() ? { top: `${userTopGap + activityPinOffset(unitIndex) - (u()?.gapBefore ?? 0)}px` } : { 'pointer-events': 'auto' }}
                               >
                               <Show when={isActivityPin()}><div class={`${pinBackdrop} ${activityPinBackdrop}`}
-                                style={{ top: `${-userTopGap}px` }}
+                                style={{ top: `${-userTopGap}px`, left: `${pinFrame().left}px`, width: `${pinFrame().width}px` }}
                                 data-chat-pin-backdrop="" aria-hidden="true" /></Show>
                               <UnitRow
                                 unit={u()!}
