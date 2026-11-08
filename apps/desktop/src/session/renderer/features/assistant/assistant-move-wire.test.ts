@@ -4,7 +4,7 @@ vi.mock('@/platform/desktopIpc', () => ({ desktopIpc: () => ({ invoke: mocks.inv
 vi.mock('@/lib/contacts', () => ({ contactsService: { setAgentDesiredStatus: mocks.setStatus } }));
 vi.mock('@/lib/identityReadAdapter', () => ({ readDisplayIdentities: mocks.identities }));
 vi.mock('@/lib/assistantSetup', () => ({ assistantResumeStore: {} }));
-vi.mock('@/lib/agentProvision', () => ({ completedSingleProvisionSession: vi.fn(), provisionSingleAgent: vi.fn() }));
+vi.mock('@/lib/agentProvision', () => ({ completedSingleProvisionSession: vi.fn(), provisionSingleAgent: vi.fn(), resumeSingleAgent: vi.fn(), findOpenAdoption: vi.fn(), completeProvision: vi.fn(), cancelProvisionOperation: vi.fn() }));
 vi.mock('@/lib/agentModelSelection', () => ({ readAgentModelSelection: vi.fn(), setAgentModelSelection: vi.fn(), platformProtocolForAgentType: vi.fn() }));
 vi.mock('@/lib/cloudComputerStore', () => ({ getCloudComputerState: vi.fn(), provisionCloudComputer: vi.fn(), refreshCloudComputer: vi.fn(), wakeCloudComputer: vi.fn() }));
 vi.mock('@/lib/myAssistant', () => ({ reloadMyAssistant: vi.fn() }));
