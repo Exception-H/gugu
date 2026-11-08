@@ -162,12 +162,12 @@ export function toolPayloadFor(
 }
 
 /** The picture strip under the header (tool-images.ts): there whenever the call handed pictures back, open or closed. */
-export function toolThumbsFor(item: Pick<ChatToolCall, 'images' | 'imageCount'>, ctx: MeasureCtx): ToolThumbStrip | null {
-  return toolThumbStrip(item.imageCount ?? item.images?.length ?? 0, ctx.width);
+export function toolThumbsFor(item: Pick<ChatToolCall, 'images' | 'imageCount'>, width: number): ToolThumbStrip | null {
+  return toolThumbStrip(item.imageCount ?? item.images?.length ?? 0, width);
 }
 
 function toolUnitH(item: ChatToolCall, ctx: MeasureCtx, vars: ToolVars): number {
-  return vars.rowH + (toolThumbsFor(item, ctx)?.stripH ?? 0) + (toolPayloadFor(item, ctx, vars)?.panelH ?? 0);
+  return vars.rowH + (toolThumbsFor(item, ctx.width)?.stripH ?? 0) + (toolPayloadFor(item, ctx, vars)?.panelH ?? 0);
 }
 
 function ToolUnitRender(props: { data: ChatToolCall; ctx: RenderCtx; vars: ToolVars }) {
@@ -186,7 +186,7 @@ function ToolUnitRender(props: { data: ChatToolCall; ctx: RenderCtx; vars: ToolV
   // `toolRoot { overflow: hidden }` exists to survive.
   const thumbs = createMemo<ToolThumbStrip | null>(() => {
     const ctx = mCtx();
-    return ctx ? toolThumbsFor(props.data, ctx) : null;
+    return ctx ? toolThumbsFor(props.data, ctx.width) : null;
   });
   const totalH = () => props.vars.rowH + (thumbs()?.stripH ?? 0) + (payload()?.panelH ?? 0);
   const codeLineH = () => mCtx()?.theme.fonts.code.lineHeight ?? 0;
@@ -236,7 +236,7 @@ export const toolUnitDef = defineUnit<ChatToolCall, ToolVars>({
       (sum, [text, cap]) => (text ? sum + Math.min(text.split('\n').length, cap) : sum),
       0
     );
-    return vars.rowH + (toolThumbsFor(item, ctx)?.stripH ?? 0) + sourceLines * ctx.theme.fonts.code.lineHeight;
+    return vars.rowH + (toolThumbsFor(item, ctx.width)?.stripH ?? 0) + sourceLines * ctx.theme.fonts.code.lineHeight;
   },
 
   measure(item, ctx, vars): number {

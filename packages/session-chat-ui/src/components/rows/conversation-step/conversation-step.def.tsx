@@ -12,8 +12,7 @@ import { ConversationTextBody, conversationNarrationHeight, conversationTextKey 
 import { conversationTextOverflow, conversationTextWidth } from '../message/conversation-text-overflow';
 import { CollapseHeader } from '@session-chat/components/primitives/CollapseHeader';
 import { ToolThumbs } from '../tools/tool/Tool';
-import { toolThumbStrip } from '../tools/tool/tool-images';
-import { toolPictures } from '../tools/tool/tool.def';
+import { toolPictures, toolThumbsFor } from '../tools/tool/tool.def';
 
 type Step = Exclude<ToolNode, { kind: 'tool-group' }>;
 type ConversationStepData = Step & { actionLabel: string; stateLabel: string | null; pictures: ReturnType<typeof toolPictures> };
@@ -51,7 +50,7 @@ function canExpand(item: ConversationStepData, ctx: MeasureCtx): boolean {
 /** The strip sits on the label's column, like the disclosed text below it. */
 export const STRIP_INSET = 20;
 function pictureStrip(item: ConversationStepData, ctx: MeasureCtx) {
-  return toolThumbStrip(item.pictures.imageCount ?? item.pictures.images?.length ?? 0, ctx.width - STRIP_INSET);
+  return toolThumbsFor(item.pictures, ctx.width - STRIP_INSET);
 }
 
 /** Prototype toolRow(): an action stays whole; only clipped details have a disclosure. */
