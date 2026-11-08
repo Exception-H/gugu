@@ -180,9 +180,14 @@ function permissionConfig(
   // @@@kilo-subagent-approval — Kilo's ACP drops a subagent's permission request (`acp/permission.ts:54-55`:
   // no session for the child id, return), so the turn hangs forever (measured 7.8.27). The top-level rules are what
   // subagents follow, so: full access stays `allow`, and over ACP an approval tier denies those tools in the
-  // general subagent, which fails loud. The terminal leg can answer subagent prompts and keeps asking.
+  // built-in subagents, which fails loud. The terminal leg can answer subagent prompts and keeps asking.
+  // explore keeps `bash` out of it: its bash is already capped to a read-only allowlist that never asks
+  // (`exploreBash`), and a deny here would survive that cap and take away `ls`.
+  // ❌ No `scout` entry: it is not registered by default, and naming it here would create a new agent (measured).
+  const denied = (keys: readonly string[]) => ({ permission: Object.fromEntries(keys.map((key) => [key, 'deny'])) });
+  const gated = Object.keys(approvalRules);
   const subagentRules = !fullAccess && surface === 'acp'
-    ? { general: { permission: Object.fromEntries(Object.keys(approvalRules).map((key) => [key, 'deny'])) } }
+    ? { general: denied(gated), explore: denied(gated.filter((key) => key !== 'bash')) }
     : {};
   return {
     permission: fullAccess ? 'allow' : approvalRules,

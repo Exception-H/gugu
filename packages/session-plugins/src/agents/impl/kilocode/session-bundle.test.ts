@@ -46,10 +46,17 @@ describe('Kilo session bundle', () => {
     expect(config.permission).toBe('allow');
     expect(config.agent['full-access'].permission).toEqual({ '*': 'allow' });
     expect(config.agent.general).toBeUndefined();
+    expect(config.agent.explore).toBeUndefined();
   });
 
   it('denies gated tools in the ACP subagent, whose approval request Kilo would drop', () => {
     expect(materialize('acp', 'edit').config.agent.general.permission.bash).toBe('deny');
+    const { explore, scout } = materialize('acp', 'edit').config.agent;
+    expect(explore.permission.webfetch).toBe('deny');
+    expect(explore.permission.external_directory).toBe('deny');
+    expect(explore.permission.bash).toBeUndefined();
+    // Naming an agent Kilo has not registered creates it.
+    expect(scout).toBeUndefined();
     expect(materialize('tui', 'edit').config.agent.general).toBeUndefined();
     expect(materialize('tui', 'edit').config.permission.bash).toBe('ask');
   });
