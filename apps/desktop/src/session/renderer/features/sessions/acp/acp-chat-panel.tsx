@@ -1967,11 +1967,7 @@ export const AcpChatPanel = observer(function AcpChatPanel({
           const reason = failureReason(error.message);
           const membership = reason !== null && guguReasonCopy(reason).action === 'join-membership';
           const text = reason ? failureText(error.message, translate, membership ? membershipLock?.modelName : null) : sessionStartupFailureCopy(error.message, translate);
-          if (!reason) {
-            const at = sessionLifeView(store.runtimeSessionId)?.failure?.at;
-            const lead = at ? translate('chat.lifeStageFailed', { stage: translate(`chat.lifeStage.${at}`) }) : translate('transcript.condition.startFailed');
-            return { code: 'start-failed', label: `${lead}: ${text}`, detail: text, actions: [retry] };
-          }
+          if (!reason) return { code: 'start-failed', label: text, detail: text, actions: [retry] };
           return {
             code: membership ? 'membership-required' : 'start-failed',
             label: text,
