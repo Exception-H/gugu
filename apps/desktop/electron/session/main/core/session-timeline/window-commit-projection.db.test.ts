@@ -144,8 +144,11 @@ describe('recoverable committed structural projection publication', () => {
     });
     vi.spyOn(source, 'assertWindowCommitSource').mockImplementation(async (...args) => {
       await validate(...args); checks++;
-      if (mode === 'publish' ? published : checks === finalCheck)
+      // Delete after the async proof helper's own synchronous check, before
+      // its caller resumes. Only an adjacent check in the export closes this.
+      if (mode === 'publish' ? published : checks === finalCheck) queueMicrotask(() => queueMicrotask(() => {
         fixture.sqlite.prepare('DELETE FROM session_turns WHERE id=?').run(c.receipt.rowId);
+      }));
     });
     await expect(mode === 'publish' ? advance(c, createWindowBudget()) : read(c, createWindowBudget())).rejects.toThrow('committed receipt');
     expect(createWindowCommitReceipts(fixture.sqlite).bySource(c.receipt.sourceId)).toBeNull();

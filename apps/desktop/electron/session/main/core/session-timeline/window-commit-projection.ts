@@ -101,6 +101,7 @@ export async function advanceWindowCommitProjection(input: Context, budget: Wind
           if (old.kind !== 'hit' || !Buffer.from(old.bytes).equals(data)) return rebuild(c);
         }
         await proof(c, signal);
+        snapshot(c); signal?.throwIfAborted();
         return { kind: 'complete' as const, projectionId: c.buildId };
       }
       const part = head.stage === 'items-index' ? 'items' : 'terminals', range = root.facts[part];
@@ -114,6 +115,7 @@ export async function advanceWindowCommitProjection(input: Context, budget: Wind
   await proof(c, signal);
   await writeWindowFrame(c.directory, key(c, false), bytes(head));
   await proof(c, signal);
+  snapshot(c); signal?.throwIfAborted();
   return { kind: 'progress' as const, stage: head.stage };
 }
 
@@ -129,6 +131,7 @@ export async function readWindowCommitProjection(input: Context, budget: WindowB
   if (root.kind !== 'complete') return rebuild(c);
   if (!await indexed(c, root.facts, budget, signal)) return rebuild(c);
   await proof(c, signal);
+  snapshot(c); signal?.throwIfAborted();
   return { kind: 'projection' as const, projectionId: c.buildId, root: root.facts, rootIndex: index(c, 'root'),
     itemsIndex: index(c, 'items', root.facts.items), terminalsIndex: root.facts.terminals ? index(c, 'terminals', root.facts.terminals) : null };
 }
