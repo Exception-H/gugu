@@ -8,7 +8,7 @@ import { groupFileLink } from './ui/guguLink'
  */
 export function attachmentFolderLine(itemId: string, version: number): string {
   const file = groupFileLink(itemId, { version })
-  return `[Folder file ${file} — show it again: message_send_file {file: "${file}"}; changed it: the local path is read-only, so copy it, change the copy, and message_send_file {file: "${file}", file_path} sends your copy as its next version, never as a new attachment]`
+  return `[Folder file ${file} — show it again: message_send_file {file: "${file}"}; changed it: the local path is read-only and a copy stays read-only, so copy it, make the copy writable, change it, and message_send_file {file: "${file}", file_path} sends your copy as its next version, never as a new attachment]`
 }
 
 /**

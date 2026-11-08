@@ -2625,7 +2625,7 @@ export const TOOL_DEFS = [
   },
   {
     name: 'message_download_file',
-    description: 'Download original bytes from a visible chat message (source_message_id) or a session-message attachment reference (source_attachment_id). Returns file_path (read-only: copy it to change it), actual size_bytes and full sha256; session files are verified against their reference.',
+    description: 'Download original bytes from a visible chat message (source_message_id) or a session-message attachment reference (source_attachment_id). Returns file_path (read-only, and so is a copy: make your copy writable to change it), actual size_bytes and full sha256; session files are verified against their reference.',
     schema: z.object({ source_message_id: z.string().optional(), source_attachment_id: z.string().uuid().optional() }).refine(args => Boolean(args.source_message_id) !== Boolean(args.source_attachment_id), 'Give exactly one attachment source'),
     handler: (args, deps) => handleFile({ ...args, action: 'download-attachment' }, deps),
   },
