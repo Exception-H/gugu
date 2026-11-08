@@ -136,8 +136,9 @@ export function createFileSaver(providers: FileProviders): NonNullable<FileProvi
         for (const name of await readdir(target).catch(error => { if (error.code === 'ENOENT') return [] as string[]; throw error })) {
           const same = join(target, name)
           if (name.endsWith('.part') || !await holds(same)) continue
-          await link(await requireAgentFileAccess(same), path).catch(error => { if (error.code !== 'EEXIST') throw error })
-          return saved
+          // A filesystem without hard links (exFAT, some network drives) just stores the name as its own copy, below.
+          if (await link(await requireAgentFileAccess(same), path).then(() => true, error => error.code === 'EEXIST')) return saved
+          break
         }
       }
     }
