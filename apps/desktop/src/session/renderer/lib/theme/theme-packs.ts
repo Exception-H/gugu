@@ -26,6 +26,8 @@ export type RawPalette = {
   card?: string;
   fg: string;
   muted?: string;
+  /** 主题自己的「低一档」:选中行 / 分隔线的色。不少主题所有面同一个底,层次全在这里。 */
+  layer?: string;
   mutedFg?: string;
   faintFg?: string;
   live?: string;
@@ -129,6 +131,21 @@ export function modeOfBackground(bg: string): ThemeMode {
 
 const lighterBy = (a: string, b: string) => lightness(a) - lightness(b);
 
+/**
+ * @@@theme-surface — 编辑器主题的底是配着满屏彩色语法字设计的;咕咕界面几乎没有彩色,同一个底铺满就只剩一大片色
+ * (Gruvbox 亮 #fbf1c7:彩度 0.055,owner 11-08「看上去那么丑」)。大面积的面只收这两样,色相不动,字和强调色不动:
+ * 彩度有上限;亮色内容面不低于这个亮度(Tokyo Night 亮 0.93,一整片灰),整组面一起抬,阶梯不变。
+ */
+const SURFACE_MAX_CHROMA: Record<ThemeMode, number> = { light: 0.028, dark: 0.045 };
+const LIGHT_BG_MIN_LIGHTNESS = 0.955;
+
+function tameChroma(value: string, mode: ThemeMode): string {
+  const lch = new Color(value).to('oklch');
+  if (lch.coords[1] <= SURFACE_MAX_CHROMA[mode]) return value;
+  lch.coords[1] = SURFACE_MAX_CHROMA[mode];
+  return toHex(lch);
+}
+
 function raiseContrast(color: string, surfaces: string[], min: number, mode: ThemeMode): string {
   let next = color;
   const worst = () => Math.min(...surfaces.map((s) => contrastRatio(next, s)));
@@ -139,21 +156,28 @@ function raiseContrast(color: string, surfaces: string[], min: number, mode: The
 
 /**
  * 补齐 + 表面阶梯 + 对比度兜底。
- * 阶梯照咕咕默认那套的形状:page(窗口底层)比 bg(内容)低一档;card(浮层、分组卡)深色时比 bg 亮、浅色时不比 bg 暗;
+ * 大面积的面先过 @@@theme-surface。阶梯照咕咕默认那套的形状:page(窗口底层)比 bg(内容)低一档;card(浮层、分组卡)深色时比 bg 亮、浅色时不比 bg 暗;
  * muted(填充面)与 card 分得开。上游不满足这个形状时由 bg 推,❌ 让浮层陷进内容里。
  */
 export function resolvePalette(raw: RawPalette, mode: ThemeMode): ResolvedPalette {
-  const bg = raw.bg;
   const fg = raw.fg;
-  const page = raw.page && lighterBy(bg, raw.page) >= 0.012 ? raw.page : shiftLightness(bg, mode === 'dark' ? -0.03 : -0.02);
+  const lift = mode === 'light' ? Math.max(0, LIGHT_BG_MIN_LIGHTNESS - lightness(raw.bg)) : 0;
+  const surface = (value: string) => shiftLightness(tameChroma(value, mode), lift);
+  const bg = surface(raw.bg);
+  const rawPage = raw.page && surface(raw.page);
+  const layer = raw.layer && surface(raw.layer);
+  const belowBg = (value: string | undefined) => !!value && lighterBy(bg, value) >= 0.012;
+  // 主题的侧栏和内容同色时,窗口底层用它自己的「低一档」(深色的选中行比内容亮,当不了底层)。
+  const page = belowBg(rawPage) ? rawPage! : belowBg(layer) ? layer! : shiftLightness(bg, mode === 'dark' ? -0.03 : -0.02);
+  const rawCard = raw.card && surface(raw.card);
   const card = mode === 'dark'
-    ? (raw.card && lighterBy(raw.card, bg) >= 0.02 ? raw.card : shiftLightness(bg, 0.035))
-    : (raw.card && lighterBy(raw.card, bg) >= 0 ? raw.card : bg);
-  // 填充面比 card 再往前景走一档(深色更亮、浅色更暗),上游的 input 底常常就是 bg 本身或全透明。
-  const mutedStep = raw.muted
-    ? Math.min(...[card, bg].map((s) => (mode === 'dark' ? lighterBy(raw.muted as string, s) : lighterBy(s, raw.muted as string))))
-    : 0;
-  const muted = raw.muted && mutedStep >= 0.025 ? raw.muted : mixOklab(card, fg, mode === 'dark' ? 0.07 : 0.06);
+    ? (rawCard && lighterBy(rawCard, bg) >= 0.02 ? rawCard : shiftLightness(bg, 0.035))
+    : (rawCard && lighterBy(rawCard, bg) >= 0 ? rawCard : bg);
+  // 填充面比 card 再往前景走一档(深色更亮、浅色更暗),上游的 input 底常常就是 bg 本身或全透明;再看主题自己的「低一档」,都不够才由 fg 推。
+  const stepped = (value: string | undefined) => !!value
+    && Math.min(...[card, bg].map((s) => (mode === 'dark' ? lighterBy(value, s) : lighterBy(s, value)))) >= 0.025;
+  const rawMuted = raw.muted && surface(raw.muted);
+  const muted = stepped(rawMuted) ? rawMuted! : stepped(layer) ? layer! : tameChroma(mixOklab(card, fg, mode === 'dark' ? 0.07 : 0.06), mode);
   const surfaces = { page, bg, card, muted };
   const guard = (role: PaletteRole, color: string): string => {
     const { min, on } = CONTRAST_FLOORS[role];
@@ -251,6 +275,7 @@ export function paletteFromVSCode(colors: Record<string, string | undefined>): R
     page: pick(colors, ['sideBar.background', 'activityBar.background'], bg),
     card: pick(colors, ['editorWidget.background', 'dropdown.background', 'menu.background'], bg),
     muted: pick(colors, ['input.background', 'dropdown.background'], bg),
+    layer: pick(colors, ['list.inactiveSelectionBackground', 'sideBar.border', 'panel.border'], bg),
     mutedFg: pick(colors, ['descriptionForeground', 'sideBarSectionHeader.foreground'], bg),
     faintFg: pick(colors, ['disabledForeground', 'editorLineNumber.foreground'], bg),
     // button.background 排最后:深色主题里它常是灰按钮(Dracula #44475a),不是强调色。
@@ -280,6 +305,7 @@ export function paletteFromObsidian(vars: Record<string, string | undefined>): R
     page: pick(vars, ['--background-secondary', '--background-secondary-alt'], bg),
     card: pick(vars, ['--background-primary-alt', '--background-secondary'], bg),
     muted: pick(vars, ['--background-modifier-form-field', '--background-secondary-alt'], bg),
+    layer: pick(vars, ['--background-modifier-border'], bg),
     mutedFg: pick(vars, ['--text-muted'], bg),
     faintFg: pick(vars, ['--text-faint'], bg),
     live: pick(vars, ['--interactive-accent', '--text-accent', '--color-accent'], bg),
@@ -290,7 +316,7 @@ export function paletteFromObsidian(vars: Record<string, string | undefined>): R
 
 export const OBSIDIAN_VARIABLES = [
   '--background-primary', '--background-primary-alt', '--background-secondary', '--background-secondary-alt',
-  '--background-modifier-form-field', '--text-normal', '--text-muted', '--text-faint', '--text-accent',
+  '--background-modifier-form-field', '--background-modifier-border', '--text-normal', '--text-muted', '--text-faint', '--text-accent',
   '--interactive-accent', '--color-accent', '--text-error', '--color-red', '--color-orange', '--color-yellow',
 ] as const;
 
