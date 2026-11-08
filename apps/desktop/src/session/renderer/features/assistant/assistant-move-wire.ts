@@ -185,12 +185,10 @@ function sideOf(machine: AssistantMachine, label: string, assistantId: string, b
     integrations: {
       exportForMove: () => rpcOn(target).integrations.exportForMove(),
       importFromMove: (accounts: MovableIntegrationAccount[]) => rpcOn(target).integrations.importFromMove(accounts),
-      accountIds: async (integrationId) => (await rpcOn(target).integrations.accounts(integrationId)).map((account) => account.accountId),
-      disconnect: async (integrationId, accountId) => {
-        // 断开失败是 `{ success:false }`(不抛):不查就会把「没撤掉」报成「撤掉了」,旧家那份还在、界面却说只剩一份。
-        const result = await rpcOn(target).integrations.disconnect(integrationId, accountId);
-        if (!result?.success) throw new Error(result?.error ?? 'disconnect failed');
-      },
+    },
+    async release() {
+      const released = await rpcOn(target).projects.releaseProjectWorkspace(machine.projectId, machine.workspaceId).catch((error: unknown) => ({ success: false as const, error }));
+      if (!released.success) wireLog.warn({ label, err: released.error }, 'move workspace not released');
     },
     schedules: {
       async list() {
@@ -455,22 +453,26 @@ async function restoreOnlineAssistant(assistantId: string): Promise<void> {
 /** 确认框要的:会拷多少、会带走哪些账号(只有名字)、哪些要在新家重新连。只读,不动任何东西。 */
 export async function previewMove(env: MoveEnv, direction: MoveDirection) {
   const source = await openSource(env, direction);
-  const plan = await planMove(source);
-  // 账号清单读的是旧家那一头(此刻它住的那台):本机 = null,别的机器 = 它的 id。
-  // 旧家那头的咕咕比这个功能老:文件照搬,账号留在原处(确认框里如实说),❌ 因此整个搬不了。
-  const accounts = await rpcOn(homeTarget(env.home))
-    .integrations.moveSummary()
-    .then((summary) => ({ ...summary, unsupported: false }))
-    .catch((error: unknown) => {
-      if (!isUnknownMethod(error)) throw error;
-      return { moving: [], reconnect: [], unsupported: true };
-    });
-  return {
-    bytes: plan.totalBytes,
-    files: plan.trees.reduce((n, tree) => n + tree.plan.files.length, 0),
-    skippedFiles: plan.trees.flatMap((tree) => tree.plan.skipped.map((s) => ({ rel: `${tree.name}/${s.rel}`, reason: s.reason }))),
-    accounts,
-  };
+  try {
+    const plan = await planMove(source);
+    // 账号清单读的是旧家那一头(此刻它住的那台):本机 = null,别的机器 = 它的 id。
+    // 读不到清单(旧家的咕咕比这个功能老、钥匙串打不开):文件照搬,账号留在原处(确认框里如实说),❌ 因此整个搬不了。
+    const accounts = await rpcOn(homeTarget(env.home))
+      .integrations.moveSummary()
+      .then((summary) => ({ ...summary, unsupported: false }))
+      .catch((error: unknown) => {
+        if (!isUnknownMethod(error)) wireLog.warn({ err: error }, 'integrations list unreadable; moving files only');
+        return { moving: [], reconnect: [], unsupported: true };
+      });
+    return {
+      bytes: plan.totalBytes,
+      files: plan.trees.reduce((n, tree) => n + tree.plan.files.length, 0),
+      skippedFiles: plan.trees.flatMap((tree) => tree.plan.skipped.map((s) => ({ rel: `${tree.name}/${s.rel}`, reason: s.reason }))),
+      accounts,
+    };
+  } finally {
+    await source.release?.();
+  }
 }
 
 export async function runAssistantMove(env: MoveEnv, direction: MoveDirection, onProgress?: MoveDeps['onProgress']): Promise<MoveReport> {
@@ -485,33 +487,39 @@ export async function runAssistantMove(env: MoveEnv, direction: MoveDirection, o
       && (direction !== 'to-computer' || savedJournal.targetDeviceId === env.localDeviceId)
       && await homeDeviceOf(env.assistantId) === savedJournal.targetDeviceId,
     activate: () => restoreOnlineAssistant(env.assistantId),
-    disconnect: async account => {
-      const sourceDevice = savedJournal!.source!.deviceId;
-      const result = await rpcOn(sourceDevice === env.localDeviceId ? null : sourceDevice).integrations.disconnect(account.integrationId, account.accountId);
-      if (!result?.success) throw new Error(result?.error ?? 'disconnect failed');
-    },
   });
   if (completed) return completed;
   const sourceHome = savedJournal?.assistantId === env.assistantId && savedJournal.direction === direction && savedJournal.source
     ? savedJournal.source : sourceHomeFor(env, direction);
   const source = await openSource(env, direction, sourceHome, savedJournal?.sourceWorkdir);
-  const saved = await readAgentModelSelection(env.assistantId);
-  const target = direction === 'to-cloud' ? null : sourceHome.deviceId;
-  const own = !savedJournal?.model && direction !== 'to-cloud' && saved.desired.source === 'default' ? await assistantSessionOn(target, env.assistantId, SESSION_WAIT_MS) : null;
-  const options = own ? await rpcOn(target).sessionTimeline.sessionOptions({ conversationId: own.conversationId }) : null;
-  if (options && !options.ok) throw new Error(options.error.message);
-  const protocol = platformProtocolForAgentType('claude-code');
-  if (!protocol) throw new Error('The assistant harness has no model protocol');
-  const model = savedJournal?.model ?? (direction === 'to-cloud' ? cloudMoveModel(saved.desired, protocol)
-    : moveModelSelection(saved.desired, options?.ok ? options.value : {}, protocol));
-  const deps = buildMoveDeps(env, direction, source, sourceHome, onProgress, model);
-  deps.journal = journal;
-  deps.model = model;
-  deps.configure = async () => {
-    const outcome = await setAgentModelSelection(env.assistantId, model);
-    if (!outcome.ok) throw new Error(outcome.error);
-    const actual = await readAgentModelSelection(env.assistantId);
-    if (actual.applyError || !sameMoveModel(model, actual.applied)) throw new Error(actual.applyError ?? 'The target has not applied the original model');
-  };
-  return runMove(deps);
+  const opened = [source];
+  try {
+    const saved = await readAgentModelSelection(env.assistantId);
+    const target = direction === 'to-cloud' ? null : sourceHome.deviceId;
+    const own = !savedJournal?.model && direction !== 'to-cloud' && saved.desired.source === 'default' ? await assistantSessionOn(target, env.assistantId, SESSION_WAIT_MS) : null;
+    const options = own ? await rpcOn(target).sessionTimeline.sessionOptions({ conversationId: own.conversationId }) : null;
+    if (options && !options.ok) throw new Error(options.error.message);
+    const protocol = platformProtocolForAgentType('claude-code');
+    if (!protocol) throw new Error('The assistant harness has no model protocol');
+    const model = savedJournal?.model ?? (direction === 'to-cloud' ? cloudMoveModel(saved.desired, protocol)
+      : moveModelSelection(saved.desired, options?.ok ? options.value : {}, protocol));
+    const deps = buildMoveDeps(env, direction, source, sourceHome, onProgress, model);
+    const openTarget = deps.openTarget;
+    deps.openTarget = async () => {
+      const side = await openTarget();
+      opened.push(side);
+      return side;
+    };
+    deps.journal = journal;
+    deps.model = model;
+    deps.configure = async () => {
+      const outcome = await setAgentModelSelection(env.assistantId, model);
+      if (!outcome.ok) throw new Error(outcome.error);
+      const actual = await readAgentModelSelection(env.assistantId);
+      if (actual.applyError || !sameMoveModel(model, actual.applied)) throw new Error(actual.applyError ?? 'The target has not applied the original model');
+    };
+    return await runMove(deps);
+  } finally {
+    await Promise.all(opened.map((side) => side.release?.()));
+  }
 }
