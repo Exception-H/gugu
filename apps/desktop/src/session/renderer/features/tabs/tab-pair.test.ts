@@ -292,6 +292,17 @@ describe('recorded pairs have their own identity and lifecycle', () => {
     expect(layout.stripTabIds).toContain(old);
   });
 
+  it('a recorded pair that is not displayed is not on screen: going back to its member is offered', () => {
+    const { layout, conversation, open } = setup();
+    const old = open('terminal');
+    const next = layout.open('file', { path: 'output.md' }, { from: conversation, intent: 'beside', activate: false })!;
+    const child = layout.open('file', { path: 'child.md' }, { from: next, intent: 'newTab', activate: false })!;
+    const pane = layout.groups.find((group) => group.pane.entries.has(child))!.pane;
+    expect(layout.sideGroup!.pane.resolvedActiveTabId).toBe(old);
+    expect(pane.openerOf(child)?.tabId).toBe(next);
+    expect(pane.canGo(child, -1)).toBe(true);
+  });
+
   it('closing a newer background output restores its displaced pair without selecting it', () => {
     const { layout, conversation, open } = setup();
     const terminal = open('terminal', conversation, 'newTab');
