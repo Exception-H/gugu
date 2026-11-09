@@ -137,7 +137,11 @@ See the [community setup guide](docs/guides/self-hosting.md) for configuration a
 
 ## Community
 
-Talk with the team and other users in the gugu WeChat group: [open the QR code](https://gugu.nextmind.space/gugu-assets/wechat-group-qr.png) and scan it with WeChat. The code changes every week, so this link always shows the current one.
+Scan to join the gugu WeChat group and talk with the team and other users:
+
+<img src="https://github.com/GUYI-AI/gugu/releases/download/assets/gugu-readme-wechat-qr.png" width="220" alt="gugu WeChat group QR code">
+
+The code changes every week. [Open the latest QR code](https://gugu.nextmind.space/gugu-assets/wechat-group-qr.png).
 
 ## Contributing
 

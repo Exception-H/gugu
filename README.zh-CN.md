@@ -137,7 +137,11 @@ App 开源，审核后进市场。想要的 App 不存在，就在聊天里描�
 
 ## 交流
 
-和团队及其他用户在咕咕微信群交流：[打开二维码](https://gugu.nextmind.space/gugu-assets/wechat-group-qr.png)，用微信扫码加入。二维码每周更换，这个链接打开的总是当前这张。
+扫码加入咕咕微信群，和团队及其他用户交流：
+
+<img src="https://github.com/GUYI-AI/gugu/releases/download/assets/gugu-readme-wechat-qr.png" width="220" alt="咕咕微信群二维码">
+
+二维码每周更换。[打开最新二维码](https://gugu.nextmind.space/gugu-assets/wechat-group-qr.png)。
 
 ## 参与贡献
 
