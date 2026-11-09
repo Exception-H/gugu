@@ -1,6 +1,7 @@
 import type { MessageItem } from '@gugu/core/shared/types/chat'
 import { forwardQuote, type ForwardQuoteItem } from '@gugu/core/shared/ui/forwardQuote'
 import { useCallback, useMemo } from 'react'
+import { useTranslation } from 'react-i18next'
 import { useAuth } from '../../store/auth'
 import { useChatStore, type ChatContextValue } from '../../store/chatContext'
 
@@ -23,15 +24,17 @@ export function openForward(pieces: ForwardPiece[]): void {
 
 type Send = Pick<ChatContextValue, 'forwardMessage' | 'sendMessageToChat'>
 type Names = {
-  /** Who a chat member is, by name; `null` = the forwarder. */
-  nameOf: (userId: string | null) => string
-  /** A name this account knows for a user, if any. */
-  knownName: (userId: string) => string | undefined
+  /** A name this account knows for a user (`null` = the forwarder), if any: a big group's profiles load lazily, a member may have left. */
+  knownName: (userId: string | null) => string | undefined
+  /** Said for a speaker no name is known for (the chat's own 「未知成员」). */
+  unknownName: string
 }
+
+const nameOf = (userId: string | null, names: Names) => names.knownName(userId) ?? names.unknownName
 
 /** Who said a plain-text piece, by name. */
 export function pieceSender(piece: Extract<ForwardPiece, { kind: 'text' }>, names: Names): string {
-  return (piece.senderId ? names.knownName(piece.senderId) : undefined) ?? piece.sender ?? names.nameOf(null)
+  return (piece.senderId ? names.knownName(piece.senderId) : undefined) ?? piece.sender ?? nameOf(null, names)
 }
 
 /**
@@ -52,9 +55,9 @@ export async function forwardToChats(pieces: readonly ForwardPiece[], targetChat
     if (message.retracted_at || !message.content?.trim()) continue
     source ??= message
     quoted.push({
-      sender: piece.sender ?? io.nameOf(message.sender_user_id),
+      sender: piece.sender ?? nameOf(message.sender_user_id, io),
       text: message.content,
-      replyTo: message.reply_to_content ? { sender: io.nameOf(message.reply_to_sender_user_id ?? null), text: message.reply_to_content } : null,
+      replyTo: message.reply_to_content ? { sender: message.reply_to_sender_user_id ? nameOf(message.reply_to_sender_user_id, io) : io.unknownName, text: message.reply_to_content } : null,
     })
   }
   const body = quoted.length ? forwardQuote(quoted, note) : null
@@ -81,13 +84,12 @@ export function useForwardToChats() {
 export function useForwardNames(): Names {
   const { identitiesById } = useChatStore('identitiesById')
   const { user } = useAuth()
+  const { t } = useTranslation('messaging')
   return useMemo(() => ({
-    knownName: (userId: string) => identitiesById[userId]?.display_name || undefined,
-    nameOf: (userId: string | null) => {
+    knownName: (userId: string | null) => {
       const id = userId ?? user?.id
-      const name = id ? identitiesById[id]?.display_name : undefined
-      if (!name) throw new Error(`No name is known for ${id ?? 'the signed-out forwarder'}`)
-      return name
+      return (id ? identitiesById[id]?.display_name : undefined) || undefined
     },
-  }), [identitiesById, user])
+    unknownName: t('group.memberFallback.unknown'),
+  }), [identitiesById, user, t])
 }

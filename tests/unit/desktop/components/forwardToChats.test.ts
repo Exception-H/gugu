@@ -8,7 +8,7 @@ function message(overrides: Partial<MessageItem>): MessageItem {
 }
 const names: Record<string, string> = { 'u-han': 'Han', 'u-mei': 'Mei', me: 'Me' }
 function io() {
-  return { forwardMessage: vi.fn(async () => {}), sendMessageToChat: vi.fn(async () => undefined), nameOf: (id: string | null) => names[id ?? 'me']!, knownName: (id: string) => names[id] }
+  return { forwardMessage: vi.fn(async () => {}), sendMessageToChat: vi.fn(async () => undefined), knownName: (id: string | null) => names[id ?? 'me'], unknownName: 'Unknown member' }
 }
 
 describe('forwardToChats', () => {
@@ -63,5 +63,14 @@ describe('forwardToChats, delivered words', () => {
     const send = io()
     await forwardToChats([{ kind: 'text', sender: 'Mei (咕咕号 7)', senderId: 'u-mei', text: 'Friday?' }], ['g1'], '', send)
     expect(send.sendMessageToChat).toHaveBeenCalledWith('g1', '> **Mei**\n>\n> Friday?')
+  })
+})
+
+describe('forwardToChats, speakers no name is known for', () => {
+  it('quotes them as an unknown member and still forwards: a reply to someone never loaded, a sender who left', async () => {
+    const send = io()
+    await forwardToChats([{ kind: 'message', message: message({ id: 'r', sender_user_id: 'u-gone', content: 'Agreed.', reply_to_message_id: 'x', reply_to_content: 'Friday?', reply_to_sender_user_id: 'u-never-loaded' }) }], ['g1', 'g2'], '', send)
+    expect(send.forwardMessage).toHaveBeenCalledTimes(2)
+    expect((send.forwardMessage.mock.calls[0] as unknown as [MessageItem])[0].content).toBe('> **Unknown member**\n>\n> > **Unknown member**：Friday?\n>\n> Agreed.')
   })
 })
