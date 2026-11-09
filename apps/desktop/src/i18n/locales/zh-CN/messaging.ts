@@ -548,8 +548,8 @@ export default {
       "notParticipant": "暂时看不到这条话题的成员",
       "sectionAgents": "Agent",
       "sectionPeople": "人",
-      "myAgents": "我的 agent · {{count}}",
-      "otherAgents": "其他人的 agent · {{count}}",
+      "myAgents": "我的 agent",
+      "otherAgents": "其他人的 agent",
       "listen": {
         "all": "收听全部消息",
         "allHint": "群里没点名的消息它也会收到。主人点这里可改为只收点名。",

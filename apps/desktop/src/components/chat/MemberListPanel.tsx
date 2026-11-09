@@ -23,6 +23,7 @@ import { GroupNameInlineEdit } from './GroupNameInlineEdit'
 import { Button } from '../ui/Button'
 import { Hint } from '../ui/Tooltip'
 import { SectionLabel } from '../ui/SectionLabel'
+import { ListRowContent } from '../ui/ListRow'
 import { SearchField } from '../ui/SearchField'
 import { HeaderSearch } from '../ui/HeaderSearch'
 import { useMobileShell } from '../../hooks/useMobileShell'
@@ -61,25 +62,10 @@ import { ChatClashNames } from './ChatClashNames'
 import { useListenModeEditControls } from './useListenModeEditControls'
 import { ChevronRight } from '../../lib/icons'
 import type { UseGroupCollabLoaderResult } from '../../hooks/useGroupCollabLoader'
-
-
-
-
-const sectionHeaderStyle = {
-  display: 'flex', alignItems: 'baseline', justifyContent: 'space-between',
-  padding: '12px 14px 4px', color: 'var(--muted-fg)',
-  fontSize: 'var(--font-caption)', fontWeight: 600, letterSpacing: '.02em',
-} as const
-
-// gugu-dev#181「我的 agent · N」那一行的折叠箭头。
+// gugu-dev#181「我的 agent」那一行的折叠箭头:放在计数后面,分区名留在和行、搜索、标题同一条左边线上。
 const myAgentsChevronStyle = (open: boolean): React.CSSProperties => ({
   width: 14, height: 14, flexShrink: 0, transform: open ? 'rotate(90deg)' : undefined,
 })
-
-const metaCellStyle = {
-  fontSize: 'var(--font-caption)', color: 'var(--muted-fg)',
-  overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: 160,
-} as const
 
 // @@@ui-ruler 其余结构性 style 一并提到模块作用域(同 ChatListPanel 的 *_STYLE 常量):
 // 既避免每次渲染重建对象,也让 JSX 里不再残留内联几何块这条债务痕迹。
@@ -87,35 +73,29 @@ const metaCellStyle = {
 // 档位是一行淡字(❌ 带框的胶囊:看着像按钮);说明在悬停浮层里。agent 的主人和群管理员点它翻档。
 const listenModeToggleStyle = (editable: boolean): React.CSSProperties => ({
   padding: 0, minHeight: 0, height: 'auto', flexShrink: 0, fontWeight: 400,
-  fontSize: 'var(--font-caption)', lineHeight: 1.2, color: 'var(--muted-fg)',
+  fontSize: 'var(--font-caption)', lineHeight: 'var(--lh-caption)', color: 'var(--muted-fg)',
   cursor: editable ? 'pointer' : 'default',
 })
-// 「我的 agent」与「其他人的 agent」两组同级:后一组顶上一条分隔线,折叠的那组底下也一眼看得出边界。
-const OTHER_AGENTS_GROUP_STYLE: React.CSSProperties = { borderTop: '1px solid var(--border-subtle)', marginTop: 4 }
-const MEMBER_ROW_STYLE: React.CSSProperties = { display: 'flex', alignItems: 'flex-start', gap: 10, padding: '7px 14px' }
-// @@@6418 群里的行可以点开资料卡;行尾的 ⋯ 管理钮靠 group-hover 显形。
-const MEMBER_ROW_INTERACTIVE_STYLE: React.CSSProperties = { ...MEMBER_ROW_STYLE, cursor: 'pointer' }
-const MEMBER_ROW_ACTIONS_STYLE: React.CSSProperties = { flexShrink: 0, alignSelf: 'center' }
-const MEMBER_LIST_SEARCH_STYLE: React.CSSProperties = { display: 'flex', alignItems: 'center', gap: 8, padding: '10px 14px 2px', flexShrink: 0 }
-const MEMBER_LIST_EMPTY_STYLE: React.CSSProperties = { padding: '24px 14px', textAlign: 'center', fontSize: 'var(--font-body)', color: 'var(--muted-fg)' }
-const MEMBER_ROW_BODY_STYLE: React.CSSProperties = { minWidth: 0, flex: 1, alignSelf: 'center' }
-const MEMBER_ROW_NAME_LINE_STYLE: React.CSSProperties = { display: 'flex', alignItems: 'center', gap: 6, minWidth: 0 }
-const MEMBER_ROW_NAME_STYLE: React.CSSProperties = {
-  fontSize: 'var(--font-body)', color: 'var(--text-primary)', fontWeight: 500,
-  overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
-}
+// @@@panel-chrome 面板里分区只用留白分开,❌ 分隔线(面板外壳规则:线只留给分栏缝)。
+// 分区标题一种(SectionLabel)、一层:人 / 我的 agent / 其他人的 agent 同级,计数在右端。
+// 左边线一条:页头 16、搜索 16、分区容器 8 + 标签 8、行容器 8 + 行内距 8 —— 都落在 16。
+// ⋯ 坐在第一行右端(ListRow meta 槽),高度按行高收住,第二行的尾随值就能和分区计数对齐同一右边。
+const MEMBER_ROW_ACTIONS_STYLE: React.CSSProperties = { display: 'flex', alignItems: 'center', height: 'var(--lh-body)' }
+const MEMBER_LIST_SEARCH_STYLE: React.CSSProperties = { display: 'flex', alignItems: 'center', gap: 8, padding: 'var(--spacing-sm) var(--spacing-lg) var(--spacing-xs)', flexShrink: 0 }
+const SECTION_COUNT_STYLE: React.CSSProperties = { fontVariantNumeric: 'tabular-nums' }
+const MEMBER_LIST_EMPTY_STYLE: React.CSSProperties = { padding: 'var(--spacing-2xl) var(--spacing-lg)', textAlign: 'center', fontSize: 'var(--font-body)', color: 'var(--muted-fg)' }
 const MEMBER_ROW_ROLE_STYLE: React.CSSProperties = {
-  fontSize: 'var(--font-caption)', color: 'var(--muted-fg)',
-  padding: '0 4px', flexShrink: 0,
+  fontSize: 'var(--font-caption)', lineHeight: 'var(--lh-caption)', color: 'var(--muted-fg)', flexShrink: 0,
 }
-const MEMBER_ROW_META_CELLS_STYLE: React.CSSProperties = { display: 'flex', flexWrap: 'wrap', gap: '2px 10px', marginTop: 3 }
-const MEMBER_ROW_TRAILING_STYLE: React.CSSProperties = { marginTop: 6 }
+const MEMBER_LIST_ROWS_STYLE: React.CSSProperties = { padding: '0 8px' }
+// 后面的分区与前一段之间:8px 留白。
+const MEMBER_LIST_NEXT_SECTION_STYLE: React.CSSProperties = { ...MEMBER_LIST_ROWS_STYLE, paddingTop: 'var(--spacing-sm)' }
 const MEMBER_LIST_PANEL_STYLE: React.CSSProperties = { display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0 }
 const MEMBER_LIST_TITLE_STYLE: React.CSSProperties = { fontSize: 'var(--font-title)', fontWeight: 600, color: 'var(--text-primary)' }
 // 话题改名那一格:占满标题与右侧动作之间的余量。与本文件其余样式同形走常量 ——
 // ❌ 不就地写内联样式块(check-ui-visual-spec 的那条棘轮是纯文本计数,连注释里的字面量都算)。
 const TOPIC_NAME_EDIT_STYLE: React.CSSProperties = { flex: 1, minWidth: 0 }
-const MEMBER_LIST_ERROR_STYLE: React.CSSProperties = { padding: '10px 14px', color: 'var(--danger-fg)', fontSize: 'var(--font-caption)' }
+const MEMBER_LIST_ERROR_STYLE: React.CSSProperties = { padding: 'var(--spacing-sm) var(--spacing-lg)', color: 'var(--danger-fg)', fontSize: 'var(--font-caption)' }
 // 档位没改成的原因:写在那一行的档位钮下面。
 const MEMBER_ROW_ERROR_STYLE: React.CSSProperties = { marginTop: 4, color: 'var(--danger-fg)', fontSize: 'var(--font-caption)' }
 const MEMBER_LIST_SCROLL_STYLE: React.CSSProperties = { flex: 1, minHeight: 0, overflowY: 'auto' }
@@ -190,48 +170,33 @@ function MemberRow({
     <div
       data-member-row={memberId}
       data-member-kind={isAgent ? 'agent' : 'human'}
-      className={onOpen ? 'gg-row group/member-row' : undefined}
+      className={onOpen ? 'gg-list-row gg-row group/member-row' : 'gg-list-row'}
       data-selected={selected || undefined}
       role={onOpen ? 'button' : undefined}
       tabIndex={onOpen ? 0 : undefined}
       onClick={onOpen ? (event) => onOpen(event.currentTarget) : undefined}
       onKeyDown={onOpen ? (event) => { if (event.target === event.currentTarget && (event.key === 'Enter' || event.key === ' ')) { event.preventDefault(); onOpen(event.currentTarget) } } : undefined}
-      style={onOpen ? MEMBER_ROW_INTERACTIVE_STYLE : MEMBER_ROW_STYLE}
     >
-      <Avatar
-        name={shownName}
-        avatarUrl={identity?.avatar ?? null}
-        seed={memberId}
-        size="sm"
-        isAgent={isAgent}
-        agentStatus={statusBadge}
+      <ListRowContent
+        leading={<Avatar name={shownName} avatarUrl={identity?.avatar ?? null} seed={memberId} size="sm" isAgent={isAgent} agentStatus={statusBadge} />}
+        title={<span data-member-name={memberId}>{shownName}</span>}
+        accessory={(
+          <>
+            <ArchivedAgentLabel status={statusBadge} />
+            {roleLabel ? <span data-member-role={memberId} style={MEMBER_ROW_ROLE_STYLE}>{roleLabel}</span> : null}
+          </>
+        )}
+        meta={actions ? <span style={MEMBER_ROW_ACTIONS_STYLE}>{actions}</span> : undefined}
+        subtitle={metaCells}
+        trailing={trailing}
       />
-      <div style={MEMBER_ROW_BODY_STYLE}>
-        <div style={MEMBER_ROW_NAME_LINE_STYLE}>
-          <span
-            data-member-name={memberId}
-            style={MEMBER_ROW_NAME_STYLE}
-          >
-            {shownName}
-          </span>
-          <ArchivedAgentLabel status={statusBadge} />
-          {roleLabel ? (
-            <span
-              data-member-role={memberId}
-              style={MEMBER_ROW_ROLE_STYLE}
-            >
-              {roleLabel}
-            </span>
-          ) : null}
-        </div>
-        {metaCells ? (
-          <div style={MEMBER_ROW_META_CELLS_STYLE}>{metaCells}</div>
-        ) : null}
-        {trailing ? <div style={MEMBER_ROW_TRAILING_STYLE}>{trailing}</div> : null}
-      </div>
-      {actions ? <div style={MEMBER_ROW_ACTIONS_STYLE}>{actions}</div> : null}
     </div>
   )
+}
+
+function joinMeta(cells: ReactNode[]): ReactNode {
+  const shown = cells.filter(Boolean)
+  return shown.length ? shown.flatMap((cell, index) => index ? [' · ', cell] : [cell]) : undefined
 }
 
 export type MemberListPanelProps = {
@@ -385,16 +350,14 @@ export function MemberListPanel({ chatId, chatKind, head, chatName, snapshot, se
         onOpen={(anchor) => group.openProfile(agent.id, anchor)}
         actions={group.rowActions(agent.id)}
         selected={group.activeMemberId === agent.id}
-        metaCells={(
-          <>
-            {/* 自己的 agent 已在「我的 agent」组里,不再写一遍主人。 */}
-            {identity?.owner_user_id === user?.id ? null : <span data-agent-meta="owner" style={metaCellStyle}><AgentOwnerLabel ownerUserId={identity?.owner_user_id} ownerDisplayName={identity ? agentOwnerDisplayName(identity, identities) : null} /></span>}
-            {/* 取不到就整格不渲染 —— 空得看得出来,❌ 没有「未知引擎」这种占位。 */}
-            {engine ? <span data-agent-meta="engine" style={metaCellStyle}>{engine}</span> : null}
-            {agent.model_source ? <span data-agent-meta="model" style={metaCellStyle}>{agent.model_source}</span> : null}
-            {device ? <span data-agent-meta="device" style={metaCellStyle}>{device}</span> : null}
-          </>
-        )}
+        metaCells={joinMeta([
+          // 自己的 agent 已在「我的 agent」组里,不再写一遍主人。
+          identity?.owner_user_id === user?.id ? null : <span key="owner" data-agent-meta="owner"><AgentOwnerLabel ownerUserId={identity?.owner_user_id} ownerDisplayName={identity ? agentOwnerDisplayName(identity, identities) : null} /></span>,
+          // 取不到就整格不渲染 —— 空得看得出来,❌ 没有「未知引擎」这种占位。
+          engine ? <span key="engine" data-agent-meta="engine">{engine}</span> : null,
+          agent.model_source ? <span key="model" data-agent-meta="model">{agent.model_source}</span> : null,
+          device ? <span key="device" data-agent-meta="device">{device}</span> : null,
+        ])}
         trailing={(
           <>
             <ListenModeToggle
@@ -473,15 +436,8 @@ export function MemberListPanel({ chatId, chatKind, head, chatName, snapshot, se
             <div data-testid="member-list-no-match" style={MEMBER_LIST_EMPTY_STYLE}>{t('group.memberList.noMatches', { query: query.trim() })}</div>
           ) : null}
           {needle && shownPeople.length === 0 ? null : (
-          <section data-member-section="human">
-            <div style={sectionHeaderStyle}>
-              <span>{t('group.memberList.sectionPeople')}</span>
-              <span aria-hidden="true">{shownPeople.length}</span>
-            </div>
-            {/* 段内❌ 不再自己限高自己滚。面板本身就是滚动容器(MEMBER_LIST_SCROLL_STYLE),
-                里面再套一个限高的滚动框 = 第二条滚动轴:6 个 agent 一共 468px 撞上 420px 的顶,
-                最后一行被切掉半截,而外面那层还空着三百多像素(owner 2026-09-19 实测截图)。
-                #2178 的两条要求由外面那一层兑现 —— ①「有 N 个就滚得到 N 个」、④长列表出细滚动条。 */}
+          <section data-member-section="human" style={MEMBER_LIST_ROWS_STYLE}>
+            <SectionLabel trailing={<span aria-hidden="true" style={SECTION_COUNT_STYLE}>{shownPeople.length}</span>}>{t('group.memberList.sectionPeople')}</SectionLabel>
             <div data-member-section-rows="human">
               {shownPeople.map((member) => (
                 <MemberRow
@@ -502,36 +458,30 @@ export function MemberListPanel({ chatId, chatKind, head, chatName, snapshot, se
           )}
 
           {needle && shownAgents.length === 0 ? null : (
-          <section data-member-section="agent">
-            <div style={sectionHeaderStyle}>
-              <span>{t('group.memberList.sectionAgents')}</span>
-              <span aria-hidden="true">{shownAgents.length}</span>
-            </div>
-            <div data-member-section-rows="agent">
-              {myAgents.length > 0 ? (
-                <div data-member-group="mine">
-                  <SectionLabel
-                    interactive
-                    role="button"
-                    tabIndex={0}
-                    aria-expanded={myAgentsOpen}
-                    leading={<ChevronRight aria-hidden="true" style={myAgentsChevronStyle(myAgentsOpen)} />}
-                    onClick={() => setMyAgentsOpen((open) => !open)}
-                    onKeyDown={(event) => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); setMyAgentsOpen((open) => !open) } }}
-                  >
-                    {t('group.memberList.myAgents', { count: myAgents.length })}
-                  </SectionLabel>
-                  {myAgentsOpen ? myAgents.map(renderAgentRow) : null}
-                </div>
-              ) : null}
-              {otherAgents.length > 0 ? (
-                <div data-member-group="others" style={myAgents.length > 0 ? OTHER_AGENTS_GROUP_STYLE : undefined}>
-                  {myAgents.length > 0 ? <SectionLabel leading={<span aria-hidden="true" style={myAgentsChevronStyle(false)} />}>{t('group.memberList.otherAgents', { count: otherAgents.length })}</SectionLabel> : null}
-                  {otherAgents.map(renderAgentRow)}
-                </div>
-              ) : null}
-            </div>
-          </section>
+          <>
+            {myAgents.length > 0 ? (
+              <section data-member-section="agent" data-member-group="mine" style={MEMBER_LIST_NEXT_SECTION_STYLE}>
+                <SectionLabel
+                  interactive
+                  role="button"
+                  tabIndex={0}
+                  aria-expanded={myAgentsOpen}
+                  trailing={<><span aria-hidden="true" style={SECTION_COUNT_STYLE}>{myAgents.length}</span><ChevronRight aria-hidden="true" style={myAgentsChevronStyle(myAgentsOpen)} /></>}
+                  onClick={() => setMyAgentsOpen((open) => !open)}
+                  onKeyDown={(event) => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); setMyAgentsOpen((open) => !open) } }}
+                >
+                  {t('group.memberList.myAgents')}
+                </SectionLabel>
+                {myAgentsOpen ? myAgents.map(renderAgentRow) : null}
+              </section>
+            ) : null}
+            {otherAgents.length > 0 ? (
+              <section data-member-section="agent" data-member-group="others" style={MEMBER_LIST_NEXT_SECTION_STYLE}>
+                <SectionLabel trailing={<span aria-hidden="true" style={SECTION_COUNT_STYLE}>{otherAgents.length}</span>}>{t(myAgents.length > 0 ? 'group.memberList.otherAgents' : 'group.memberList.sectionAgents')}</SectionLabel>
+                {otherAgents.map(renderAgentRow)}
+              </section>
+            ) : null}
+          </>
           )}
         </div>
       </div>
