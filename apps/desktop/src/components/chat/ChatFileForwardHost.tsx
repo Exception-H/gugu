@@ -26,10 +26,13 @@ export function ChatFileForwardHost() {
   }, [])
   if (!request || !user) return null
   // The note follows the files, as a forward's note follows what has no words to quote.
-  const forward = async (targetChatIds: string[], note: string) => {
-    if ('copies' in request) for (const chatId of targetChatIds) await sendAttachmentsToChat(chatId, request.copies)
-    else for (const file of request.files) for (const chatId of targetChatIds) await forwardMessage(file, chatId)
-    if (note.trim()) for (const chatId of targetChatIds) await sendMessageToChat(chatId, note.trim())
+  const forward = async (targetChatIds: string[], note: string, sent: (chatId: string) => void) => {
+    for (const chatId of targetChatIds) {
+      if ('copies' in request) await sendAttachmentsToChat(chatId, request.copies)
+      else for (const file of request.files) await forwardMessage(file, chatId)
+      if (note.trim()) await sendMessageToChat(chatId, note.trim())
+      sent(chatId)
+    }
   }
   const named = 'copies' in request ? request.copies : request.files
   const [only] = named

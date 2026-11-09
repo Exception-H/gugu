@@ -87,3 +87,13 @@ describe('forwardToChats, a single piece', () => {
     expect(send.sendMessageToChat).not.toHaveBeenCalled()
   })
 })
+
+describe('forwardToChats, a failure part-way', () => {
+  it('reports each chat once it has its copy, and not the one that failed or those after it', async () => {
+    const send = io()
+    const forwardMessage = vi.fn(async (_message: unknown, chatId: string) => { if (chatId === 'g2') throw new Error('outbox refused') })
+    const sent: string[] = []
+    await expect(forwardToChats([{ kind: 'message', message: message({ id: 'a', content: 'Friday?' }) }], ['g1', 'g2', 'g3'], '', { ...send, forwardMessage }, id => sent.push(id))).rejects.toThrow('outbox refused')
+    expect(sent).toEqual(['g1'])
+  })
+})

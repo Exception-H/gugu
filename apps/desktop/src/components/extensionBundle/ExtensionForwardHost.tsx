@@ -62,7 +62,7 @@ export function ExtensionForwardHost() {
   const t = translateSessionMessage
   const close = () => setRequest(null)
 
-  const forward = async (targetChatIds: string[], note: string) => {
+  const forward = async (targetChatIds: string[], note: string, sent: (chatId: string) => void) => {
     const packed = await rpc.extensions.packInstalled({ extensionId: request.extensionId })
     if (!packed.success || !packed.data) {
       log.error({ extensionId: request.extensionId, error: packed.error }, 'packing an extension to forward failed')
@@ -72,6 +72,7 @@ export function ExtensionForwardHost() {
     for (const chatId of targetChatIds) {
       await sendAttachmentsToChat(chatId, [file])
       if (note.trim()) await sendMessageToChat(chatId, note.trim())
+      sent(chatId)
     }
   }
 

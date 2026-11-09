@@ -24,7 +24,7 @@ export function MessageForwardHost() {
       messages={messages}
       preview={preview}
       sourceChatId={messages[0]?.chat_id ?? ''}
-      onForward={(targetChatIds, note) => forwardTo(pieces, targetChatIds, note)}
+      onForward={(targetChatIds, note, sent) => forwardTo(pieces, targetChatIds, note, sent)}
       onClose={() => setPieces(null)}
     />
   )

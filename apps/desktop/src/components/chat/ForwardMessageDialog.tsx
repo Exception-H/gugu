@@ -19,8 +19,11 @@ interface ForwardMessageDialogProps {
   chats: ChatItem[]
   /** Source chat — excluded from the target list. */
   sourceChatId: string
-  /** Forward into every selected chat, with the forwarder's note (may be empty). Rejects to surface an error. */
-  onForward: (targetChatIds: string[], note: string) => Promise<void>
+  /**
+   * Forward into every selected chat, with the forwarder's note (may be empty). Rejects to surface an error. `sent` names each
+   * chat once it has its copy: it is unticked, so forwarding again after a failure part-way only reaches the rest.
+   */
+  onForward: (targetChatIds: string[], note: string, sent: (chatId: string) => void) => Promise<void>
   onClose: () => void
 }
 
@@ -38,6 +41,14 @@ export function ForwardMessageDialog({ messages = [], preview: subject, topRow, 
       const next = new Set(prev)
       if (next.has(id)) next.delete(id)
       else next.add(id)
+      return next
+    })
+  }, [])
+
+  const untick = useCallback((id: string) => {
+    setSelected((prev) => {
+      const next = new Set(prev)
+      next.delete(id)
       return next
     })
   }, [])
@@ -62,14 +73,14 @@ export function ForwardMessageDialog({ messages = [], preview: subject, topRow, 
     setForwarding(true)
     setError(null)
     try {
-      await onForward(Array.from(selected), note)
+      await onForward(Array.from(selected), note, untick)
       onClose()
     } catch (e) {
       setError(e instanceof Error ? e.message : t('forward.failed'))
     } finally {
       setForwarding(false)
     }
-  }, [selected, note, onForward, onClose, t])
+  }, [selected, note, onForward, onClose, untick, t])
 
   // Only mounted by callers when there is ≥1 message; guard the impossible-empty case so the
   // single-message preview branch can deref messages[0] without an optional chain.

@@ -42,9 +42,11 @@ export function pieceSender(piece: Extract<ForwardPiece, { kind: 'text' }>, name
  * quoted under who said it, one piece too (a line forwarded alone is the one that most needs its speaker). Files, widgets
  * and cards go as themselves, after the words; with nothing to quote, the note follows them.
  *
- * Chats are written to one after another: a failure part-way (the outbox refusing a write) leaves the earlier chats sent.
+ * Chats are written to one after another; `sent` hears each one done, so a failure part-way (the outbox refusing a write)
+ * can tell which chats already have their copy.
  */
-export async function forwardToChats(pieces: readonly ForwardPiece[], targetChatIds: readonly string[], note: string, io: Send & Names): Promise<void> {
+export async function forwardToChats(pieces: readonly ForwardPiece[], targetChatIds: readonly string[], note: string, io: Send & Names,
+  sent: (chatId: string) => void = () => {}): Promise<void> {
   const words: { quote: ForwardQuoteItem; message?: MessageItem }[] = []
   const own: MessageItem[] = []
   for (const piece of pieces) {
@@ -72,6 +74,7 @@ export async function forwardToChats(pieces: readonly ForwardPiece[], targetChat
     }
     for (const message of own) await io.forwardMessage(message, chatId)
     if (!quoted && note.trim()) await io.sendMessageToChat(chatId, note.trim())
+    sent(chatId)
   }
 }
 
@@ -79,8 +82,8 @@ export async function forwardToChats(pieces: readonly ForwardPiece[], targetChat
 export function useForwardToChats() {
   const { forwardMessage, sendMessageToChat } = useChatStore('forwardMessage', 'sendMessageToChat')
   const names = useForwardNames()
-  return useCallback((pieces: readonly ForwardPiece[], targetChatIds: readonly string[], note: string) =>
-    forwardToChats(pieces, targetChatIds, note, { forwardMessage, sendMessageToChat, ...names }), [forwardMessage, sendMessageToChat, names])
+  return useCallback((pieces: readonly ForwardPiece[], targetChatIds: readonly string[], note: string, sent?: (chatId: string) => void) =>
+    forwardToChats(pieces, targetChatIds, note, { forwardMessage, sendMessageToChat, ...names }, sent), [forwardMessage, sendMessageToChat, names])
 }
 
 /** Names as this account's chat store knows them. */
