@@ -1,4 +1,4 @@
-import { useCallback, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 
 /**
  * A menu opened by a button React does not own — the transcript's rows are drawn by the Solid tree, so their 「侧边栏 ▾」
@@ -9,6 +9,9 @@ import { useCallback, useState } from 'react'
  * Pass `press` to the button's click and `onOpenChange` to the menu Root. `opened` is what the open menu shows, anchored to
  * the button element itself (Base UI follows it on scroll), never a snapshot of its rect; `last` stays after it closes, for
  * a menu that keeps its dialog mounted and reopens itself (onOpenChange(true)) at the same button.
+ * The transcript is virtualized: a row scrolled away is recycled and its button leaves the DOM. A menu anchored to a
+ * detached element would jump to the corner, so the menu closes when its button is no longer connected — as a Base UI
+ * menu does when its Trigger unmounts.
  */
 export function useExternalMenuTrigger<T>() {
   const [state, setState] = useState<{ anchor: HTMLElement; value: T; open: boolean } | null>(null)
@@ -21,5 +24,14 @@ export function useExternalMenuTrigger<T>() {
     setState((current) => current ? { ...current, open } : null)
   }, [state])
   const close = useCallback(() => setState((current) => current ? { ...current, open: false } : null), [])
+  const openAnchor = state?.open ? state.anchor : null
+  useEffect(() => {
+    if (!openAnchor) return
+    const closeIfDetached = () => { if (!openAnchor.isConnected) close() }
+    closeIfDetached()
+    const observer = new MutationObserver(closeIfDetached)
+    observer.observe(openAnchor.ownerDocument.body, { childList: true, subtree: true })
+    return () => observer.disconnect()
+  }, [openAnchor, close])
   return { opened: state?.open ? state : null, last: state, press, onOpenChange, close }
 }
