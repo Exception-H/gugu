@@ -121,6 +121,27 @@ export interface ExtensionChat {
   kind: 'group' | 'topic' | 'dm';
   /** The group: this chat for a group, the one a topic grew out of; null for a private chat and a topic of one. */
   groupId: string | null;
+  /** A project group's folders on the reader's own machines, the project's root first. Absent: none, or not a project group. */
+  folders?: ExtensionChatFolder[];
+}
+
+/** A chat as a page sees it: a project's folders (paths, machines) only for a page that may read files. */
+export function chatForCapabilities<T extends ExtensionChat>(chat: T, capabilities: readonly string[]): T {
+  if (!chat.folders || capabilities.some((capability) => capability.startsWith('files:'))) return chat;
+  const { folders: _folders, ...rest } = chat;
+  return rest as T;
+}
+
+/** One folder of a project group, as the account records it. Its machine may be offline, or no longer have it. */
+export interface ExtensionChatFolder {
+  /** `folder:<device>/<workspace>`: the place `gugu.files.list({ workspace })` lists, on that machine. */
+  workspace: string;
+  path: string;
+  /** The machine's name. */
+  machine: string;
+  online: boolean;
+  /** Whether this computer is that machine: files elsewhere are only read. Absent on a phone. */
+  thisMachine?: boolean;
 }
 
 /**
@@ -149,6 +170,8 @@ export interface ExtensionWorkspace {
   agentId?: string;
   /** The project it is in; absent for a session in none — a real answer, ❌ "". */
   projectId?: string;
+  /** The folder every task with no project works in, shared by them all: no project's, and not this task's alone. */
+  taskHome?: true;
   /**
    * Absolute path of its working copy — present only with `files:read` or `files:write`. Absent means "not
    * granted" (or not open on this computer), never "none": an extension must not read a missing root as permission to guess.
@@ -1038,6 +1061,8 @@ export function callRefusal(
 export const BRIDGE_ERROR_CODES = [
   'denied', 'invalid', 'failed', 'not-found', 'ambiguous', 'too-large', 'rate-limited', 'content-changed', 'unavailable',
   'name-taken', 'not-installed', 'version-mismatch', 'stale-version', 'machine-outdated',
+  // This computer cannot open that file: it is on another machine, with nothing here to open it through.
+  'elsewhere',
 ] as const;
 export type BridgeErrorCode = (typeof BRIDGE_ERROR_CODES)[number];
 

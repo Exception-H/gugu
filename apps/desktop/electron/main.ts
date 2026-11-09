@@ -6508,6 +6508,7 @@ app.whenReady().then(async () => {
           client: (accessToken) => makeIdentityClient(accessToken) as unknown as DeviceProjectsRpcClient,
           records: () => emdash.listDeviceProjectRecords(),
           warn: (message, fields) => createLogger('device-projects').warn(fields, message),
+          onPublished: () => emdash.projectFoldersPublished(),
         })
         try {
           emdash.onDeviceProjectsMaybeChanged(() => deviceProjectsPublisher?.notify())
