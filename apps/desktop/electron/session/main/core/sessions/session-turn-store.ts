@@ -192,15 +192,22 @@ export async function readStoredTailNow(sessionId: string, limit: number): Promi
  * `limit` caps the count. Only inside `withStoredTurns`.
  */
 export function* storedTurnsNewestFirstNow(sessionId: string, limit = Number.MAX_SAFE_INTEGER, atLeast = 0): Generator<{ seq: number; turn: TranscriptTurn; createdAt: string }> {
-  const seqs = db.select({ seq: sessionTurns.seq, createdAt: sessionTurns.createdAt }).from(sessionTurns)
-    .where(and(eq(sessionTurns.sessionId, sessionId), gte(sessionTurns.seq, atLeast)))
-    .orderBy(desc(sessionTurns.seq)).limit(limit).all();
-  for (const { seq, createdAt } of seqs) {
-    const row = db.select({ data: sessionTurns.data }).from(sessionTurns)
-      .where(and(eq(sessionTurns.sessionId, sessionId), eq(sessionTurns.seq, seq))).limit(1).get();
-    if (row) yield { seq, turn: JSON.parse(row.data) as TranscriptTurn, createdAt };
+  // Sequences a page at a time too: a reader that stops early (deliveries) never lists the whole session.
+  let before = Number.MAX_SAFE_INTEGER, left = limit;
+  while (left > 0) {
+    const seqs = db.select({ seq: sessionTurns.seq, createdAt: sessionTurns.createdAt }).from(sessionTurns)
+      .where(and(eq(sessionTurns.sessionId, sessionId), gte(sessionTurns.seq, atLeast), lt(sessionTurns.seq, before)))
+      .orderBy(desc(sessionTurns.seq)).limit(Math.min(left, STORED_SEQ_PAGE)).all();
+    for (const { seq, createdAt } of seqs) {
+      const row = db.select({ data: sessionTurns.data }).from(sessionTurns)
+        .where(and(eq(sessionTurns.sessionId, sessionId), eq(sessionTurns.seq, seq))).limit(1).get();
+      if (row) yield { seq, turn: JSON.parse(row.data) as TranscriptTurn, createdAt };
+    }
+    if (seqs.length < Math.min(left, STORED_SEQ_PAGE)) return;
+    before = seqs.at(-1)!.seq; left -= seqs.length;
   }
 }
+const STORED_SEQ_PAGE = 200;
 
 /** Record-backed rows without an outcome, with their sequence: a later read may complete them (see below). */
 export function readUnfinishedRecordRowsNow(sessionId: string): Array<{ seq: number; turn: TranscriptTurn }> {
