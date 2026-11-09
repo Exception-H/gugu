@@ -87,8 +87,11 @@ export const McpLibraryView: React.FC<{ onOpenIntegrations: () => void }> = ({ o
         ) : notice && !library.hasData ? null : (
           <div className="flex flex-col gap-6 py-8">
             <section data-slot="mcp-library-gugu" className="flex flex-col gap-3">
-              <h3 className="text-sm font-medium text-foreground">{translate('mcpLibrary.ownGroup')}</h3>
-              <FoldGroup slot="mcp-library-builtin" title={translate('mcpLibrary.builtInGroup')} defaultOpen>
+              <header className="flex flex-col gap-1">
+                <h3 className="text-base font-semibold text-foreground">{translate('mcpLibrary.ownGroup')}</h3>
+                <p className="text-xs text-foreground-muted">{translate('mcpLibrary.ownGroupNote')}</p>
+              </header>
+              <FoldGroup slot="mcp-library-builtin" title={translate('mcpLibrary.builtInGroup')} fixed>
                 {library.provided?.builtIn.map((name) => (
                   <ProvidedRow key={name} name={name} note={translate('mcpLibrary.builtInNote')} />
                 ))}
@@ -97,11 +100,9 @@ export const McpLibraryView: React.FC<{ onOpenIntegrations: () => void }> = ({ o
                 {library.servers.length === 0 ? (
                   <div data-slot="mcp-library-own-empty" className="flex flex-wrap items-center gap-2 px-3 py-2">
                     <span className="mr-auto text-sm text-foreground-muted">{translate('mcpLibrary.ownEmpty')}</span>
-                    <Button variant="outline" size="sm" onClick={() => void openAdd()} disabled={disabled}>
-                      {translate('mcpLibrary.add')}
-                    </Button>
                     <Button variant="ghost" size="sm" data-slot="mcp-library-via-integrations" onClick={onOpenIntegrations}>
                       {translate('mcpLibrary.addViaIntegrations')}
+                      <ArrowRight className="size-3" />
                     </Button>
                   </div>
                 ) : (
@@ -158,7 +159,10 @@ export const McpLibraryView: React.FC<{ onOpenIntegrations: () => void }> = ({ o
             </section>
             {library.installed.length > 0 && (
               <section data-slot="mcp-library-harnesses" className="flex flex-col gap-3">
-                <h3 className="text-sm font-medium text-foreground">{translate('mcpLibrary.harnessesGroup')}</h3>
+                <header className="flex flex-col gap-1">
+                  <h3 className="text-sm font-medium text-foreground-muted">{translate('mcpLibrary.harnessesGroup')}</h3>
+                  <p className="text-xs text-foreground-muted">{translate('mcpLibrary.harnessesGroupNote')}</p>
+                </header>
             {library.installed.map((agent) => (
               <HarnessGroup key={agent.id} agent={agent} library={library} disabled={disabled} onFail={fail} />
             ))}
@@ -199,7 +203,7 @@ function HarnessGroup({
       providerId={agent.id}
       icon={<AgentIcon id={agent.id} size={20} className="shrink-0 rounded-sm" />}
       // @@@raw agent name — harness 名是 provider 数据,原样显示。
-      title={translate('mcpLibrary.harnessGroup', { agent: agent.name })}
+      title={agent.name}
       open={open}
       onOpenChange={setOpen}
     >
@@ -245,6 +249,7 @@ function FoldGroup({
   count,
   action,
   defaultOpen,
+  fixed,
   open,
   onOpenChange,
   children,
@@ -256,6 +261,8 @@ function FoldGroup({
   count?: number;
   action?: { label: string; onClick: () => void };
   defaultOpen?: boolean;
+  /** 只有一两行、不值得折叠的组(内置):常开,没有箭头。 */
+  fixed?: boolean;
   open?: boolean;
   onOpenChange?: (open: boolean) => void;
   children: React.ReactNode;
@@ -264,17 +271,21 @@ function FoldGroup({
     <Collapsible
       data-slot={slot}
       {...(providerId ? { 'data-provider-id': providerId } : {})}
-      {...(open === undefined ? { defaultOpen: !!defaultOpen } : { open })}
+      {...(fixed ? { open: true } : open === undefined ? { defaultOpen: !!defaultOpen } : { open })}
       {...(onOpenChange ? { onOpenChange } : {})}
       className="flex flex-col gap-2"
     >
       <div className="flex min-h-7 items-center gap-2">
-        <CollapsibleTrigger className="group/trigger flex min-w-0 items-center gap-2 rounded-md text-left">
-          <ChevronRight className="size-4 shrink-0 text-foreground-muted transition-transform group-data-[panel-open]/trigger:rotate-90" />
-          {icon}
+        {fixed ? (
           <span className="truncate text-sm text-foreground">{title}</span>
-          {count !== undefined && <span className="shrink-0 text-xs text-foreground-muted">{count}</span>}
-        </CollapsibleTrigger>
+        ) : (
+          <CollapsibleTrigger className="group/trigger flex min-w-0 items-center gap-2 rounded-md text-left">
+            <ChevronRight className="size-4 shrink-0 text-foreground-muted transition-transform group-data-[panel-open]/trigger:rotate-90" />
+            {icon}
+            <span className="truncate text-sm text-foreground">{title}</span>
+            {count ? <span className="shrink-0 text-xs text-foreground-muted">{count}</span> : null}
+          </CollapsibleTrigger>
+        )}
         {action && (
           <Button variant="ghost" size="xs" className="ml-auto text-foreground-muted" onClick={action.onClick}>
             {action.label}
