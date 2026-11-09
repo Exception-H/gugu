@@ -912,7 +912,7 @@ export const extensionsController = createRPCController({
       events.emit(extensionsQuitChangedChannel, { quit: quitExtensions() });
       await retireExtensionPrograms(args.extensionId);
       await clearExtensionStorage(args.extensionId);
-      removeExtensionData(extensionDataRoot(args.extensionId));
+      await removeExtensionData(extensionDataRoot(args.extensionId));
       return { success: true as const, data: { bytes: 0 } };
     } catch (error) {
       log.error('Failed to clear an App\'s data:', error);
@@ -1123,7 +1123,7 @@ export const extensionsController = createRPCController({
       if (!extensionsService().isInstalled(extensionId)) {
         if (identity) void grants!.forgetAccountGrants(identity);
         await clearExtensionSessionData(extensionId);
-        removeUninstalledLeftovers(app.getPath('userData'), extensionDataRoot(extensionId), extensionId);
+        await removeUninstalledLeftovers(app.getPath('userData'), extensionDataRoot(extensionId), extensionId);
       }
       if (forgetQuit(extensionId)) events.emit(extensionsQuitChangedChannel, { quit: quitExtensions() });
       syncExtensionBackgrounds();

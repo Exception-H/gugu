@@ -83,6 +83,6 @@ export async function folderBytes(root: string): Promise<number> {
   return total;
 }
 
-export function removeExtensionData(root: string): void {
-  fs.rmSync(root, { recursive: true, force: true });
+export async function removeExtensionData(root: string): Promise<void> {
+  await fs.promises.rm(root, { recursive: true, force: true });
 }
