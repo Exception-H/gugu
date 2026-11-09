@@ -291,7 +291,8 @@ export function MenuFold({ icon, label, 'data-testid': testId, children }: {
 }
 
 /**
- * 分组线:把性质不同的动作隔开(例如「改名 / 复制地址」与「移除 / 卸载」这类不可轻易撤回的)。
+ * 分组线只隔开**性质不同**的几组:点了就去做 / 去打开的动作、原地切换的开关、不可轻易撤回的(移除 / 卸载 / 退出)。
+ * 同一性质的行之间不画线 —— 页头 ⋯ 的「搜索 / 文件 / 群信息与设置」都是「打开一样东西」,是一组(owner 11-09)。
  * 与会话页 dropdown-menu 的分隔线同一画法:贴满菜单宽度的一条细线。
  */
 export function MenuSeparator({ className }: { className?: string }) {
