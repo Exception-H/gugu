@@ -45,8 +45,8 @@ beforeEach(() => {
 });
 afterEach(() => act(() => root.unmount()));
 
-const draw = (inWorkspace: boolean) => act(() => root.render(
-  <WorkspaceFileView projectId="p" workspaceId="w" path="/home/task/hw1.pdf" absolutePath="/home/task/hw1.pdf" inWorkspace={inWorkspace} onClose={() => {}} />
+const draw = (inWorkspace: boolean, absolutePath = '/home/task/hw1.pdf') => act(() => root.render(
+  <WorkspaceFileView projectId="p" workspaceId="w" path={absolutePath} absolutePath={absolutePath} inWorkspace={inWorkspace} onClose={() => {}} />
 ));
 
 it('watches the directory of the file it shows, reads it again when it changes there, and lets the watch go when closed', async () => {
@@ -65,4 +65,9 @@ it('watches the directory of the file it shows, reads it again when it changes t
 it('watches nothing for a file outside the workspace: no change feed carries it', async () => {
   await draw(false);
   expect(h.watchDirectory).not.toHaveBeenCalled();
+});
+
+it('watches the folder of a Windows path, not the path cut by one character', async () => {
+  await draw(true, 'C:\\Users\\me\\task\\hw1.pdf');
+  expect(h.watchDirectory.mock.calls).toEqual([['p', 'w', 'C:\\Users\\me\\task']]);
 });

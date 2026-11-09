@@ -15,6 +15,7 @@ import { quoteWorkspaceFile } from '@renderer/lib/editor/quote-workspace-file';
 import { fileChangesChannel } from '@shared/core/fs/fsEvents';
 import { workspaceBackend, workspaceEvents, workspaceRpc } from '../workspace-backend/workspace-backend';
 import { watchWorkspaceDirectory } from '../workspace-backend/watch-directory';
+import { parentOf } from '@/components/remoteFolderPath';
 import { openPathWithFailureToast } from '../stores/open-file-in-file-editor';
 import { fileBaseName } from '../stores/workspace-path';
 import { getSessionView } from '../stores/session-selectors';
@@ -76,9 +77,9 @@ export function WorkspaceFileView({ root, tabId, projectId, workspaceId, session
   const [revision, setRevision] = useState(0);
   // What it re-reads on: the change feed, which on Linux only carries directories someone watches.
   useEffect(() => {
-    if (!inWorkspace) return;
-    const directory = absolutePath.slice(0, absolutePath.lastIndexOf('/'));
-    return directory ? watchWorkspaceDirectory(projectId, workspaceId, directory) : undefined;
+    // A peek's path is the machine's own (a Windows one keeps its backslashes); one with no separator names no directory.
+    if (!inWorkspace || !/[\\/]/.test(absolutePath)) return;
+    return watchWorkspaceDirectory(projectId, workspaceId, parentOf(absolutePath));
   }, [projectId, workspaceId, absolutePath, inWorkspace]);
   useEffect(
     () =>
