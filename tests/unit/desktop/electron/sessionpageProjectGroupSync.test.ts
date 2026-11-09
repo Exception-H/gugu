@@ -1300,8 +1300,14 @@ describe('#4526 A:owner 删除 ⇒ 释放本机足迹 + 墓碑挡住重新开户
     expect(tombstones[0]).toMatchObject({ gugu_user_id: original!.guguAgentUserId, conversation_id: info.sessionId })
     expect(await provisionSessionpageAgentForSession(info, deps)).toBeNull()
     const takeBirthGroup = vi.fn(async () => ({ chatId: 'old-social-group', asTask: true }))
+    const { setSessionpageAgentCardRevoker } = await import(SUT)
+    const revokedCards: string[] = []
+    setSessionpageAgentCardRevoker(async (agentUserId: string) => { revokedCards.push(agentUserId) })
     const replacement = await provisionSessionpageAgentForSession({ ...info, replacesRemovedIdentity: original!.guguAgentUserId }, { ...deps, takeBirthGroup })
     await settleCloud()
+    // The removed identity's Gugu MCP card must go first, or the restored session cannot get one.
+    expect(revokedCards).toEqual([original!.guguAgentUserId])
+    setSessionpageAgentCardRevoker(null)
     expect(replacement!.guguAgentUserId).not.toBe(original!.guguAgentUserId)
     expect(roster).toHaveLength(1)
     expect(roster[0]).toMatchObject({ gugu_user_id: replacement!.guguAgentUserId, cache: { emdash_session_id: info.sessionId, emdash_project_id: info.projectId } })
