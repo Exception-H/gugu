@@ -487,6 +487,7 @@ export default {
     "forwarding": "转发中…",
     "noResults": "未找到对话",
     "noTargets": "暂无可转发的对话",
+    "note": "留言",
     "preview": {
       "attachment": "[附件]",
       "card": "[卡片]",

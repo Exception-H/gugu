@@ -12,7 +12,7 @@ import { ForwardMessageDialog } from './ForwardMessageDialog'
  */
 export function ChatFileForwardHost() {
   const { t } = useTranslation('messaging')
-  const { chats, forwardMessage, sendAttachmentsToChat } = useChatStore('chats', 'forwardMessage', 'sendAttachmentsToChat')
+  const { chats, forwardMessage, sendAttachmentsToChat, sendMessageToChat } = useChatStore('chats', 'forwardMessage', 'sendAttachmentsToChat', 'sendMessageToChat')
   const { user } = useAuth()
   const [request, setRequest] = useState<Extract<AppForwardFilesDetail, { files: unknown }> | { copies: File[] } | null>(null)
   useEffect(() => {
@@ -25,12 +25,11 @@ export function ChatFileForwardHost() {
     return () => window.removeEventListener(APP_FORWARD_FILES_EVENT, open)
   }, [])
   if (!request || !user) return null
-  const forward = async (targetChatIds: string[]) => {
-    if ('copies' in request) {
-      for (const chatId of targetChatIds) await sendAttachmentsToChat(chatId, request.copies)
-      return
-    }
-    for (const file of request.files) for (const chatId of targetChatIds) await forwardMessage(file, chatId)
+  // The note follows the files, as a forward's note follows what has no words to quote.
+  const forward = async (targetChatIds: string[], note: string) => {
+    if ('copies' in request) for (const chatId of targetChatIds) await sendAttachmentsToChat(chatId, request.copies)
+    else for (const file of request.files) for (const chatId of targetChatIds) await forwardMessage(file, chatId)
+    if (note.trim()) for (const chatId of targetChatIds) await sendMessageToChat(chatId, note.trim())
   }
   const named = 'copies' in request ? request.copies : request.files
   const [only] = named

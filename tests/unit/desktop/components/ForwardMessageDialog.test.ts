@@ -107,6 +107,27 @@ afterEach(() => {
   vi.restoreAllMocks()
 })
 describe('ForwardMessageDialog', () => {
+  it('hands the typed note to the forward', async () => {
+    const onForward = vi.fn(async () => {})
+    await act(async () => {
+      root.render(createElement(ForwardMessageDialog, {
+        messages: [message({ chat_id: 'src' })],
+        chats: [chat({ id: 'src', name: 'Source' }), chat({ id: 'a', name: 'Alpha' })],
+        sourceChatId: 'src', onForward, onClose: vi.fn(),
+      }))
+    })
+    await flush()
+    const note = document.body.querySelector<HTMLInputElement>('[data-testid="forward-note"]')!
+    await act(async () => {
+      Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!.call(note, '看一下这条')
+      note.dispatchEvent(new Event('input', { bubbles: true }))
+    })
+    await act(async () => { (document.body.querySelector('[data-pick-row="a"]') as HTMLElement).dispatchEvent(new MouseEvent('click', { bubbles: true })) })
+    const forwardBtn = Array.from(document.body.querySelectorAll('button')).find((b) => b.textContent === '转发')!
+    await act(async () => { forwardBtn.dispatchEvent(new MouseEvent('click', { bubbles: true })); await Promise.resolve() })
+    await flush()
+    expect(onForward).toHaveBeenCalledWith(['a'], '看一下这条')
+  })
   it('forwards the message to selected chats and closes', async () => {
     const onForward = vi.fn(async () => {})
     const onClose = vi.fn()
@@ -135,7 +156,7 @@ describe('ForwardMessageDialog', () => {
       await Promise.resolve()
     })
     await flush()
-    expect(onForward).toHaveBeenCalledWith(['a'])
+    expect(onForward).toHaveBeenCalledWith(['a'], '')
     expect(onClose).toHaveBeenCalledTimes(1)
   })
   it('surfaces forward failures without closing', async () => {
@@ -200,7 +221,7 @@ describe('ForwardMessageDialog', () => {
       await Promise.resolve()
     })
     await flush()
-    expect(onForward).toHaveBeenCalledWith(['a'])
+    expect(onForward).toHaveBeenCalledWith(['a'], '')
     expect(onClose).toHaveBeenCalledTimes(1)
   })
 })

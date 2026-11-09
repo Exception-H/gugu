@@ -6,6 +6,7 @@ import { chatDisplayName } from '@gugu/core/shared/ui/chatModels'
 import { ChatPickSheet } from './ChatPickSheet'
 import { useChatStore } from '../../store/chatContext'
 import { ShareToAppsRow } from '../share/ShareToAppsRow'
+import { Field } from '../ui/Field'
 
 interface ForwardMessageDialogProps {
   // @@@multi-select (#988) - one or many messages to forward. Single-forward passes [msg];
@@ -18,8 +19,8 @@ interface ForwardMessageDialogProps {
   chats: ChatItem[]
   /** Source chat — excluded from the target list. */
   sourceChatId: string
-  /** Forward the message(s) into every selected chat. Rejects to surface an error. */
-  onForward: (targetChatIds: string[]) => Promise<void>
+  /** Forward into every selected chat, with the forwarder's note (may be empty). Rejects to surface an error. */
+  onForward: (targetChatIds: string[], note: string) => Promise<void>
   onClose: () => void
 }
 
@@ -28,6 +29,7 @@ export function ForwardMessageDialog({ messages = [], preview: subject, topRow, 
   const { identitiesById } = useChatStore('identitiesById')
   const [selected, setSelected] = useState<Set<string>>(new Set())
   const [query, setQuery] = useState('')
+  const [note, setNote] = useState('')
   const [forwarding, setForwarding] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
@@ -60,14 +62,14 @@ export function ForwardMessageDialog({ messages = [], preview: subject, topRow, 
     setForwarding(true)
     setError(null)
     try {
-      await onForward(Array.from(selected))
+      await onForward(Array.from(selected), note)
       onClose()
     } catch (e) {
       setError(e instanceof Error ? e.message : t('forward.failed'))
     } finally {
       setForwarding(false)
     }
-  }, [selected, onForward, onClose, t])
+  }, [selected, note, onForward, onClose, t])
 
   // Only mounted by callers when there is ≥1 message; guard the impossible-empty case so the
   // single-message preview branch can deref messages[0] without an optional chain.
@@ -95,8 +97,8 @@ export function ForwardMessageDialog({ messages = [], preview: subject, topRow, 
       placeholder={t('forward.searchChats')}
       empty={chats.length <= 1 ? t('forward.noTargets') : t('forward.noResults')}
       top={topRow ?? <ShareToAppsRow messages={messages} onClose={onClose} />}
-      above={
-        // Forwarded message preview
+      above={<>
+        {/* Forwarded message preview */}
         <div
           style={{
             border: '1px solid var(--border-color)',
@@ -123,7 +125,11 @@ export function ForwardMessageDialog({ messages = [], preview: subject, topRow, 
             </>
           ))}
         </div>
-      }
+        <Field.Root className="mt-2">
+          <Field.Label className="sr-only">{t('forward.note')}</Field.Label>
+          <Field.Input value={note} placeholder={t('forward.note')} data-testid="forward-note" onChange={(event) => setNote(event.target.value)} />
+        </Field.Root>
+      </>}
       picked={t('forward.selected', { count: selected.size })}
       actionLabel={forwarding ? t('forward.forwarding') : t('forward.title')}
       onAction={() => void handleForward()}

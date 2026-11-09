@@ -489,6 +489,7 @@ export default {
     "forwarding": "Forwarding…",
     "noResults": "No chats found",
     "noTargets": "No chats available for forwarding",
+    "note": "Add a note",
     "preview": {
       "attachment": "[Attachment]",
       "card": "[Card]",
