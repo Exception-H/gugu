@@ -48,6 +48,7 @@ const probeModelDialects: readonly ModelConfigDialect[] = [
   'qwen-openai-env',
   'gemini-env',
   'mimocode-config-content',
+  'kilocode-config-content',
   'copilot-provider-env',
   'kimi-model-env',
   'qoder-byok-settings',
@@ -373,13 +374,13 @@ describe('pluginRegistry', () => {
     // 2026-09-21(#6097):goose 随插件删掉,这一组 10 → 9。
     const sessionAcpNone9 = [
       'auggie', 'cline', 'devin',
-      'junie', 'kilocode', 'kiro', 'mistral', 'oh-my-pi', 'qoder',
+      'junie', 'kiro', 'mistral', 'oh-my-pi', 'qoder',
     ];
     for (const providerId of addressable24) {
       const provider = pluginRegistry.get(providerId)!;
       // OpenCode and MiMo Code use the provider-agnostic serve/attach host adapter;
       // droid retains its daemon adapter while the remaining providers stay local-session.
-      const expected = providerId === 'opencode' || providerId === 'mimocode'
+      const expected = providerId === 'opencode' || providerId === 'mimocode' || providerId === 'kilocode'
         ? { identity: 'addressable', messageTransport: 'router', hostAdapter: 'opencode-serve-attach-v1' }
         : {
             identity: 'addressable',
@@ -428,14 +429,14 @@ describe('pluginRegistry', () => {
     // 见 impl/antigravity/session-bundle.ts 抬头。
     // zcode 自 2026-10-17 起在列(#7385):桥 @gugu-acp/zcode-acp 把 `session/new.mcpServers` 原样交给 ZCode app-server,
     // 注入的 stdio 工具被模型调到(mcp__<server>__<tool>);身份自述走 session-context。见 impl/zcode/session-bundle.ts 抬头。
-    expect(sessionAcpProviders).toEqual(['codex', 'claude', 'grok', 'qwen', 'droid', 'antigravity', 'cursor', 'copilot', 'gemini', 'opencode', 'hermes', 'kimi', 'pi', 'mimocode', 'zcode', 'codebuddy', 'dsh']);
+    expect(sessionAcpProviders).toEqual(['codex', 'claude', 'grok', 'qwen', 'droid', 'antigravity', 'cursor', 'copilot', 'gemini', 'opencode', 'hermes', 'kimi', 'kilocode', 'pi', 'mimocode', 'zcode', 'codebuddy', 'dsh']);
 
     const localSessionTransportProviders = pluginRegistry.getAll()
       .filter((provider) => provider.capabilities.sessionBundle.sessionpage['tui']?.messageTransport === 'local-session')
       .map((provider) => provider.metadata.id);
     // OpenCode and MiMo Code use serve/attach; the remaining addressable TUI legs stay local-session.
     expect(localSessionTransportProviders.sort()).toEqual(
-      addressable24.filter((id) => id !== 'opencode' && id !== 'mimocode').sort(),
+      addressable24.filter((id) => id !== 'opencode' && id !== 'mimocode' && id !== 'kilocode').sort(),
     );
 
     expect(sessionAcpNone9.every((providerId) =>
@@ -769,7 +770,9 @@ describe('pluginRegistry', () => {
     // dsh 2026-11-05 接入:只有 acp 腿,mcp('acp-session')、env('child-process')、model('config-file')、
     //   autonomy('config-file',`--patch` 里的权限插件行)、promptBlocks('session-context')五格 native
     //   ⇒ **+5**,87 → **92**(Windows 85 → 90)。
-    expect(checks).toHaveLength(ANTIGRAVITY_SESSION_TUI_ENABLED ? 92 : 90);
+    // kilocode 2026-11-08 五维接通(mcp / env / model / autonomy / promptBlocks 都走 `KILO_CONFIG_CONTENT`,
+    //   逐格 flat native)⇒ **+5**,92 → **97**(Windows 90 → 95)。
+    expect(checks).toHaveLength(ANTIGRAVITY_SESSION_TUI_ENABLED ? 97 : 95);
     for (const check of checks) {
       expect(check.populated, check.label + ': ' + JSON.stringify(check.surfaces)).toBe(true);
     }
@@ -855,6 +858,7 @@ describe('pluginRegistry', () => {
         provider.metadata.id === 'gemini' ||
         provider.metadata.id === 'grok' ||
         provider.metadata.id === 'hermes' ||
+        provider.metadata.id === 'kilocode' ||
         provider.metadata.id === 'kimi' ||
         provider.metadata.id === 'oh-my-pi' ||
         provider.metadata.id === 'opencode' ||
@@ -1382,6 +1386,7 @@ describe('pluginRegistry', () => {
       // #7525:codebuddy 也没有登录子命令,走协议登录(ACP `authenticate`,国际版 / 中国版两条)。
       'codebuddy',
       'codex',
+      'kilocode',
       'kimi',
       'mimocode',
       'opencode',
