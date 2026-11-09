@@ -642,7 +642,7 @@ const enUSCoreMessages = {
   'chat.sideChatForkFailed': 'Side chat could not be opened.',
   'chat.providerSessionMissingTitle': 'Task cannot be restored',
   'chat.providerSessionMissingDescription':
-    'The previous conversation history is no longer available. You can start this task again from its first message.',
+    'The previous conversation history is no longer available. Starting again won’t redo what was already done: it picks up from your next message.',
   'chat.providerSessionMissingAction': 'Start again',
   'chat.providerSessionMissingActionBusy': 'Starting…',
   'chat.providerSessionMissingLegacyDescription':
@@ -1713,7 +1713,7 @@ const zhCNCoreMessages: Record<CoreSessionMessageKey, string> = {
   'chat.sideChatForkFailed': '无法打开侧边聊天。',
   'chat.providerSessionMissingTitle': '会话无法恢复',
   'chat.providerSessionMissingDescription':
-    '之前的对话记录已丢失。你可以从第一条消息重新开始这个会话。',
+    '之前的对话记录已丢失。重新开始不会把已经做过的事再做一遍，从你发的下一条消息接着来。',
   'chat.providerSessionMissingAction': '重新开始',
   'chat.providerSessionMissingActionBusy': '正在开始…',
   'chat.providerSessionMissingLegacyDescription':

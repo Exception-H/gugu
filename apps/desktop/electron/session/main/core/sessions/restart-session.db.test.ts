@@ -18,7 +18,8 @@ vi.mock('@main/db/client', () => ({
 }));
 vi.mock('@main/lib/events', () => ({ events: { emit: vi.fn() } }));
 vi.mock('@main/lib/logger', () => ({ log: { info: vi.fn(), warn: vi.fn(), error: vi.fn() } }));
-vi.mock('@main/core/agent-status/agent-status-writer', () => ({ agentStatusWriter: { restart: vi.fn(async () => {}) } }));
+const restartStatus = vi.hoisted(() => vi.fn(async () => {}));
+vi.mock('@main/core/agent-status/agent-status-writer', () => ({ agentStatusWriter: { restart: restartStatus } }));
 vi.mock('./hydrateSession', () => ({ hydrateSession: vi.fn(async () => { mocks.calls.push('hydrate'); }) }));
 vi.mock('./session-life', async () => {
   const { enqueuePending } = await vi.importActual<typeof import('./session-pending')>('./session-pending');
@@ -83,6 +84,21 @@ describe('restartSession on a session-life session', () => {
     await restartSession('p', 's');
     const rows = fixture.sqlite.prepare("SELECT message_id AS id, state FROM session_pending WHERE session_id = 's' ORDER BY seq").all();
     expect(rows).toEqual([{ id: 's:restart:0', state }, { id: 's:restart:1', state: 'queued' }]);
+  });
+
+  it('a session whose first turn ran is not replayed: nothing is queued, nothing runs, its first-turn payload is gone', async () => {
+    fixture.sqlite.prepare("UPDATE sessions SET config = json_set(config, '$.initialPrompt', '把测试跑一遍', '$.initialMessageId', 'm1') WHERE id = 's'").run();
+    fixture.sqlite.prepare("INSERT INTO session_turns (id, session_id, seq, turn_id, data) VALUES ('s:0', 's', 0, 't0', ?)")
+      .run(JSON.stringify({ id: 't0', seq: 0, initiator: 'user', items: [{ kind: 'message', id: 'm1', seq: 0, role: 'user', text: '把测试跑一遍' }] }));
+    await restartSession('p', 's');
+    expect(mocks.calls).toEqual(['reconfigure:s']);
+    expect(fixture.sqlite.prepare("SELECT count(*) AS n FROM session_pending WHERE session_id = 's'").get()).toEqual({ n: 0 });
+    const row = fixture.sqlite.prepare("SELECT provider_session_id AS p, config FROM sessions WHERE id = 's'").get() as { p: string | null; config: string };
+    expect(row.p).toBeNull();
+    expect(JSON.parse(row.config)).not.toHaveProperty('initialPrompt');
+    expect(JSON.parse(row.config)).not.toHaveProperty('initialMessageId');
+    expect(JSON.parse(row.config)).not.toHaveProperty('initialQueue');
+    expect(restartStatus).toHaveBeenLastCalledWith({ sessionId: 's', projectId: 'p' }, false);
   });
 
 });
