@@ -1,5 +1,5 @@
 import { existsSync, unlinkSync } from 'node:fs';
-import { windowFrameName } from '@gugu/session-core/session-record/window-cache/frame';
+import { windowFrameName, type WindowFrameKey } from '@gugu/session-core/session-record/window-cache/frame';
 import { openFixture } from '@tooling/utils/db';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { mkdtemp, rm } from 'node:fs/promises';
@@ -12,7 +12,6 @@ import { connect, memoryTransportPair } from '@gugu/session-wire/api';
 import { connectWindowCommitHost } from './window-commit-host';
 import type { WindowCommittedEvent } from './window-commit-tap';
 import * as publishers from './window-commit-publisher';
-import { windowCommitProjectionDirectory } from './window-commit-projection-disk';
 import * as service from './service';
 import { persistCommittedTurn } from '../sessions/session-turn-store';
 
@@ -40,6 +39,12 @@ vi.mock('./desktop-source-reader', () => ({ createDesktopSourceWindowReader: () 
     turns: [], removedTurnIds: [], settlements: [], pendingLongRecords: [] } } }); return () => {};
 } }) }));
 
+/** Projection frames live in immutable packs; remove the pack that holds this frame. */
+function packPath(key: WindowFrameKey) {
+  const row = fixture.sqlite.prepare('SELECT group_id g FROM session_window_pack_positions WHERE frame_name=?').get(windowFrameName(key)) as { g: string } | undefined;
+  if (!row) throw new Error('Frame has no committed pack position');
+  return join(state.root, 'session-window-cache', 'committed', `${row.g}.pack`);
+}
 let fixture: Awaited<ReturnType<typeof openFixture>>, connected: Awaited<ReturnType<typeof connectWindowCommitHost>>;
 let pair: ReturnType<typeof memoryTransportPair>, source: EventStreamSource<WindowCommittedEvent>;
 const input = { conversationId: 'c', subscriptionId: 'view' };
@@ -97,8 +102,7 @@ it('preserves committed historical null-first proof and reports a missing public
   const read = publishers.readWindowCommitPublication;
   vi.spyOn(publishers, 'readWindowCommitPublication').mockImplementation(async (...args) => {
     const key = { ...args[0].receipt.binding, kind: 'head' as const, cursor: 'publisher:job' };
-    const path = join(windowCommitProjectionDirectory(join(state.root, 'session-window-cache', 'committed'), key), windowFrameName(key));
-    unlinkSync(path); return read(...args);
+    unlinkSync(packPath(key)); return read(...args);
   });
   expect(await service.windowLivePosition(request)).toMatchObject({ ok: false, error: { code: 'needs_location' } });
   expect(state.primary).not.toHaveBeenCalled();
@@ -124,8 +128,7 @@ it.each(['publication', 'head', 'source'])('rechecks the independent %s after th
       : target === 'head' ? { ...binding, kind: 'head' as const, cursor: 'publisher:job' }
       : { ...binding, kind: 'projection' as const, cursor: `publisher:${publication.buildId}:publication` };
     const committed = join(state.root, 'session-window-cache', 'committed');
-    const path = target === 'source' ? join(committed, `${windowFrameName(key)}.source`)
-      : join(windowCommitProjectionDirectory(committed, key), windowFrameName(key));
+    const path = target === 'source' ? join(committed, `${windowFrameName(key)}.source`) : packPath(key);
     removed.push(existsSync(path)); queueMicrotask(() => unlinkSync(path));
     return publication;
   });
