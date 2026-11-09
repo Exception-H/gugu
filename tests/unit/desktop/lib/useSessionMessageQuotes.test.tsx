@@ -146,7 +146,7 @@ describe('task message copy menus and legacy prompt restoration', () => {
     expect(c.editor.current.setText).toHaveBeenCalledWith('retry this');
     c.dispose(); c.root.remove();
   });
-  it('forwards an answer with the prompt that opened its turn, and lifts the bubble on the phone', async () => {
+  it('forwards an answer, and lifts the bubble on the phone', async () => {
     const forwards: unknown[] = [];
     const capture = (event: Event) => forwards.push((event as CustomEvent).detail);
     window.addEventListener('gugu:forward-pieces-open', capture);
@@ -157,7 +157,7 @@ describe('task message copy menus and legacy prompt restoration', () => {
       expect(asked().lift.bubble).toBe(c.root);
       expect(asked().onEditMessage).toBeUndefined();
       await act(async () => asked().onForward());
-      expect(forwards).toEqual([[{ kind: 'text', sender: null, senderId: null, text: 'What is the harbor?' }, { kind: 'text', sender: 'Agent', text: 'same words' }]]);
+      expect(forwards).toEqual([[{ kind: 'text', sender: 'Agent', text: 'same words' }]]);
       c.dispose(); c.root.remove();
     } finally { window.removeEventListener('gugu:forward-pieces-open', capture); }
   });

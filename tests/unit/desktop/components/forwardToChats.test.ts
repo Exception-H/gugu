@@ -50,27 +50,40 @@ describe('forwardToChats', () => {
   })
 })
 
+const lead = { kind: 'text' as const, sender: 'Han', text: 'Context.' }
+const LEAD = '> **Han**\n>\n> Context.\n\n'
+
 describe('forwardToChats, a message whose row names no sender', () => {
   it('quotes it under the name the piece gives', async () => {
     const send = io()
-    await forwardToChats([{ kind: 'message', message: message({ id: 's', sender_user_id: null, content: 'Shipped.' }), sender: 'Codex' }], ['g1'], '', send)
-    expect((send.forwardMessage.mock.calls[0] as unknown as [MessageItem])[0].content).toBe('> **Codex**\n>\n> Shipped.')
+    await forwardToChats([lead, { kind: 'message', message: message({ id: 's', sender_user_id: null, content: 'Shipped.' }), sender: 'Codex' }], ['g1'], '', send)
+    expect((send.forwardMessage.mock.calls[0] as unknown as [MessageItem])[0].content).toBe(LEAD + '> **Codex**\n>\n> Shipped.')
   })
 })
 
 describe('forwardToChats, delivered words', () => {
   it('names them as this account knows the sender, not as the delivery labelled them', async () => {
     const send = io()
-    await forwardToChats([{ kind: 'text', sender: 'Mei (咕咕号 7)', senderId: 'u-mei', text: 'Friday?' }], ['g1'], '', send)
-    expect(send.sendMessageToChat).toHaveBeenCalledWith('g1', '> **Mei**\n>\n> Friday?')
+    await forwardToChats([lead, { kind: 'text', sender: 'Mei (咕咕号 7)', senderId: 'u-mei', text: 'Friday?' }], ['g1'], '', send)
+    expect(send.sendMessageToChat).toHaveBeenCalledWith('g1', LEAD + '> **Mei**\n>\n> Friday?')
   })
 })
 
 describe('forwardToChats, speakers no name is known for', () => {
   it('quotes them as an unknown member and still forwards: a reply to someone never loaded, a sender who left', async () => {
     const send = io()
-    await forwardToChats([{ kind: 'message', message: message({ id: 'r', sender_user_id: 'u-gone', content: 'Agreed.', reply_to_message_id: 'x', reply_to_content: 'Friday?', reply_to_sender_user_id: 'u-never-loaded' }) }], ['g1', 'g2'], '', send)
+    await forwardToChats([lead, { kind: 'message', message: message({ id: 'r', sender_user_id: 'u-gone', content: 'Agreed.', reply_to_message_id: 'x', reply_to_content: 'Friday?', reply_to_sender_user_id: 'u-never-loaded' }) }], ['g1', 'g2'], '', send)
     expect(send.forwardMessage).toHaveBeenCalledTimes(2)
-    expect((send.forwardMessage.mock.calls[0] as unknown as [MessageItem])[0].content).toBe('> **Unknown member**\n>\n> > **Unknown member**：Friday?\n>\n> Agreed.')
+    expect((send.forwardMessage.mock.calls[0] as unknown as [MessageItem])[0].content).toBe(LEAD + '> **Unknown member**\n>\n> > **Unknown member**：Friday?\n>\n> Agreed.')
+  })
+})
+
+describe('forwardToChats, a single piece', () => {
+  it('goes as its own words, the note after it', async () => {
+    const send = io()
+    const agreed = message({ id: 'b', content: 'Agreed.', reply_to_message_id: 'a', reply_to_content: 'Friday?', reply_to_sender_user_id: 'u-mei' })
+    await forwardToChats([{ kind: 'message', message: agreed }], ['g1'], 'for you', send)
+    expect(send.forwardMessage).toHaveBeenCalledWith(agreed, 'g1')
+    expect(send.sendMessageToChat).toHaveBeenCalledWith('g1', 'for you')
   })
 })

@@ -38,37 +38,43 @@ export function pieceSender(piece: Extract<ForwardPiece, { kind: 'text' }>, name
 }
 
 /**
- * One forward into each picked chat. Words (text messages and plain text) go as one message: the note, then each piece
- * quoted under who said it. Files, widgets and cards go as themselves, after it; with nothing to quote, the note follows them.
+ * One forward into each picked chat. Several pieces of words (text messages and plain text) go as one message: the note,
+ * then each piece quoted under who said it. A single piece goes as its own words. Files, widgets and cards go as themselves,
+ * after the words; a note not written into a quote follows everything.
+ *
+ * Chats are written to one after another: a failure part-way (the outbox refusing a write) leaves the earlier chats sent.
  */
 export async function forwardToChats(pieces: readonly ForwardPiece[], targetChatIds: readonly string[], note: string, io: Send & Names): Promise<void> {
-  const quoted: ForwardQuoteItem[] = []
-  let source: MessageItem | undefined
+  const words: { quote: ForwardQuoteItem; message?: MessageItem }[] = []
   const own: MessageItem[] = []
   for (const piece of pieces) {
     if (piece.kind === 'text') {
-      if (piece.text.trim()) quoted.push({ sender: pieceSender(piece, io), text: piece.text })
+      if (piece.text.trim()) words.push({ quote: { sender: pieceSender(piece, io), text: piece.text } })
       continue
     }
     const { message } = piece
     if (message.content_type !== 'text') { own.push(message); continue }
     if (message.retracted_at || !message.content?.trim()) continue
-    source ??= message
-    quoted.push({
+    words.push({ message, quote: {
       sender: piece.sender ?? nameOf(message.sender_user_id, io),
       text: message.content,
       replyTo: message.reply_to_content ? { sender: message.reply_to_sender_user_id ? nameOf(message.reply_to_sender_user_id, io) : io.unknownName, text: message.reply_to_content } : null,
-    })
+    } })
   }
-  const body = quoted.length ? forwardQuote(quoted, note) : null
+  const quoted = words.length > 1
+  const body = quoted ? forwardQuote(words.map(word => word.quote), note) : null
+  // A chat message among the words keeps the link to where they came from (read rights, the forwarded badge).
+  const source = words.find(word => word.message)?.message
   for (const chatId of targetChatIds) {
     if (body !== null) {
-      // A chat message among the words keeps the link to where they came from (read rights, the forwarded badge).
       if (source) await io.forwardMessage({ ...source, content: body, reply_to_message_id: null, reply_to_content: null, reply_to_sender_user_id: null }, chatId)
       else await io.sendMessageToChat(chatId, body)
     }
+    const single = !quoted ? words[0] : undefined
+    if (single?.message) await io.forwardMessage(single.message, chatId)
+    else if (single) await io.sendMessageToChat(chatId, single.quote.text)
     for (const message of own) await io.forwardMessage(message, chatId)
-    if (body === null && note.trim()) await io.sendMessageToChat(chatId, note.trim())
+    if (!quoted && note.trim()) await io.sendMessageToChat(chatId, note.trim())
   }
 }
 

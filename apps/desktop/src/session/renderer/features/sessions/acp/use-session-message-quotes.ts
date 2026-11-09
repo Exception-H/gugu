@@ -14,7 +14,6 @@ import type { AcpChatStore } from './acp-chat-store';
 import { quotedIntoDraft, selectedMessageText, sessionPromptBody } from './session-message-quote';
 import { sessionForwardPieces } from './session-message-forward';
 import { openForward } from '@/components/chat/forwardToChats';
-import type { TranscriptTurn } from '@gugu/session-chat-ui';
 import { bindMessageQuoteTouchMenu } from './message-quote-touch-menu';
 
 type Target = Parameters<NonNullable<ChatCommands['onMessageTextMount']>>[0];
@@ -28,11 +27,9 @@ export type SessionMessageActions = {
   phone?: boolean;
 };
 
-/** The turns a forwarded answer finds its prompt in. */
-type TranscriptReader = { chatState: { transcript: { state: { committedTurns: readonly TranscriptTurn[]; activeTurnSnapshot?: TranscriptTurn | null } } } };
 
 /** The chat's own message menu on the timeline's bubbles, and restoration of previously saved prompts. */
-export function useSessionMessageQuotes(store: (Pick<AcpChatStore, 'sessionId' | 'setDraftText'> & TranscriptReader) | null | undefined, editor: MutableRefObject<PromptEditorRef | null>, actions: SessionMessageActions) {
+export function useSessionMessageQuotes(store: Pick<AcpChatStore, 'sessionId' | 'setDraftText'> | null | undefined, editor: MutableRefObject<PromptEditorRef | null>, actions: SessionMessageActions) {
   const { translate } = useSessionMessages();
   const latest = useRef({ store, translate, actions });
   latest.current = { store, translate, actions };
@@ -96,9 +93,7 @@ export function useSessionMessageQuotes(store: (Pick<AcpChatStore, 'sessionId' |
       const anchor = clicked?.closest<HTMLAnchorElement>('a[href]');
       const link = anchor?.getAttribute('href');
       const commands = target.commands?.();
-      const transcript = current.chatState.transcript.state;
-      const turns = transcript.activeTurnSnapshot ? [...transcript.committedTurns, transcript.activeTurnSnapshot] : transcript.committedTurns;
-      const pieces = sessionForwardPieces({ itemId: target.itemId, message, text: message.text, sender: target.sender?.() ?? null, carried, turns });
+      const pieces = sessionForwardPieces({ itemId: target.itemId, message, text: message.text, sender: target.sender?.() ?? null, carried });
       showRendererMessageMenu({
         x: event.clientX, y: event.clientY, isRetracted: false, content: text, hasSelection: selection !== undefined,
         ...(acts.phone ? { lift: { bubble: menuRoot, touchY: event.clientY, mine: message.role === 'user' } } : {}),
