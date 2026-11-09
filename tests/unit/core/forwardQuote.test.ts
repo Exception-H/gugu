@@ -15,7 +15,7 @@ describe('forwardQuote', () => {
 
   it('carries the line a reply answered, cut to one line', () => {
     const text = forwardQuote([{ sender: 'Han', text: 'Agreed.', replyTo: { sender: 'Mei', text: `ship it on Friday\n${'x'.repeat(100)}` } }])
-    expect(text.split('\n')[2]).toMatch(/^> \*\*Mei\*\*：ship it on Friday x+…$/)
+    expect(text.split('\n')[2]).toMatch(/^> > \*\*Mei\*\*：ship it on Friday x+…$/)
     expect(text.split('\n')[2]!.length).toBeLessThan(100)
     expect(text.endsWith('> Agreed.')).toBe(true)
   })

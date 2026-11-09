@@ -8,7 +8,7 @@ function message(overrides: Partial<MessageItem>): MessageItem {
 }
 const names: Record<string, string> = { 'u-han': 'Han', 'u-mei': 'Mei', me: 'Me' }
 function io() {
-  return { forwardMessage: vi.fn(async () => {}), sendMessageToChat: vi.fn(async () => undefined), nameOf: (id: string | null) => names[id ?? 'me']! }
+  return { forwardMessage: vi.fn(async () => {}), sendMessageToChat: vi.fn(async () => undefined), nameOf: (id: string | null) => names[id ?? 'me']!, knownName: (id: string) => names[id] }
 }
 
 describe('forwardToChats', () => {
@@ -29,7 +29,7 @@ describe('forwardToChats', () => {
 
   it('sends words with no chat message behind them as a new message', async () => {
     const send = io()
-    await forwardToChats([{ kind: 'text', sender: null, text: 'Why?' }, { kind: 'text', sender: 'u-han', text: 'Because.' }], ['g1'], '', send)
+    await forwardToChats([{ kind: 'text', sender: null, text: 'Why?' }, { kind: 'text', sender: 'Han', text: 'Because.' }], ['g1'], '', send)
     expect(send.forwardMessage).not.toHaveBeenCalled()
     expect(send.sendMessageToChat).toHaveBeenCalledWith('g1', '> **Me**\n>\n> Why?\n\n> **Han**\n>\n> Because.')
   })
@@ -47,5 +47,21 @@ describe('forwardToChats', () => {
     await forwardToChats([{ kind: 'message', message: message({ retracted_at: '2026-11-09T00:00:00Z' }) }], ['g1'], '', send)
     expect(send.forwardMessage).not.toHaveBeenCalled()
     expect(send.sendMessageToChat).not.toHaveBeenCalled()
+  })
+})
+
+describe('forwardToChats, a message whose row names no sender', () => {
+  it('quotes it under the name the piece gives', async () => {
+    const send = io()
+    await forwardToChats([{ kind: 'message', message: message({ id: 's', sender_user_id: null, content: 'Shipped.' }), sender: 'Codex' }], ['g1'], '', send)
+    expect((send.forwardMessage.mock.calls[0] as unknown as [MessageItem])[0].content).toBe('> **Codex**\n>\n> Shipped.')
+  })
+})
+
+describe('forwardToChats, delivered words', () => {
+  it('names them as this account knows the sender, not as the delivery labelled them', async () => {
+    const send = io()
+    await forwardToChats([{ kind: 'text', sender: 'Mei (咕咕号 7)', senderId: 'u-mei', text: 'Friday?' }], ['g1'], '', send)
+    expect(send.sendMessageToChat).toHaveBeenCalledWith('g1', '> **Mei**\n>\n> Friday?')
   })
 })
