@@ -14,6 +14,7 @@ import { mimeTypeFromName } from '@gugu/core/shared/imageMime.mjs';
 import { quoteWorkspaceFile } from '@renderer/lib/editor/quote-workspace-file';
 import { fileChangesChannel } from '@shared/core/fs/fsEvents';
 import { workspaceBackend, workspaceEvents, workspaceRpc } from '../workspace-backend/workspace-backend';
+import { watchWorkspaceDirectory } from '../workspace-backend/watch-directory';
 import { openPathWithFailureToast } from '../stores/open-file-in-file-editor';
 import { fileBaseName } from '../stores/workspace-path';
 import { getSessionView } from '../stores/session-selectors';
@@ -73,6 +74,12 @@ export function WorkspaceFileView({ root, tabId, projectId, workspaceId, session
     return () => { current = false; };
   }, [projectId]);
   const [revision, setRevision] = useState(0);
+  // What it re-reads on: the change feed, which on Linux only carries directories someone watches.
+  useEffect(() => {
+    if (!inWorkspace) return;
+    const directory = absolutePath.slice(0, absolutePath.lastIndexOf('/'));
+    return directory ? watchWorkspaceDirectory(projectId, workspaceId, directory) : undefined;
+  }, [projectId, workspaceId, absolutePath, inWorkspace]);
   useEffect(
     () =>
       workspaceEvents.on(fileChangesChannel, ({ workspaceId: changed, update }) => {
