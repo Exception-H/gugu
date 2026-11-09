@@ -861,6 +861,7 @@ export function ChatRoot(props: ChatRootProps) {
   let lastVisibleStart = 0;
   let lastVisibleEnd = -1;
 
+  const bodySizeOf = (messageId: string) => state().session.state.bodySize(messageId);
   const estimateContext = (): MeasureCtx => ({
         theme: theme(),
         translate: props.context.translate,
@@ -874,6 +875,7 @@ export function ChatRoot(props: ChatRootProps) {
         caches: caches(),
         measureEpoch: measureEpoch(),
         expandedId: expandedUserId(),
+        bodySize: bodySizeOf,
         editingMessage: editingMessage(),
         finalReplyId: finalReplyId(),
         latestConversationMessageId: latestConversationMessageId(),
@@ -1447,6 +1449,7 @@ export function ChatRoot(props: ChatRootProps) {
       caches: caches(),
       measureEpoch: measureEpoch(),
       expandedId: expandedUserId(),
+      bodySize: bodySizeOf,
       editingMessage: editingMessage(),
       finalReplyId: finalReplyId(),
       latestConversationMessageId: latestConversationMessageId(),
@@ -1933,6 +1936,7 @@ export function ChatRoot(props: ChatRootProps) {
       isCollapsed: () => false,
       expanded: () => false,
       caches: caches(),
+      bodySize: bodySizeOf,
     };
     const count = prependedUnits.length;
     // 前插改变了所有行号;这一批的锚位由下面按 anchorId 重算,旧的逐行增量作废(行号已失效)。
@@ -2339,6 +2343,7 @@ export function ChatRoot(props: ChatRootProps) {
                                 measureEpoch={measureEpoch()}
                                 expandedId={expandedUserId()}
                                 editingMessage={editingMessage()}
+                                bodySize={bodySizeOf}
                                 finalReplyId={finalReplyId()}
                                 latestConversationMessageId={latestConversationMessageId()}
                                 background={backgroundAttachment()}

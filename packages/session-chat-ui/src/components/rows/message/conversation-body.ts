@@ -59,5 +59,5 @@ export function hasConversationActions(item: ChatMessage): boolean {
 
 /** 对话布局里这条有没有要画的正文或附件:只有过程、一个字没回的那一轮没有气泡,也不留时间那一行。 */
 export function hasConversationBody(item: ChatMessage): boolean {
-  return Boolean(item.streaming || item.text?.trim() || item.attachments?.length);
+  return Boolean(item.streaming || item.text?.trim() || item.attachments?.length || item.sentMessages?.length);
 }

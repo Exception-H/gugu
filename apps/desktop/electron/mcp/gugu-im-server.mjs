@@ -2406,7 +2406,10 @@ async function handleFile(args, deps) {
       ? { file: groupFileLink(message.file_item_id, { version: message.file_version }), version: message.file_version }
       : {}
     const blocks = await messageDeliveryBlocks(deps, message.id)
-    return JSON.stringify({ status: 'sent', message_id: message.id, file_name: fileName, ...pinned, ...(blocks.length ? { not_delivered_to: blocks, delivery_note: '对方已归档、未送达; retained in history, no replay after restoration' } : {}),
+    // Size and type let the task timeline draw the same file card as the chat (sentMessageOf), without reading the row back.
+    const sent = parseAttachmentContent(String(message.content ?? ''), message)
+    const card = sent ? { size_bytes: sent.sizeBytes, mime_type: sent.mimeType, ...(typeof message.file_blob_id === 'string' ? { file_blob_id: message.file_blob_id } : {}) } : {}
+    return JSON.stringify({ status: 'sent', message_id: message.id, file_name: fileName, ...card, ...pinned, ...(blocks.length ? { not_delivered_to: blocks, delivery_note: '对方已归档、未送达; retained in history, no replay after restoration' } : {}),
       source_link: conversationLink(chatId, String(message.id).replace(/^msg:/, '')) })
   }
   if (args.action === 'download-attachment') {
@@ -2938,7 +2941,8 @@ export async function sendWidgetOf(context, args, content, injected = {}, state 
   if (!members.some(member => String(member.user_id) === context.agentId)) throw new Error('widget_send: the agent must be a member of this chat')
   const row = buildMessageRow(context, { id: randomUUID(), chatId, content, contentType: 'widget', replyToMessageId, threadRootId: context.threadRootId ?? null })
   await postCommandMessageRow(deps, row)
-  return `sent (id=${row.id})`
+  // The task timeline draws this send from its arguments and this receipt (sentMessageOf): the chat it landed in rides here.
+  return JSON.stringify({ status: 'sent', message_id: row.id, source_link: conversationLink(chatId, row.id) })
 }
 
 // ── MCP server（官方 SDK） ─────────────────────────────────────────

@@ -122,6 +122,8 @@ import { useComposerFileUploads } from './use-composer-file-uploads';
 import { shellPort } from '@renderer/lib/shell-port';
 import { getRendererSession } from '@/lib/sessionPublication';
 import { useAgents } from '@renderer/lib/stores/use-agents';
+import { agentForksOn } from '@shared/core/agents/agent-payload';
+import { forkTask } from '@renderer/features/sessions/fork-task';
 import {
   ThreadWelcome,
   type ThreadSuggestion,
@@ -2076,7 +2078,12 @@ export const AcpChatPanel = observer(function AcpChatPanel({
   const messageEditPending = store?.reverting ?? false;
   // The agent speaking in this transcript is this task; its name is the task's one name.
   const conversationAgentName = sessionStore?.data.title ?? null;
-  const quotes = useSessionMessageQuotes(store, editorApiRef);
+  const canForkTask = !!store && agentForksOn(agents?.find(agent => agent.id === providerId)?.capabilities, 'acp');
+  const quotes = useSessionMessageQuotes(store, editorApiRef, {
+    canEdit: (itemId) => (store?.isRejectedInput(itemId) ?? false) || (historyActionsEnabled && (store?.canRevertMessage(itemId) ?? false)),
+    onEdit: (itemId) => store?.beginMessageEdit(itemId),
+    ...(canForkTask ? { onForkTask: () => forkTask({ projectId: store.projectId, sessionId: store.sessionId, navigate, translate }) } : {}),
+  });
   const transcriptCommands = useMemo<ChatCommands>(
     () => ({
       ...outputMenu.commands,
@@ -2101,6 +2108,8 @@ export const AcpChatPanel = observer(function AcpChatPanel({
         ...messageEdit,
         pending: messageEditPending,
         canSubmit: (historyActionsEnabled || !!store?.isRejectedInput(messageEdit.itemId)) && !messageEditPending && messageEdit.text.trim().length > 0,
+        // A rejected input has no reply yet: sending it removes nothing.
+        notice: store?.isRejectedInput(messageEdit.itemId) ? undefined : translate('transcript.editRemoves'),
         onChange: (text) => store?.changeMessageEdit(messageEdit.itemId, text),
         onCancel: () => store?.cancelMessageEdit(messageEdit.itemId),
         onSubmit: () => void store?.sendMessageEdit(messageEdit.itemId),
@@ -2225,7 +2234,7 @@ export const AcpChatPanel = observer(function AcpChatPanel({
         if (store) dismissSubagent(store.sessionId, entryId);
       },
     }),
-    [store, quotes.onMessageTextMount, quotes.restorePrompt, sourceMessage.reveal, sourceMessage.flashMessageId, conversationAgentName, historyActionsEnabled, messageEdit, messageEditPending, handleViewerOpen, translate, membershipLock?.modelName, outputMenu.commands]
+    [store, translate, quotes.onMessageTextMount, quotes.restorePrompt, sourceMessage.reveal, sourceMessage.flashMessageId, conversationAgentName, historyActionsEnabled, messageEdit, messageEditPending, handleViewerOpen, translate, membershipLock?.modelName, outputMenu.commands]
   );
 
   // A freshly-created task can publish its tab before the resource manager has finished attaching

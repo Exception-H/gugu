@@ -120,6 +120,9 @@ export interface MessageItem {
   file_version?: number | null
   /** #7290 悄悄话的附件:不进群文件夹,直接指字节;能读这条消息的人才签得到链接。 */
   file_blob_id?: string | null
+  /** A file an agent handed its owner in the task timeline (an owner notification): it stays in that session's folder on
+   * the session's machine and is read the way that session's timeline reads it. `session_id`: filled in by the host. */
+  session_file?: { path: string; sha256: string; session_id?: string | null } | null
   /** Authorized pinned-file display metadata; original reads still use the file resolver. */
   file_metadata?: FileMetadata | null
   /** Local sending preview only; committed dimensions come from the verified file metadata. */
