@@ -122,10 +122,6 @@ export type DiffViewSnapshot = {
   prTab?: 'files' | 'commits' | 'checks';
 };
 
-export type TerminalDrawerActiveItem =
-  | { kind: 'terminal'; id: string }
-  | { kind: 'script'; id: string };
-
 export interface ActiveFile {
   path: string;
   /** Storage layer: how content is fetched.
@@ -157,15 +153,12 @@ export type SessionViewSnapshot = {
   sidebarTab?: string;
   isSidebarCollapsed?: boolean;
   focusedRegion: 'main' | 'bottom';
-  isTerminalDrawerOpen?: boolean;
-  terminalDrawerActiveItem?: TerminalDrawerActiveItem;
   /** Takes precedence over tabManager when present. */
   tabGroups?: TabGroupsSnapshot;
   /** @deprecated Use tabGroups. Kept for migration from single-pane snapshots. */
   tabManager?: TabManagerSnapshot;
   /** @deprecated Legacy field from before the unified tab refactor. Used only for migration. */
   sessions?: TabViewSnapshot;
-  terminals?: TabViewSnapshot;
   editor?: EditorViewSnapshot;
   diffView?: DiffViewSnapshot;
 };

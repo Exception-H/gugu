@@ -12,6 +12,7 @@ export {
   diskWindowsShimReader,
   escapeCmdCommand,
   escapeCmdShimArgument,
+  findWindowsCommandPaths,
   planDirectSpawn,
   resolveWindowsHandoffLaunch,
   type DirectSpawnPlan,

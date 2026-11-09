@@ -420,7 +420,21 @@ export function ChatRoot(props: ChatRootProps) {
   const [viewHeight, setViewHeight] = createSignal(600);
   const [containerWidth, setContainerWidth] = createSignal(0);
 
-  const updateContentColumnGeometry = () => syncContentColumnGeometry(widthProbeEl, scrollEl, outerEl, setContainerWidth);
+  // Only the activity pin's backdrop reads this. A custom property on the root would restyle every row on each width change.
+  const [pinFrame, setPinFrame] = createSignal({ left: 0, width: 0 }, { equals: (a, b) => a.left === b.left && a.width === b.width });
+  // @@@width-keeps-the-reading-spot — an anchor is a row plus pixels into it. New width rewraps that row, so the same pixels
+  // are a different part of it; a long reply makes that many sections. The spot is the same share of the row.
+  const setColumnWidth = (width: number) => {
+    if (width === containerWidth()) return;
+    const m = anchor();
+    const i = m.kind === 'anchor' && m.edge === 'top' ? unitIndexOf(m.itemId, m.edge) : -1;
+    if (m.kind !== 'anchor' || i < 0) return void setContainerWidth(width);
+    const before = virt.size(i);
+    setContainerWidth(width);
+    measureUnitAt(i);
+    if (before > 0 && virt.size(i) !== before) setAnchor({ ...m, offset: (m.offset * virt.size(i)) / before });
+  };
+  const updateContentColumnGeometry = () => syncContentColumnGeometry(widthProbeEl, scrollEl, setColumnWidth, setPinFrame);
 
   const updateSlotPadBottom = () => {
     if (props.composer !== 'slot' || effectiveComposerPlacement() === 'center') {
@@ -2312,7 +2326,7 @@ export function ChatRoot(props: ChatRootProps) {
                                 style={isActivityPin() ? { top: `${userTopGap + activityPinOffset(unitIndex) - (u()?.gapBefore ?? 0)}px` } : { 'pointer-events': 'auto' }}
                               >
                               <Show when={isActivityPin()}><div class={`${pinBackdrop} ${activityPinBackdrop}`}
-                                style={{ top: `${-userTopGap}px` }}
+                                style={{ top: `${-userTopGap}px`, left: `${pinFrame().left}px`, width: `${pinFrame().width}px` }}
                                 data-chat-pin-backdrop="" aria-hidden="true" /></Show>
                               <UnitRow
                                 unit={u()!}

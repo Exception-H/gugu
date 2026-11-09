@@ -34,7 +34,7 @@ import {
 } from '@/lib/icons'
 import { OnContactsHidden } from './contacts/OnContactsHidden'
 import { useContactsStore } from '../store/contactsContext'
-import { useChatStore } from '../store/chatContext'
+import { useChatStore, useStoreValueBy } from '../store/chatContext'
 import { useAuth } from '../store/auth'
 import { NewFriendsPanel } from './NewFriendsPanel'
 import { AddFriendSearch } from './AddFriendSearch'
@@ -1045,8 +1045,8 @@ export const ContactsPanel = memo(function ContactsPanel({
   } = useContactsStore()
   const { user } = useAuth()
   const { toast } = useToast()
-  const { chats: liveChats, pinChat, markUnread, setChatNotificationLevel, leaveGroup, deleteChat, refreshChats } = useChatStore('chats', 'pinChat', 'markUnread', 'setChatNotificationLevel', 'leaveGroup', 'deleteChat', 'refreshChats')
-  const chats = useMemo(() => liveChats, [JSON.stringify(liveChats.map((c) => [c.id, c.kind, c.peer_user_id, c.is_pinned, c.notification_level]))]) // eslint-disable-line react-hooks/exhaustive-deps -- 只读私聊对象、置顶、通知档:这几项没变就沿用上一份,不跟着每条消息把几百行联系人重渲染
+  const { pinChat, markUnread, setChatNotificationLevel, leaveGroup, deleteChat, refreshChats } = useChatStore('pinChat', 'markUnread', 'setChatNotificationLevel', 'leaveGroup', 'deleteChat', 'refreshChats')
+  const chats = useStoreValueBy((store) => store.chats, (store) => store.chats.map((c) => [c.id, c.kind, c.peer_user_id, c.is_pinned, c.notification_level]))
   const [selectedNav, setSelectedNav] = useState<LeftSel>('contacts')
   const [mobilePane, setMobilePane] = useState<MobileContactsPane>('nav')
   const [query, setQuery] = useState('')
