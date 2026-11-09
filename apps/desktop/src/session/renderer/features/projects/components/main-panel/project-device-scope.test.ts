@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { adoptLegacyScope, foldersInScope, selectedScope } from './project-device-scope';
+import { defaultRunMachine, foldersInScope } from './project-device-scope';
 import type { ProjectFoldersState, ShownFolder } from './project-folders';
 
 const folder = (projectId: string): ShownFolder => ({ projectId, workspaceId: projectId, path: '/same/path', kind: 'root', branch: null, attachedAt: null, sessionIds: [], offline: projectId === 'remote', deviceId: projectId === 'remote' ? 'device-b' : null });
@@ -9,13 +9,19 @@ const state: ProjectFoldersState = { folders: [local, remote], chosen: local, fr
 const deviceOf = (id: string) => id === 'remote' ? 'device-b' : null;
 
 describe('project device scope', () => {
-  it('all devices includes devices subsequently linked to the project', () => {
-    expect(selectedScope(null, ['local', 'device-b', 'device-c'])).toEqual(['local', 'device-b', 'device-c']);
-    expect(selectedScope(['local'], ['local', 'device-b'])).toEqual(['local']);
-  });
-  it('discards stale device IDs without producing an unusable empty scope', () => {
-    expect(selectedScope(['removed', 'device-b'], ['local', 'device-b'])).toEqual(['device-b']);
-    expect(selectedScope(['removed'], ['device-b'])).toEqual(['device-b']);
+  // DESIGN「新建任务」默认机器:上次那台且在线 → 本机(有文件夹)→ 在线的第一台 → 都离线才回上次那台 → 第一台。
+  it('defaults to the last machine only while it is online, else this computer, else the first online one', () => {
+    const local = { key: 'local', online: true };
+    const gpu = { key: 'gpu', online: true };
+    const juma = { key: 'juma', online: false };
+    expect(defaultRunMachine([local, gpu], 'gpu')).toBe('gpu');
+    expect(defaultRunMachine([local, juma], 'juma')).toBe('local');
+    expect(defaultRunMachine([juma, gpu], undefined)).toBe('gpu');
+    expect(defaultRunMachine([juma, { key: 'wen', online: false }], 'wen')).toBe('wen');
+    expect(defaultRunMachine([juma], undefined)).toBe('juma');
+    // A machine without this project's folder is never a default, whatever was saved.
+    expect(defaultRunMachine([gpu], 'mac1')).toBe('gpu');
+    expect(defaultRunMachine([], 'gpu')).toBeNull();
   });
   it('a remote-only scope chooses that remote folder, including when it is offline', () => {
     const scoped = foldersInScope(state, ['device-b'], deviceOf);
@@ -34,13 +40,6 @@ describe('project device scope', () => {
     const moved = { ...remote, projectId: 'local' };
     const scoped = foldersInScope({ ...state, folders: [local, moved] }, ['device-b'], () => null);
     expect(scoped.folders).toEqual([moved]);
-  });
-  it('the scope saved under the old row id is read once, moved to the project group key, and the old key dropped', () => {
-    expect(adoptLegacyScope({ 'row-1': ['device-b'], other: null }, 'chat-1', 'row-1')).toEqual({ other: null, 'chat-1': ['device-b'] });
-    // Already moved, nothing under the old key, or no group yet (same key): nothing to do.
-    expect(adoptLegacyScope({ 'chat-1': ['local'], 'row-1': ['device-b'] }, 'chat-1', 'row-1')).toBeNull();
-    expect(adoptLegacyScope({}, 'chat-1', 'row-1')).toBeNull();
-    expect(adoptLegacyScope({ 'row-1': ['device-b'] }, 'row-1', 'row-1')).toBeNull();
   });
   it('a scoped device that has not answered yet is unknown (loading), not a device without folders', () => {
     const waiting = { ...state, folders: [local], chosen: local, unanswered: ['remote'] };

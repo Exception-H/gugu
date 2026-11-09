@@ -320,9 +320,9 @@ describe('新建框用到的那几件(#6264)', () => {
     const stop = autorun(() => {
       seen.push(store.newSessionTarget?.deviceId ?? null);
     });
-    store.requestNewSession('dev-1', '/srv/app');
+    store.requestNewSession('dev-1');
     expect(seen.at(-1)).toBe('dev-1');
-    expect(store.takeNewSessionTarget()).toEqual({ deviceId: 'dev-1', projectPath: '/srv/app' });
+    expect(store.takeNewSessionTarget()).toEqual({ deviceId: 'dev-1' });
     expect(seen.at(-1)).toBeNull();
     stop();
   });
@@ -340,14 +340,6 @@ describe('新建框用到的那几件(#6264)', () => {
     store.openAddMachine();
     expect(openAddMachine).toHaveBeenCalledTimes(1);
     withAdd();
-  });
-
-  it('最近用过的文件夹按机器记,新的在前', () => {
-    const store = new RemoteHostsStore();
-    store.rememberRecentFolder('dev-1', '/srv/a');
-    store.rememberRecentFolder('dev-1', '/srv/b');
-    expect(store.recentFolders('dev-1')).toEqual(['/srv/b', '/srv/a']);
-    expect(store.recentFolders('dev-2')).toEqual([]);
   });
 });
 

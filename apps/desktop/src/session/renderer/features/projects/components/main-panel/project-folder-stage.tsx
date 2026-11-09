@@ -1,5 +1,8 @@
 import { messageForUser } from '@/lib/userFacingError';
 import { useEffect, type ReactNode } from 'react';
+import { localMachineChoice } from '@renderer/features/remote-hosts/machine-choice';
+import { MachinePicker } from '@renderer/features/remote-hosts/machine-picker';
+import { remoteChoice } from '@renderer/features/remote-hosts/use-new-session-machine';
 import { getProjectStore, projectDisplayName } from '@renderer/features/projects/stores/project-selectors';
 import { useMachineCreateContext } from '@renderer/features/sessions/use-machine-create-target';
 import { electronApi } from '@renderer/lib/electron-api';
@@ -11,7 +14,7 @@ import { projectGroupsStore } from '@renderer/features/projects/stores/project-g
 import { machineRegistry } from '@renderer/lib/machine-routing';
 import { remoteHostsStore } from '@renderer/features/remote-hosts/remote-hosts-store';
 import { useEnsureMounted } from '@renderer/features/projects/hooks/use-ensure-mounted';
-import { foldersInScope, useProjectDeviceScope } from './project-device-scope';
+import { foldersInScope, machineOfKey, scopeKey, useProjectRunMachine } from './project-device-scope';
 import { ProjectFolderCard, shortHome, type AttachMachine, type FolderCardMachine } from './project-folder-card';
 import { linkFolderOnMachine, planAttach, type LinkFolderDeps } from '@shared/core/projects/project-attach-flow';
 import { MAX_PROJECT_FOLDERS, useProjectFolders, type AttachResult } from './project-folders';
@@ -56,8 +59,12 @@ export function useProjectFolderStage(projectId: string, { floating = false, onC
     const deviceId = machineRegistry.machineOf(id) ?? null;
     return [deviceId, deviceId ? describeMachine(deviceId) : thisComputer] as const;
   })).values()];
-  const scope = useProjectDeviceScope(projectGroupsStore.chatIdOf(rowId) ?? rowId, rowId, projectMachines);
-  const scopedFolders = foldersInScope(folders, scope.selected, (id) => machineRegistry.machineOf(id) ?? null, (deviceId) => {
+  // 在哪台跑:有这个项目文件夹的机器里选一台(默认规则见 defaultRunMachine);没有文件夹的机器在选择器分隔线下,点了先挂文件夹。
+  const runMachine = useProjectRunMachine(
+    projectGroupsStore.chatIdOf(rowId) ?? rowId,
+    projectMachines.map((machine) => ({ key: scopeKey(machine.id), online: machine.online })),
+  );
+  const scopedFolders = foldersInScope(folders, runMachine.selected, (id) => machineRegistry.machineOf(id) ?? null, (deviceId) => {
     const state = remoteHostsStore.connectionState(deviceId);
     return state === 'asleep' || state === 'waking';
   });
@@ -69,10 +76,7 @@ export function useProjectFolderStage(projectId: string, { floating = false, onC
   useEffect(() => remoteHostsStore.start(), []);
   // 在哪台上开工:选中的那个文件夹自己记着(folder.deviceId);没选 = 这一页的项目所在的那台。
   const executionDevice = scopedFolders.chosen ? scopedFolders.chosen.deviceId : machineRegistry.machineOf(targetProjectId) ?? null;
-  const machineContext = useMachineCreateContext(executionDevice ? {
-    deviceId: executionDevice, projectId: targetProjectId,
-    projectPath: getProjectStore(targetProjectId)?.data?.path ?? null,
-  } : null);
+  const machineContext = useMachineCreateContext(executionDevice ? { deviceId: executionDevice, projectId: targetProjectId } : null);
   const machineLabel = (machine: string | null) => (machine ? describeMachine(machine).label : thisComputer.label);
   const showConfirm = useShowModal('confirmActionModal');
 
@@ -230,8 +234,8 @@ export function useProjectFolderStage(projectId: string, { floating = false, onC
   };
 
   // 「+」:在选的那台机器上挑文件夹 —— 本机弹系统的目录框,别的机器由那台机器画目录树(同「新建项目 › 使用现有文件夹」)。
-  const pickAndAttach = (machine: string | null) => {
-    if (refuseWhenFull()) return;
+  const pickAndAttach = (machine: string | null): Promise<boolean> => {
+    if (refuseWhenFull()) return Promise.resolve(false);
     const picked = machine
       ? (remoteHostsStore.connectionState(machine) === 'asleep'
           ? remoteHostsStore.wakeCloudComputer(machine)
@@ -241,9 +245,16 @@ export function useProjectFolderStage(projectId: string, { floating = false, onC
           title: translate('projects.folders.attachDialogTitle', { projectName: displayName }),
           message: translate('projects.folders.attachDialogMessage'),
         });
-    void picked
-      .then((path) => (path ? attachOn(machine, path) : undefined))
-      .catch((error: unknown) => log.error('[project-home] 挂文件夹失败', { projectId, error }));
+    return picked
+      .then(async (path) => {
+        if (!path) return false;
+        await attachOn(machine, path);
+        return true;
+      })
+      .catch((error: unknown) => {
+        log.error('[project-home] 挂文件夹失败', { projectId, error });
+        return false;
+      });
   };
   // 从 Finder 拖进来的是这台电脑上的文件夹:挂到这个项目在这台电脑上的那一个(没有就在这台电脑上接进来)。
   const dropFolder = (file: File) => {
@@ -255,13 +266,38 @@ export function useProjectFolderStage(projectId: string, { floating = false, onC
     void attachOn(null, path);
   };
 
+  // 托盘上的机器选择器:上面是有这个项目文件夹的机器(淡色字 = 那台上的文件夹),分隔线下是还没有的,点了先在那台上挑文件夹、挂上就选中它。
+  const choiceOf = (deviceId: string | null) => (deviceId ? remoteChoice(deviceId, translate) : localMachineChoice('local', thisComputer.label));
+  const folderOn = (key: string) => folders.folders?.find((folder) => scopeKey(folder.deviceId) === key && folder.kind === 'root')
+    ?? folders.folders?.find((folder) => scopeKey(folder.deviceId) === key);
+  const withFolder = new Set(projectMachines.map((machine) => scopeKey(machine.id)));
+  const runMachinePicker = (
+    <MachinePicker
+      size="compact"
+      testId="composer-device-picker"
+      wakeOnPick="retry"
+      machines={projectMachines.map((machine) => choiceOf(machine.id))}
+      selectedId={runMachine.selected[0] ?? null}
+      onSelect={(key) => runMachine.pick(machineOfKey(key))}
+      metaOf={(machine) => { const folder = folderOn(machine.id); return folder ? shortHome(folder.path) : null; }}
+      elsewhere={{
+        machines: attachMachines.filter((machine) => !withFolder.has(scopeKey(machine.id))).map((machine) => choiceOf(machine.id)),
+        onPick: (key) => {
+          const machine = machineOfKey(key);
+          void pickAndAttach(machine).then((picked) => { if (picked) runMachine.pick(machine); });
+        },
+      }}
+      onAddMachine={remoteHostsStore.canAddMachine ? () => remoteHostsStore.openAddMachine() : undefined}
+    />
+  );
+
   const card: ReactNode = (
     <ProjectFolderCard
       projectId={rowId}
       projectName={displayName}
       folders={{ ...folders, chosen: scopedFolders.chosen, choose: (workspaceId) => {
         const folder = folders.folders?.find((item) => item.workspaceId === workspaceId);
-        if (folder) scope.include(folder.deviceId);
+        if (folder) runMachine.pick(folder.deviceId);
         folders.choose(workspaceId);
         onChosen?.();
       } }}
@@ -276,7 +312,7 @@ export function useProjectFolderStage(projectId: string, { floating = false, onC
     />
   );
   return {
-    rowId, displayName, folders, scope, scopedFolders, targetProjectId, machineContext, projectMachines,
+    rowId, displayName, folders, runMachine, runMachinePicker, scopedFolders, targetProjectId, machineContext, projectMachines,
     machineOf, pickAndAttach, card,
   };
 }

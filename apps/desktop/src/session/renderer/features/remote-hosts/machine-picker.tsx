@@ -9,7 +9,7 @@
 // 触发器里只放:机器种类图标 · (别的机器才有的)在线点 · 名字 · (离线时)淡色「离线」 · 箭头。
 // 系统与连法只在菜单行里:行的写法同项目选择器的行(图标 + 名字,右边一段淡色的 small)。
 import type { ReactNode } from 'react';
-import { Check, ChevronDown, Cloud, Monitor, Plus, Server } from '@/lib/icons';
+import { Check, ChevronDown, ChevronRightIcon, Cloud, Monitor, Plus, Server } from '@/lib/icons';
 import { cn } from '@renderer/utils/utils';
 import {
   DropdownMenu,
@@ -144,6 +144,8 @@ export function MachinePicker({
   lockedHint,
   wakeOnPick = 'always',
   stateInHeading = false,
+  metaOf,
+  elsewhere,
 }: {
   machines: readonly MachineChoice[];
   selectedId: string | null;
@@ -181,6 +183,13 @@ export function MachinePicker({
    * trigger drops its own dot and 「离线」 so the state is said once. The menu rows keep theirs.
    */
   stateInHeading?: boolean;
+  /** 行上那段淡色字由上层给(项目里:那台机器上这个项目的文件夹路径);缺省 = 系统与连法。 */
+  metaOf?: (machine: MachineChoice) => string | null;
+  /**
+   * 分隔线下的另一组:选它之前还差一步(项目里:那台机器上还没有这个项目的文件夹,点了先选文件夹)。
+   * 点了调 `onPick`,❌ 当场选中 —— 那一步做完,由上层再选它。
+   */
+  elsewhere?: { machines: readonly MachineChoice[]; onPick: (machineId: string) => void };
 }) {
   const { translate } = useSessionMessages();
   const ordered = orderMachines(machines);
@@ -289,7 +298,7 @@ export function MachinePicker({
             ordered.map((machine) => {
               const isSelected = machine.id === selected?.id;
               const offline = !machineAcceptsWork(machine);
-              const rowMeta = machineMeta(machine, translate, { withLink: true });
+              const rowMeta = metaOf?.(machine) ?? machineMeta(machine, translate, { withLink: true });
               return (
                 <DropdownMenuItem
                   key={machine.id}
@@ -326,7 +335,28 @@ export function MachinePicker({
             })
           )}
         </div>
-        {!hasOtherMachines ? (
+        {elsewhere && elsewhere.machines.length > 0 ? (
+          <>
+            <DropdownMenuSeparator className="mx-0 my-0" />
+            <div className="max-h-48 overflow-y-auto py-1" data-testid={`${testId}-elsewhere`}>
+              {orderMachines(elsewhere.machines).map((machine) => {
+                const offline = !machineAcceptsWork(machine);
+                return (
+                  <DropdownMenuItem
+                    key={machine.id}
+                    data-device-id={machine.id}
+                    data-online={offline ? 'false' : 'true'}
+                    disabled={offline}
+                    onClick={() => elsewhere.onPick(machine.id)}
+                  >
+                    <MachineRow machine={machine} meta={null} trailing={<ChevronRightIcon aria-hidden="true" className="size-3.5 shrink-0 text-foreground-muted" />} />
+                  </DropdownMenuItem>
+                );
+              })}
+            </div>
+          </>
+        ) : null}
+        {!hasOtherMachines && !(elsewhere && elsewhere.machines.length > 0) ? (
           // 空状态:名下只有这一台。一句话说清别的机器是干嘛的,下面就是去添加的入口。
           <>
             <DropdownMenuSeparator className="mx-0 my-0" />

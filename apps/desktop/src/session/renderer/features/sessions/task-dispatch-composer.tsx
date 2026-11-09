@@ -1,5 +1,5 @@
 import { observer } from 'mobx-react-lite';
-import { useEffect, useState } from 'react';
+import { useEffect, useState, type ReactElement } from 'react';
 import { readComposerVerbChat, setComposerVerb, takeComposerCarry, useComposerVerb } from '@/lib/composerVerbBridge';
 import { platform } from '@/platform';
 import { machineLibraryHost } from '@renderer/features/library/library-host';
@@ -7,7 +7,10 @@ import { useNewSessionMachine } from '@renderer/features/remote-hosts/use-new-se
 import { useSessionMessages } from '@renderer/localization/use-session-messages';
 import { sessionpageMessageHost } from '@renderer/lib/sessionpage-message-host';
 import { log } from '@renderer/utils/logger';
-import { ComposerBirthGroupChip, ComposerProjectPicker, mountedProjects } from './composer-context-tray';
+import { ComposerBirthGroupChip, ComposerProjectPicker, accountProjects } from './composer-context-tray';
+import { ComposerFolderPicker } from '@renderer/features/projects/components/main-panel/composer-folder-picker';
+import { useProjectFolderStage } from '@renderer/features/projects/components/main-panel/project-folder-stage';
+import { sidebarStore } from '@renderer/lib/stores/app-state';
 import { composerDrafts } from './composer-drafts';
 import { ComposerTray } from './composer-tray';
 import { ensureImplicitSessionHomeProjectId } from './implicit-session-home-project';
@@ -24,7 +27,8 @@ export function taskDispatchDraftKey(chatId: string): string {
  * gugu-dev#181「派任务」:对话块的输入框选了「新任务」(composerVerbBridge)时,换上来的就是这个框 —— 与新建会话页
  * 同一个托盘 + NewSessionComposer,❌ 另一条建会话的路。发出去的那句话由宿主落成这个对话里的一张任务卡
  * (taskChatId),结果回这里;建完人留在原处、框还原成发消息。
- * 托盘是 项目 · 这台电脑 · 群名。项目按这个对话记(没选过 = 最近一次选的);`joinChat` = 这个 agent 进群
+ * 托盘是 项目 · 机器 · (文件夹)· 群名。选了项目:机器和文件夹与项目块同一套(useProjectFolderStage);没选 = 选哪台机器的任务工作区。
+ * 项目按这个对话记(没选过 = 最近一次选的);`joinChat` = 这个 agent 进群
  * (群里派的;私聊里 agent 进不去,卡留在私聊、结果回它自己的会话)。项目块里的新任务是项目首页那个框(ProjectTaskComposer)。
  */
 export const TaskDispatchComposer = observer(function TaskDispatchComposer({
@@ -61,6 +65,7 @@ export const TaskDispatchComposer = observer(function TaskDispatchComposer({
     if (remembered && selectedId === undefined) setSelectedId(remembered);
   }, [remembered, selectedId]);
   const implicitProjectId = useImplicitProjectId(!selectedId);
+  // 记着的项目若是并进某一行的(别的机器上同一个项目),按那一行选(与侧栏、项目块同一个身份)。
 
   const pickProject = (projectId: string | undefined) => {
     setSelectedId(projectId);
@@ -70,36 +75,85 @@ export const TaskDispatchComposer = observer(function TaskDispatchComposer({
       });
     }
   };
-  const { remote, machineContext, devicePicker, projectPicker } = useNewSessionMachine(
-    <ComposerProjectPicker includeRemote selectedId={selectedId} onSelect={pickProject} />
-  );
-  const effectiveProjectId = selectedId ?? implicitProjectId;
-
-  const close = () => setComposerVerb(verbKey, null);
+  const projectPicker = <ComposerProjectPicker selectedId={selectedId} onSelect={pickProject} />;
+  const tray = {
+    draftKey,
+    chatId,
+    birthChip: joinChat && chatName ? <ComposerBirthGroupChip name={chatName} /> : null,
+    composer: {
+      placeholder: placeholder ?? ((agent: string) => translate('taskDispatch.placeholder', { agent })),
+      verb: composerVerbLook('task', { label: translate('taskDispatch.task'), onCancel: () => cancelComposerVerb(verbKey, draftKey), testId: 'task-dispatch' }),
+      taskChatId: chatId,
+      openAfterCreate: false,
+      birthChatId: joinChat ? chatId : undefined,
+      onSessionCreated: (result: { projectId: string; sessionId: string }) => {
+        setComposerVerb(verbKey, null);
+        onSessionCreated?.(result);
+      },
+    },
+  };
   return (
     <div data-testid="task-dispatch-composer" data-chat-id={chatId}>
-      <ComposerTray
-        projectPicker={projectPicker}
-        devicePicker={devicePicker}
-        folderPicker={joinChat && chatName ? <ComposerBirthGroupChip name={chatName} /> : null}
-        host={machineContext?.host ?? machineLibraryHost(null)}
-      >
-        <NewSessionComposer
-          key={remote?.deviceId ?? 'local'}
-          draftKey={draftKey}
-          placeholder={placeholder ?? ((agent) => translate('taskDispatch.placeholder', { agent }))}
-          verb={composerVerbLook('task', { label: translate('taskDispatch.task'), onCancel: () => cancelComposerVerb(verbKey, draftKey), testId: 'task-dispatch' })}
-          taskChatId={chatId}
-          openAfterCreate={false}
-          birthChatId={joinChat ? chatId : undefined}
-          {...machineComposerProps(machineContext, { projectId: effectiveProjectId })}
-          onSessionCreated={(result) => {
-            close();
-            onSessionCreated?.(result);
-          }}
-        />
-      </ComposerTray>
+      {selectedId ? (
+        <ProjectDispatch key={selectedId} projectId={selectedId} projectPicker={projectPicker} {...tray} />
+      ) : (
+        <MachineDispatch projectPicker={projectPicker} implicitProjectId={implicitProjectId} {...tray} />
+      )}
     </div>
+  );
+});
+
+type DispatchTray = {
+  draftKey: string;
+  chatId: string;
+  projectPicker: ReactElement;
+  birthChip: ReactElement | null;
+  composer: Omit<Parameters<typeof NewSessionComposer>[0], 'draftKey' | 'projectId'>;
+};
+
+/** 选了项目:在哪台跑、用哪个文件夹,与项目块的新任务框同一套(项目的文件夹在哪些机器上,没有的机器点了先挂文件夹)。 */
+const ProjectDispatch = observer(function ProjectDispatch({ projectId, draftKey, projectPicker, birthChip, composer }: DispatchTray & { projectId: string }) {
+  const stage = useProjectFolderStage(projectId);
+  const { scopedFolders, targetProjectId, machineContext, machineOf, pickAndAttach } = stage;
+  return (
+    <ComposerTray
+      projectPicker={projectPicker}
+      devicePicker={stage.runMachinePicker}
+      folderPicker={
+        <>
+          <ComposerFolderPicker
+            folders={scopedFolders}
+            machineLabelOf={(deviceId) => machineOf(deviceId).label}
+            onAttach={() => void pickAndAttach(scopedFolders.chosen?.deviceId ?? null)}
+          />
+          {birthChip}
+        </>
+      }
+      host={machineContext?.host ?? machineLibraryHost(null)}
+    >
+      <NewSessionComposer
+        key={targetProjectId}
+        draftKey={draftKey}
+        {...composer}
+        workspaceId={scopedFolders.chosen?.workspaceId ?? null}
+        {...machineComposerProps(machineContext, { projectId: targetProjectId, isContextPending: scopedFolders.folders === null })}
+      />
+    </ComposerTray>
+  );
+});
+
+/** 没选项目:选哪台机器,就在那台的任务工作区里跑。 */
+const MachineDispatch = observer(function MachineDispatch({ draftKey, projectPicker, birthChip, composer, implicitProjectId }: DispatchTray & { implicitProjectId: string | undefined }) {
+  const { remote, machineContext, devicePicker } = useNewSessionMachine();
+  return (
+    <ComposerTray projectPicker={projectPicker} devicePicker={devicePicker} folderPicker={birthChip} host={machineContext?.host ?? machineLibraryHost(null)}>
+      <NewSessionComposer
+        key={remote?.deviceId ?? 'local'}
+        draftKey={draftKey}
+        {...composer}
+        {...machineComposerProps(machineContext, { projectId: implicitProjectId })}
+      />
+    </ComposerTray>
   );
 });
 
@@ -142,7 +196,8 @@ function useChatProjectMemory(chatId: string, deviceId: string | null): string |
     let live = true;
     void sessionpageMessageHost().rememberedTaskProject(chatId, deviceId).then(
       (id) => {
-        if (live && id && mountedProjects().some((project) => project.id === id)) setProjectId(id);
+        const row = id ? sidebarStore.rowProjectIdOf(id) : null;
+        if (live && row && accountProjects().some((project) => project.id === row)) setProjectId(row);
       },
       (error: unknown) => log.warn('read the project remembered for a chat failed', { chatId, error: error instanceof Error ? error.message : String(error) }),
     );

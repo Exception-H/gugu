@@ -1,27 +1,67 @@
-import { useEffect, useState } from 'react';
-import { ChevronDown, Monitor, Server } from '@/lib/icons';
-import { sessionComposerTrayTriggerClassName } from '@renderer/features/sessions/session-composer-styles';
-import { DropdownMenu, DropdownMenuCheckboxItem, DropdownMenuContent, DropdownMenuGroup, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from '@renderer/lib/ui/dropdown-menu';
-import { useSessionMessages } from '@renderer/localization/use-session-messages';
-import type { AttachMachine } from './project-folder-card';
+import { useState } from 'react';
 import type { ProjectFoldersState } from './project-folders';
 
-const STORAGE_KEY = 'gugu.projectDeviceScope.v1';
+/**
+ * 项目里的新任务在哪台机器上跑(项目与机器解耦):项目是账号上的,机器只是这一次跑在哪里、用哪个文件夹。
+ * 一次只选一台;记的是人上次在这个项目里选的那台(键 = 项目的跨设备身份:项目群 chatId,还没绑群 = 那一行的本地项目 id)。
+ */
+const STORAGE_KEY = 'gugu.projectRunMachine.v1';
 export const scopeKey = (deviceId: string | null) => deviceId ?? 'local';
-export type SavedScopes = Record<string, string[] | null>;
+export const machineOfKey = (key: string): string | null => (key === 'local' ? null : key);
 
-function readScopes(): SavedScopes {
+type SavedMachines = Record<string, string>;
+
+function readSaved(): SavedMachines {
   try {
     const raw: unknown = JSON.parse(localStorage.getItem(STORAGE_KEY) ?? '{}');
     if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return {};
-    return Object.fromEntries(Object.entries(raw).filter(([, value]) => value === null || (Array.isArray(value) && value.length > 0 && value.every((id) => typeof id === 'string'))));
+    return Object.fromEntries(Object.entries(raw).filter(([, value]) => typeof value === 'string'));
   } catch { return {}; }
 }
 
-/** null means all devices, including devices added to this project later. */
-export function selectedScope(saved: readonly string[] | null | undefined, available: readonly string[]): string[] {
-  const selected = saved ? available.filter((id) => saved.includes(id)) : [...available];
-  return selected.length ? selected : [...available];
+function persist(next: SavedMachines): void {
+  try { localStorage.setItem(STORAGE_KEY, JSON.stringify(next)); } catch { /* This choice still applies in this window. */ }
+}
+
+/** 有这个项目文件夹的一台机器(`key` 同 scopeKey;顺序 = 侧栏的代表顺序:本机 → 连着的 → 最早建的)。 */
+export type RunMachineCandidate = { key: string; online: boolean };
+
+/**
+ * 默认在哪台跑(DESIGN「新建任务」):上次选的那台且它在线 → 本机(有文件夹)→ 有文件夹的在线机器里排最前的 →
+ * 都不在线时才回到上次选的那台 → 第一台。❌ 换到一台没有文件夹的机器上。没有任何文件夹 = null。
+ */
+export function defaultRunMachine(candidates: readonly RunMachineCandidate[], saved: string | undefined): string | null {
+  const savedOne = saved ? candidates.find((machine) => machine.key === saved) : undefined;
+  if (savedOne?.online) return savedOne.key;
+  if (candidates.some((machine) => machine.key === 'local')) return 'local';
+  const online = candidates.find((machine) => machine.online);
+  if (online) return online.key;
+  return savedOne?.key ?? candidates[0]?.key ?? null;
+}
+
+/** 记下人在别处(新建页先选了机器再选项目)选的那台:进了项目块,它有这个项目的文件夹就默认用它。 */
+export function rememberRunMachine(projectKey: string, deviceId: string | null): void {
+  persist({ ...readSaved(), [projectKey]: scopeKey(deviceId) });
+}
+
+/**
+ * 这个项目此刻选着的机器。`pick` = 人选的(记下来,下次默认还是它);候选里没有它(没有文件夹)也照选 ——
+ * 那是人刚在那台机器上挂了文件夹、文件夹清单还没读回来。
+ */
+export function useProjectRunMachine(projectKey: string, candidates: readonly RunMachineCandidate[]) {
+  const [saved, setSaved] = useState(readSaved);
+  const [picked, setPicked] = useState<{ projectKey: string; key: string } | null>(null);
+  const chosen = picked && picked.projectKey === projectKey ? picked.key : defaultRunMachine(candidates, saved[projectKey]);
+  const pick = (deviceId: string | null) => {
+    const key = scopeKey(deviceId);
+    setPicked({ projectKey, key });
+    setSaved((current) => {
+      const next = { ...current, [projectKey]: key };
+      persist(next);
+      return next;
+    });
+  };
+  return { selected: chosen ? [chosen] : [], machine: chosen === null ? undefined : machineOfKey(chosen), pick };
 }
 
 /** `deviceOfMember` 只用来认还没答的那几个本地项目在哪台上;读到的文件夹各带自己的 deviceId。 */
@@ -42,78 +82,4 @@ export function foldersInScope(
   const folders = found?.length === 0 && waiting ? null : found;
   const chosen = folders?.find((folder) => folder.workspaceId === state.chosen?.workspaceId) ?? folders?.[0] ?? null;
   return { ...state, folders, chosen };
-}
-
-/**
- * 记的键是项目的跨设备身份(项目群 chatId;还没绑群 = 那一行的本地项目 id)。从前按「代表那一行」的本地项目 id 记,
- * 代表一换范围就丢了:那份旧记录读一次、挪到新键下、旧键删掉(✅ 人选过的范围不丢)。
- */
-export function adoptLegacyScope(saved: SavedScopes, scopeId: string, legacyId: string): SavedScopes | null {
-  if (scopeId === legacyId || saved[scopeId] !== undefined || saved[legacyId] === undefined) return null;
-  const { [legacyId]: legacy, ...rest } = saved;
-  return { ...rest, [scopeId]: legacy };
-}
-
-function persist(next: SavedScopes): void {
-  try { localStorage.setItem(STORAGE_KEY, JSON.stringify(next)); } catch { /* This selection still applies in this window. */ }
-}
-
-export function useProjectDeviceScope(scopeId: string, legacyId: string, machines: readonly AttachMachine[]) {
-  const [saved, setSaved] = useState(readScopes);
-  const adopted = adoptLegacyScope(saved, scopeId, legacyId);
-  useEffect(() => {
-    if (!adopted) return;
-    persist(adopted);
-    setSaved(adopted);
-  }, [adopted === null, scopeId, legacyId]);
-  const available = machines.map((machine) => scopeKey(machine.id));
-  const selected = selectedScope((adopted ?? saved)[scopeId], available);
-  const save = (ids: string[] | null) => {
-    setSaved((current) => {
-      const next = { ...current, [scopeId]: ids };
-      persist(next);
-      return next;
-    });
-  };
-  return { selected, select: save, include: (deviceId: string | null) => {
-    const key = scopeKey(deviceId);
-    if (!selected.includes(key)) save([...selected, key]);
-  } };
-}
-
-export function ProjectDeviceScopePicker({ machines, selected, onSelect }: {
-  machines: readonly AttachMachine[];
-  selected: readonly string[];
-  onSelect: (ids: string[] | null) => void;
-}) {
-  const { translate } = useSessionMessages();
-  const names = machines.filter((machine) => selected.includes(scopeKey(machine.id))).map((machine) => machine.label);
-  const label = names.length === 1 ? names[0] : translate('projects.folders.deviceCount', { count: names.length });
-  return (
-    <DropdownMenu>
-      <DropdownMenuTrigger className={sessionComposerTrayTriggerClassName} data-testid="project-device-scope" title={translate('projects.folders.deviceScopeHint', { devices: names.join('、') })}>
-        <Monitor className="size-3 shrink-0" />
-        <span className="max-w-40 truncate">{label}</span>
-        <ChevronDown className="size-3 shrink-0" />
-      </DropdownMenuTrigger>
-      <DropdownMenuContent side="top" className="min-w-64">
-        <DropdownMenuGroup>
-          <DropdownMenuLabel>{translate('projects.folders.deviceScope')}</DropdownMenuLabel>
-          {machines.map((machine) => {
-            const key = scopeKey(machine.id);
-            const checked = selected.includes(key);
-            return <DropdownMenuCheckboxItem key={key} checked={checked} closeOnClick={false} disabled={checked && selected.length === 1}
-              onCheckedChange={(next) => onSelect(next ? [...selected, key] : selected.filter((id) => id !== key))}>
-              {machine.kind === 'server' ? <Server className="size-3.5" /> : <Monitor className="size-3.5" />}
-              <span>{machine.label}</span>
-              {!machine.online && <small className="ml-auto text-foreground-passive">{translate('projects.folders.offline')}</small>}
-            </DropdownMenuCheckboxItem>;
-          })}
-        </DropdownMenuGroup>
-        <DropdownMenuSeparator />
-        <DropdownMenuItem onClick={() => onSelect(null)}>{translate('projects.folders.allDevices')}</DropdownMenuItem>
-        <p className="max-w-72 px-2 py-2 text-tiny text-foreground-passive">{translate('projects.folders.scopeExecutionHint')}</p>
-      </DropdownMenuContent>
-    </DropdownMenu>
-  );
 }

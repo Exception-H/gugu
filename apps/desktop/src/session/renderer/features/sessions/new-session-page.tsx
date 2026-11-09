@@ -13,6 +13,8 @@ import { useNavigate } from '@renderer/lib/layout/navigation-provider';
 import { ComposerProjectPicker } from './composer-context-tray';
 import { describeImplicitProjectFailure, machineComposerProps } from './use-machine-create-target';
 import { useNewSessionMachine } from '@renderer/features/remote-hosts/use-new-session-machine';
+import { projectGroupsStore } from '@renderer/features/projects/stores/project-groups-store';
+import { rememberRunMachine } from '@renderer/features/projects/components/main-panel/project-device-scope';
 import { useWakeCloudOnInput } from '@renderer/features/remote-hosts/use-wake-cloud-once';
 import { machineLibraryHost } from '@renderer/features/library/library-host';
 import { ComposerTray } from './composer-tray';
@@ -240,6 +242,8 @@ export const NewSessionPage = observer(function NewSessionPage({
   const openProject = (projectId: string | undefined) => {
     setSelectedId(projectId);
     if (!projectId) return;
+    // 先选了机器再选项目:进了项目块,那台机器有这个项目的文件夹就在那台上开(没有就照默认规则)。
+    rememberRunMachine(projectGroupsStore.chatIdOf(projectId) ?? projectId, remote?.deviceId ?? null);
     // gugu-dev#181 ⑩:选项目 = 去那个项目里开新任务,写好的话跟着进项目块新任务框的草稿。
     prepareProjectTask(projectId, NEW_SESSION_DRAFT_KEY);
     navigate('project', { projectId });
@@ -248,10 +252,9 @@ export const NewSessionPage = observer(function NewSessionPage({
   // 项目入口。原本是贴在输入框左上角的单项页签,现在收进通栏托盘 —— 托盘还同时承载
   // 环境与分支,信息密度换的是"发任务前一眼确认跑在哪"。
   // gugu #2525: 控件本体抽到 composer-context-tray.tsx,与项目页、对话里派任务共用一份。
-  // #6264 选了别的机器时,项目换成那台机器上的(在哪台机器上跑是这一条会话的属性,见 use-new-session-machine.tsx)。
-  const { remote, machineContext, devicePicker, projectPicker } = useNewSessionMachine(
-    <ComposerProjectPicker includeRemote selectedId={selectedId} onSelect={openProject} />
-  );
+  // 项目选择器列账号下的全部项目,与机器无关;没选项目时机器选择器定在哪台的任务工作区里跑。
+  const { remote, machineContext, devicePicker } = useNewSessionMachine();
+  const projectPicker = <ComposerProjectPicker selectedId={selectedId} onSelect={openProject} />;
 
   return (
     <div className="flex h-full min-h-0 min-w-0 flex-1 flex-col">

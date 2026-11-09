@@ -16,7 +16,7 @@ import { MachinePicker } from '@renderer/features/remote-hosts/machine-picker';
 import { remoteHostsStore } from '@renderer/features/remote-hosts/remote-hosts-store';
 import { machineRegistry } from '@renderer/lib/machine-routing';
 import { installRemoteHostsBridge, type RemoteHostsBridge } from '@shared/remote-hosts';
-import { ComposerProjectPicker, ComposerRemoteProjectPicker } from './composer-context-tray';
+import { ComposerProjectPicker } from './composer-context-tray';
 import { getSessionWorkspaceActionOrder, sessionWorkspaceActionBlocked } from './pane-empty-state';
 import { registerWorkspaceBackend, type WorkspaceBackend } from './workspace-backend/workspace-backend';
 import { ShellTitlebar } from '@renderer/lib/components/titlebar/shell-titlebar';
@@ -669,15 +669,14 @@ describe('NewSessionPage', () => {
   });
 
   // owner 2026-10-19:项目跨设备,设备选择圈定范围;具体执行设备跟随所选文件夹。
-  it('项目页共用新建托盘,设备为可选择的项目范围', async () => {
+  it('项目页共用新建托盘,机器是「在哪台跑」的单选,默认本机(有文件夹)', async () => {
     mocks.orderedProjects = [
       { id: 'project-1', state: 'mounted' },
       { id: 'project-2', state: 'mounted' }
     ];
     await renderProjectHome();
-    expect(container.querySelector('[data-testid="project-device-scope"]')?.textContent).toContain('这台电脑');
-    expect(container.querySelector('[data-testid="composer-device-picker"]')).toBeNull();
-    expect(container.querySelector('[role="menuitemcheckbox"]')?.getAttribute('aria-checked')).toBe('true');
+    expect(container.querySelector('[data-testid="composer-device-picker"]')?.getAttribute('data-selected-id')).toBe('local');
+    expect(container.querySelector('[data-testid="composer-device-picker"]')?.textContent).toContain('这台电脑');
     // 项目预选这一个;这一页就是它的,没有「未选择项目」。
     expect(container.textContent).not.toContain('未选择项目');
     expect(mocks.createSessionCallbackProjectId).toBe('project-1');
@@ -691,7 +690,7 @@ describe('NewSessionPage', () => {
     expect(mocks.navigate).toHaveBeenCalledWith('project', { projectId: 'project-2' });
   });
 
-  it('项目页可切换只有远端文件夹的项目,设备范围如实标离线', async () => {
+  it('项目页可切换只有远端文件夹的项目,在哪台跑如实标离线', async () => {
     // 产品里别的机器的项目只经远程主机那座桥登记进来;桥在、那台机器连不上(开线一直不回)= 离线。
     const removeBridge = installRemoteHostsBridge({
       openSessionHost: () => () => new Promise(() => {}),
@@ -703,9 +702,9 @@ describe('NewSessionPage', () => {
     mocks.orderedProjects = [{ id: 'project-remote', state: 'mounted' }, { id: 'project-1', state: 'mounted' }];
     try {
       await renderProjectHome();
-      expect(container.querySelector('[data-testid="project-device-scope"]')?.textContent).toContain('device-9');
+      // 项目与机器解耦:托盘上是「在哪台跑」的选择器,默认选有这个项目文件夹的那台(只有 device-9 有)。
+      expect(container.querySelector('[data-testid="composer-device-picker"]')?.getAttribute('data-selected-id')).toBe('device-9');
       expect(container.textContent).toContain('离线');
-      expect(container.querySelector('[data-testid="composer-device-picker"]')).toBeNull();
       // 那台机器用不了:输入框下面没有行内字(它一变输入框就动),原因在统一提示条里说,发送照样挡住。
       expect(container.querySelector('[role="alert"]')).toBeNull();
       expect(mocks.notify).toHaveBeenCalledWith(expect.objectContaining({ key: 'machine:device-9', tier: 'error', ongoing: true }));
@@ -716,49 +715,6 @@ describe('NewSessionPage', () => {
     } finally {
       machineRegistry.forgetMachine('device-9');
       removeBridge();
-    }
-  });
-
-  // owner 2026-09-25:「我发现新建项目居然不支持远程项目,应该得支持啊」
-  it('选了别的机器时「新建项目 ›」建在那台机器上', async () => {
-    const onSelect = vi.fn();
-    const pickFolder = vi.spyOn(remoteHostsStore, 'pickFolder').mockResolvedValue('/srv/app');
-    const ensureProject = vi.spyOn(remoteHostsStore, 'ensureProject').mockResolvedValue('project-new');
-    try {
-      await act(async () => {
-        root.render(
-          localized(
-            React.createElement(ComposerRemoteProjectPicker, {
-              selectedPath: null,
-              projects: [],
-              loading: false,
-              onSelect,
-              machine: { deviceId: 'device-9', label: 'd22', browseFrom: '/srv' }
-            })
-          )
-        );
-      });
-
-      // 新建空白项目:同一张起名弹窗,带着那台机器。
-      await act(async () =>
-        (container.querySelector('[data-testid="project-create-blank"]') as HTMLButtonElement).click()
-      );
-      expect(mocks.showAddProjectModal).toHaveBeenCalledWith(
-        expect.objectContaining({ machine: { deviceId: 'device-9', label: 'd22' } })
-      );
-
-      // 使用现有文件夹:浏览的是那台机器(❌ 本机 Finder),选中后在那台机器上加成项目并选中它。
-      await act(async () =>
-        (container.querySelector('[data-testid="project-create-existing"]') as HTMLButtonElement).click()
-      );
-      expect(pickFolder).toHaveBeenCalledWith('device-9', '/srv');
-      expect(ensureProject).toHaveBeenCalledWith('device-9', '/srv/app');
-      expect(onSelect).toHaveBeenCalledWith('/tmp/project-new');
-      // 旧的「浏览或输入那台机器上的路径…」并进了「使用现有文件夹」,不再单列一项。
-      expect(container.textContent).not.toContain('浏览或输入');
-    } finally {
-      pickFolder.mockRestore();
-      ensureProject.mockRestore();
     }
   });
 

@@ -16,7 +16,6 @@ import { useNavigate } from '@renderer/lib/layout/navigation-provider';
 import { projectGroupsStore } from '@renderer/features/projects/stores/project-groups-store';
 import { machineRegistry } from '@renderer/lib/machine-routing';
 import { ComposerFolderPicker } from './composer-folder-picker';
-import { ProjectDeviceScopePicker } from './project-device-scope';
 import { useProjectFolderStage, type ProjectFolderStage } from './project-folder-stage';
 import { prepareProjectTask } from '@renderer/features/projects/project-task-entry';
 import { composerVerbLook } from '@renderer/features/sessions/composer-verb-tag';
@@ -75,7 +74,7 @@ export const ProjectTaskComposer = observer(function ProjectTaskComposer({
 }) {
   const { translate } = useSessionMessages();
   const { navigate } = useNavigate();
-  const { rowId, scope, scopedFolders, targetProjectId, machineContext, projectMachines, machineOf, pickAndAttach } = stage;
+  const { rowId, runMachinePicker, scopedFolders, targetProjectId, machineContext, machineOf, pickAndAttach } = stage;
   // gugu #2328: 挂载中页面已上屏,发送由新会话要建进去的那个项目挂上之后解锁;这行小字是
   // 发送暂不可用的唯一提示(安静补齐,❌ 显眼 loading)。
   const isBootstrapping = projectViewKind(getProjectStore(targetProjectId)) === 'bootstrapping';
@@ -101,14 +100,13 @@ export const ProjectTaskComposer = observer(function ProjectTaskComposer({
           {/* 与新建会话页同一个托盘 + 新建框(owner 2026-09-25:「也用 create task 的那个设计」):
               项目预选这一个;机器跟着选中的文件夹走(#7341 第二步:文件夹可以在别的机器上)。 */}
           <ComposerTray
-            projectPicker={<ComposerProjectPicker includeRemote selectedId={rowId} onSelect={openProject} />}
-            devicePicker={<ProjectDeviceScopePicker machines={projectMachines} selected={scope.selected} onSelect={scope.select} />}
+            projectPicker={<ComposerProjectPicker selectedId={rowId} onSelect={openProject} />}
+            devicePicker={runMachinePicker}
             folderPicker={
               <ComposerFolderPicker
                 folders={scopedFolders}
                 machineLabelOf={(deviceId) => machineOf(deviceId).label}
-                showMachine={projectMachines.length > 1}
-                onAttach={() => pickAndAttach(machineRegistry.machineOf(targetProjectId))}
+                onAttach={() => void pickAndAttach(scopedFolders.chosen?.deviceId ?? machineRegistry.machineOf(targetProjectId))}
               />
             }
             host={machineContext?.host ?? machineLibraryHost(null)}

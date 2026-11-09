@@ -439,7 +439,7 @@ class SessionKeyboardNavStore {
       // 代位的任务工作区那一行(那台机器还没有主目录项目):它的「主页」是预选那台机器的新建页。
       const standIn = sidebarStore.homeLayout.standIns.get(node.projectId);
       if (standIn) {
-        remoteHostsStore.requestNewSession(standIn, null);
+        remoteHostsStore.requestNewSession(standIn);
         nav.navigateTransient('new-session');
         return;
       }
