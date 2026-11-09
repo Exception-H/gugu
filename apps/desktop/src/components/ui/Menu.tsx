@@ -88,7 +88,7 @@ export type MenuProps = MenuAnchorProps & {
   style?: CSSProperties
   children: ReactNode
   /** Called for outside press, Escape, item selection, or another Base UI close request. */
-  onClose?: () => void
+  onClose?: (details?: { reason: string; event: Event }) => void
   /** Accessible name for non-standard menu contents such as the quick reaction picker. */
   ariaLabel?: string
   /** Default true. Keep the Menu mounted and flip this to false to let the popup play its exit animation. */
@@ -137,8 +137,8 @@ export function Menu({
     <MenuPrimitive.Root
       open={open}
       modal={false}
-      onOpenChange={(open) => {
-        if (!open) onClose?.()
+      onOpenChange={(open, details) => {
+        if (!open) onClose?.(details)
       }}
     >
       <MenuPrimitive.Trigger nativeButton={false} render={<span hidden />} />
