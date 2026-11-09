@@ -13,7 +13,6 @@ import { ProjectHome } from '@renderer/features/projects/components/main-panel/p
 import { NewSessionComposer, NewSessionPage } from './new-session-page';
 import { remoteInstallNote } from './remote-install-before-create';
 import { MachinePicker } from '@renderer/features/remote-hosts/machine-picker';
-import { remoteHostsStore } from '@renderer/features/remote-hosts/remote-hosts-store';
 import { machineRegistry } from '@renderer/lib/machine-routing';
 import { installRemoteHostsBridge, type RemoteHostsBridge } from '@shared/remote-hosts';
 import { ComposerProjectPicker } from './composer-context-tray';
