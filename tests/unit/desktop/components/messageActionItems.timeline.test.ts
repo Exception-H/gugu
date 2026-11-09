@@ -8,16 +8,10 @@ const timeline: MessageActionTarget = { isRetracted: false, content: 'x', onQuot
 const keys = (input: MessageActionTarget) => messageActionItems(input, t).map(item => item.key)
 const label = (input: MessageActionTarget, key: string) => messageActionItems(input, t).find(item => item.key === key)?.label
 
-it('leads with what the clicked file or link can do', () => {
-  expect(keys({ ...timeline, onOpenFile: fn, onDownload: fn })).toEqual(['openFile', 'download', 'quoteToComposer', 'copy', 'forkTask'])
-  expect(keys({ ...timeline, onCopyLink: fn, onOpenLink: fn })).toEqual(['openLink', 'copyLink', 'quoteToComposer', 'copy', 'forkTask'])
-})
-
-it('says what a selection and a file card will copy or quote', () => {
-  expect(label({ ...timeline, hasSelection: true }, 'copy')).toBe('message.actions.copySelection')
+it('adds the timeline actions after the copy items, and says when a quote is of a selection', () => {
+  expect(keys({ ...timeline, onCopyLink: fn, onOpenLink: fn, onOpenFile: fn })).toEqual(['quoteToComposer', 'copy', 'copyLink', 'openLink', 'openFile', 'forkTask'])
   expect(label({ ...timeline, hasSelection: true }, 'quoteToComposer')).toBe('message.actions.quoteSelectionToComposer')
-  expect(label({ ...timeline, copiesFileName: true }, 'copy')).toBe('message.actions.copyFileName')
-  expect(label(timeline, 'copy')).toBe('message.actions.copy')
+  expect(label(timeline, 'quoteToComposer')).toBe('message.actions.quoteToComposer')
 })
 
 it('leaves the chat menu in its own order and wording', () => {

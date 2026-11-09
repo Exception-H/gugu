@@ -25,8 +25,6 @@ export type MessageActionTarget = {
   onOpenTopic?: () => void
   /** The task timeline: quote the text (or the selection) into its composer as markdown. */
   onQuoteToComposer?: () => void
-  /** The task timeline: what Copy copies from a file card is its name. */
-  copiesFileName?: boolean
   /** The task timeline: open the file this message carries, the way its card opens it. */
   onOpenFile?: () => void
   /** The task timeline: edit one's own message and resend from there. */
@@ -46,8 +44,6 @@ export type MessageActionItem = {
   fold?: true
 }
 
-const TARGET_ACTIONS = ['openFile', 'download', 'openLink', 'copyLink']
-
 /** 一条消息能做的事。右键 / ⋯ / 长按 / 文件预览共用,按提供的 handler 取适合当前场景的动作。 */
 export function messageActionItems(input: MessageActionTarget, t: TFunction<'messaging'>): MessageActionItem[] {
   const target: MessageActionTarget = input.hasSelection ? {
@@ -60,7 +56,7 @@ export function messageActionItems(input: MessageActionTarget, t: TFunction<'mes
     !!target.onReply && { key: 'reply', icon: Reply, label: t('message.actions.reply'), onSelect: target.onReply, disabled: target.isRetracted },
     SELECTED_MESSAGE_QUOTES_ENABLED && !!target.onQuoteSelection && { key: 'quoteSelection', icon: Reply, label: t('message.actions.quoteSelection'), onSelect: target.onQuoteSelection, disabled: target.isRetracted },
     !!target.onQuoteToComposer && { key: 'quoteToComposer', icon: Reply, label: t(input.hasSelection ? 'message.actions.quoteSelectionToComposer' : 'message.actions.quoteToComposer'), onSelect: target.onQuoteToComposer, disabled: !hasContent },
-    !!target.onCopy && { key: 'copy', icon: Copy, label: t(input.hasSelection && target.onQuoteToComposer ? 'message.actions.copySelection' : target.copiesFileName ? 'message.actions.copyFileName' : 'message.actions.copy'), onSelect: target.onCopy, disabled: !hasContent },
+    !!target.onCopy && { key: 'copy', icon: Copy, label: t('message.actions.copy'), onSelect: target.onCopy, disabled: !hasContent },
     !!target.onSelectText && { key: 'selectText', icon: TextCursorInput, label: t('message.actions.selectText'), onSelect: target.onSelectText, disabled: !hasContent },
     !!target.onCopyLink && { key: 'copyLink', icon: Copy, label: t('message.actions.copyLink'), onSelect: target.onCopyLink, disabled: target.isRetracted },
     !!target.onOpenLink && { key: 'openLink', icon: ExternalLink, label: t('message.actions.openLink'), onSelect: target.onOpenLink, disabled: target.isRetracted },
@@ -75,10 +71,7 @@ export function messageActionItems(input: MessageActionTarget, t: TFunction<'mes
     !!target.onSelect && { key: 'select', icon: SquareCheck, label: t('message.actions.select'), onSelect: target.onSelect, fold: true },
     !!target.onDelete && { key: 'delete', icon: Trash, label: t('message.actions.delete'), onSelect: target.onDelete, danger: true, fold: true },
   ]
-  const shown = items.filter((item): item is MessageActionItem => item !== false)
-  if (!target.onQuoteToComposer) return shown
-  // The task timeline's menu opens on what was clicked: what that file or link can do comes first.
-  return [...TARGET_ACTIONS.flatMap(key => shown.filter(item => item.key === key)), ...shown.filter(item => !TARGET_ACTIONS.includes(item.key))]
+  return items.filter((item): item is MessageActionItem => item !== false)
 }
 
 /** Until excerpt-aware receivers ship, Reply on a selection keeps its whole-message meaning. */

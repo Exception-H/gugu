@@ -774,8 +774,6 @@ export default {
       "quoteSelection": "引用选中文字",
       "quoteToComposer": "引用到输入框",
       "quoteSelectionToComposer": "引用选中内容",
-      "copySelection": "复制选中内容",
-      "copyFileName": "复制文件名",
       "openFile": "打开",
       "editMessage": "编辑重发",
       "forkTask": "分叉这个任务",

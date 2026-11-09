@@ -100,15 +100,13 @@ describe('task message copy menus and legacy prompt restoration', () => {
     expect(opened).toHaveBeenCalledOnce();
     c.dispose(); c.root.remove();
   });
-  it('offers no open or download on a file its card says is gone, and copies its name', async () => {
+  it('offers no open on a file its card says is gone', async () => {
     const c = await setup();
     const slot = document.createElement('div'); slot.dataset.sentMessageBody = 'sent'; slot.dataset.attachmentUnavailable = ''; c.root.append(slot);
     const inner = document.createElement('div'); inner.setAttribute('data-attachment-unavailable', ''); slot.append(inner);
     c.setItem({ kind: 'message', id: 'first', role: 'assistant', text: 'a.png', sentMessages: [{ id: 'sent', content_type: 'attachment', content: attachmentEnvelope('a.png', 1, 'image/png'), file_blob_id: 'blob' }] } as unknown as ChatMessage);
     await rightClick(inner);
     expect(asked().onOpenFile).toBeUndefined();
-    expect(asked().onDownload).toBeUndefined();
-    expect(asked().copiesFileName).toBe(true);
     c.dispose(); c.root.remove();
   });
   it('offers edit only on a message the store can edit, a person\'s own, and fork when the task can fork', async () => {

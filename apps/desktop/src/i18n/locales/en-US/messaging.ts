@@ -777,8 +777,6 @@ export default {
       "quoteSelection": "Quote selection",
       "quoteToComposer": "Quote in reply",
       "quoteSelectionToComposer": "Quote selection",
-      "copySelection": "Copy selection",
-      "copyFileName": "Copy file name",
       "openFile": "Open",
       "editMessage": "Edit and resend",
       "forkTask": "Fork this task",

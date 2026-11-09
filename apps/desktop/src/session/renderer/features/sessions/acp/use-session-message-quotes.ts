@@ -90,7 +90,7 @@ export function useSessionMessageQuotes(store: Pick<AcpChatStore, 'sessionId' | 
       const link = anchor?.getAttribute('href');
       const commands = target.commands?.();
       showRendererMessageMenu({
-        x: event.clientX, y: event.clientY, isRetracted: false, content: text, hasSelection: selection !== undefined, copiesFileName: !!file,
+        x: event.clientX, y: event.clientY, isRetracted: false, content: text, hasSelection: selection !== undefined,
         onCopy: usable(() => copy(text)),
         onQuoteToComposer: usable(() => {
           const quoted = quotedIntoDraft(editor.current?.getText() ?? '', text);
@@ -103,16 +103,7 @@ export function useSessionMessageQuotes(store: Pick<AcpChatStore, 'sessionId' | 
           // The link's own click: a reference, a group file, a working-folder file and a web link each open their own way.
           onOpenLink: usable(() => anchor?.click()),
         } : {}),
-        ...(file && carried && !unavailable ? {
-          onOpenFile: usable(() => openSentFile(file, carried, commands)),
-          // A session file's bytes are readable here only as a picture; another file opens on its machine.
-          ...(file.source.kind !== 'session-file' || file.kind === 'image' ? { onDownload: usable(() => {
-            void import('@/lib/attachmentBytes').then(({ downloadAttachment }) => downloadAttachment(file.source, file.fileName)).catch(error => {
-              log.error({ error }, 'Message file download failed');
-              toast({ title: latest.current.translate('task.copyFailed'), tier: 'error' });
-            });
-          }) } : {}),
-        } : {}),
+        ...(file && carried && !unavailable ? { onOpenFile: usable(() => openSentFile(file, carried, commands)) } : {}),
         ...(message.role === 'user' && !message.guguDelivery && acts.canEdit?.(target.itemId) ? { onEditMessage: usable(() => acts.onEdit?.(target.itemId)) } : {}),
         ...(acts.onForkTask ? { onForkTask: usable(acts.onForkTask) } : {}),
       });
