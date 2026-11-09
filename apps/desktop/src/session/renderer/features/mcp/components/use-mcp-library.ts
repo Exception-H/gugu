@@ -61,6 +61,7 @@ export function useMcpLibrary() {
   // 正在检测的那几台(键 = `gugu:<名>` 或 `<家>:<名>`),以及各家那几台这一页上检测出来的结果。
   const [checking, setChecking] = useState<ReadonlySet<string>>(new Set());
   const [harnessChecks, setHarnessChecks] = useState<Readonly<Record<string, LibraryMcpCheck>>>({});
+  const [providedChecks, setProvidedChecks] = useState<Readonly<Record<string, LibraryMcpCheck>>>({});
   const track = async <T,>(key: string, work: () => Promise<T>): Promise<T> => {
     setChecking((current) => new Set(current).add(key));
     try {
@@ -117,6 +118,14 @@ export function useMcpLibrary() {
     checking,
     check: (name: string) => track(`gugu:${name}`, () => host.mcpLibrary.check(name)).finally(invalidate),
     harnessChecks,
+    /** 集成、App 那几台的工具列表(键见 `LibraryMcpProvidedServer.key`),这一页上取的,不记下来。 */
+    providedChecks,
+    checkProvided: (key: string) =>
+      track(key, async () => {
+        const result = await host.mcpLibrary.providedTools(key);
+        setProvidedChecks((current) => ({ ...current, [key]: result }));
+        return result;
+      }),
     checkHarness: (providerId: string, name: string) =>
       track(`${providerId}:${name}`, async () => {
         const result = await host.mcpLibrary.checkHarnessServer(providerId, name);
