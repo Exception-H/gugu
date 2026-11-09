@@ -1073,6 +1073,8 @@ function topEntries() {
 // The folders of a list: 「附件」 first where a search lists it, the rest by name.
 function folderOrder(a, b) {
   if (!!a.systemRole !== !!b.systemRole) return a.systemRole ? -1 : 1
+  // A computer's hidden folders (.git) come after the ones a person is there for.
+  if (a.name.startsWith('.') !== b.name.startsWith('.')) return a.name.startsWith('.') ? 1 : -1
   return compareNames(a, b, shownName, state.ctx?.locale)
 }
 

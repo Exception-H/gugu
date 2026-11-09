@@ -947,7 +947,7 @@ async function provisionLockedBody(
   //    This session caller adds project/session binding and a delivery owner below.
   if (!ownerAuth.accessToken) throw new Error('session-page agent provisioning: owner not authenticated')
   // 第 19 条:这条会话上一个身份开户失败被撤了 ⇒ 铸新身份之前先收它的卡,新身份才要得到卡。铸新身份与接既有身份都从这里过。
-  // 归档时移除的身份同理:恢复时铸新身份,这条会话要得到新卡。
+  // Restoring an archived task mints a new identity the same way: the removed one's cards must go first.
   const withdrawn = withdrawnIdentityBySession.get(info.sessionId) ?? info.replacesRemovedIdentity
   if (withdrawn) {
     await revokeAgentCards?.(withdrawn)

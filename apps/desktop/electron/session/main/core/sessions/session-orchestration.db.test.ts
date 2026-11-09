@@ -11,6 +11,7 @@ import type { AppDb } from '@main/db/client';
 import { resumeHostUpdate } from '../agent-status/resume-host-update';
 import { sessionBootTasks } from '../boot-tasks';
 import { setSessionMessageRouter } from './session-message-router';
+import { setSessionHostLocale } from '../host-locale';
 
 const mocks = vi.hoisted(() => ({
   db: undefined as AppDb | undefined,
@@ -729,7 +730,10 @@ describe('session orchestration', () => {
       expect(appRow(picked.id)).toMatchObject({ provider: 'codex' });
       fixture.sqlite.exec(`DELETE FROM sessions WHERE id = '${picked.id}'`);
       installed();
+      setSessionHostLocale('en-US');
       await expect(spawnSessionForApp({ extensionId: 'board', envelope, prompt: 'x' })).rejects.toThrow('No agent is installed on this computer yet. Install one from New task, then try again.');
+      setSessionHostLocale('zh-CN');
+      await expect(spawnSessionForApp({ extensionId: 'board', envelope, prompt: 'x' })).rejects.toThrow('这台电脑上还没有装 agent。先在「新建任务」里装一个，再试一次。');
       expect(childRows()).toEqual([]);
     });
 
