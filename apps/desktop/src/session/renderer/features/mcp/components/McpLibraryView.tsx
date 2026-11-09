@@ -87,10 +87,7 @@ export const McpLibraryView: React.FC<{ onOpenIntegrations: () => void }> = ({ o
         ) : notice && !library.hasData ? null : (
           <div className="flex flex-col gap-6 py-8">
             <section data-slot="mcp-library-gugu" className="flex flex-col gap-3">
-              <header className="flex flex-col gap-1">
-                <h3 className="text-base font-semibold text-foreground">{translate('mcpLibrary.ownGroup')}</h3>
-                <p className="text-xs text-foreground-muted">{translate('mcpLibrary.ownGroupNote')}</p>
-              </header>
+              <h3 className="text-base font-semibold text-foreground">{translate('mcpLibrary.ownGroup')}</h3>
               <FoldGroup slot="mcp-library-builtin" title={translate('mcpLibrary.builtInGroup')} fixed>
                 {library.provided?.builtIn.map((name) => (
                   <ProvidedRow key={name} name={name} note={translate('mcpLibrary.builtInNote')} />
@@ -159,10 +156,7 @@ export const McpLibraryView: React.FC<{ onOpenIntegrations: () => void }> = ({ o
             </section>
             {library.installed.length > 0 && (
               <section data-slot="mcp-library-harnesses" className="flex flex-col gap-3">
-                <header className="flex flex-col gap-1">
-                  <h3 className="text-sm font-medium text-foreground-muted">{translate('mcpLibrary.harnessesGroup')}</h3>
-                  <p className="text-xs text-foreground-muted">{translate('mcpLibrary.harnessesGroupNote')}</p>
-                </header>
+                <h3 className="text-sm font-medium text-foreground-muted">{translate('mcpLibrary.harnessesGroup')}</h3>
             {library.installed.map((agent) => (
               <HarnessGroup key={agent.id} agent={agent} library={library} disabled={disabled} onFail={fail} />
             ))}
