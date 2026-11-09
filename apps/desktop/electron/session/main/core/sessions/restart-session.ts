@@ -4,6 +4,7 @@ import { sessionPending, sessions, sessionTurns } from '@main/db/schema';
 import { events } from '@main/lib/events';
 import { log } from '@main/lib/logger';
 import { agentStatusWriter } from '@main/core/agent-status/agent-status-writer';
+import { forgetLostAcpSession } from '@main/core/acp/runtime-process/host';
 import type { SessionConfig } from '@shared/core/sessions/session-config';
 import { sessionChangedChannel } from '@shared/core/sessions/sessionEvents';
 import { hydrateSession } from './hydrateSession';
@@ -105,6 +106,9 @@ export async function restartSession(
     if (db.select({ seq: sessionPending.seq }).from(sessionPending)
       .where(and(eq(sessionPending.sessionId, sessionId), eq(sessionPending.messageId, replayId))).get()) return;
     await sessionLife().interrupt(sessionId, { k: 'interrupt', reason: 'reconfigure' });
+    // The runtime's lost record still pins the missing engine session: the next start would load it again and fail the
+    // same way. The engine session was replaced, so forget it (a crash teardown keeps it: reconnect goes through it).
+    await forgetLostAcpSession(sessionId);
     if (replay) sessionLife().enqueue({ sessionId, messageId: replayId, text: replay, kind: 'ordinary',
       turn: { kind: 'prompt', origin: 'manual' } });
   } else {
