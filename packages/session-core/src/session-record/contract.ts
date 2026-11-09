@@ -159,8 +159,9 @@ export type RecordBoundary = { messageId?: string } & (
  * （不进时间线，只关掉当前这一轮）。❌ 不许一条同时是两者 —— 那样"这条要不要去重"没有答案。
  */
 export type RecordEntry =
-  | { key: string; at?: number; event: NormalizedEvent; boundary?: never; imageOrigins?: readonly (RecordImageRef | null)[] }
-  | { key: string; at?: number; boundary: RecordBoundary; event?: never; imageOrigins?: never };
+  | { key: string; at?: number; position?: number; event: NormalizedEvent; boundary?: never; imageOrigins?: readonly (RecordImageRef | null)[] }
+  | { key: string; at?: number; position?: number; boundary: RecordBoundary; event?: never; imageOrigins?: never };
+// `position`: where the record line (or row) that produced the entry starts, as `SessionRecordSource.startingAt` takes it.
 
 /**
  * 一张工具图在记录文件里的原文位置:那段 base64 正文从哪个字节起、多少个字。`imageOrigins` 与这条 `tool_update`
@@ -230,6 +231,13 @@ export interface SessionRecordSource {
   readImage?(ref: RecordImageRef): Promise<string | null>;
   getLineage?(): readonly RecordLineageNode[] | null;
   stop(): void;
+  /**
+   * A resume point that reads from `position` (a `RecordEntry.position`, where a turn started) with empty decoder state;
+   * null = read from the start (also for a record that cannot start elsewhere, a `.zst` archive).
+   */
+  startingAt?(position: number): Promise<SessionRecordResume | null>;
+  /** Changes whenever the record can have grown or been replaced; null = cannot tell (always read). */
+  stamp?(): Promise<string | null>;
 }
 
 // ─── 时间线 ───────────────────────────────────────────────────────────────
@@ -498,6 +506,10 @@ export interface SessionTimeline {
    * 返回 null = 这条时间线存不了（记录源不支持续读）——那只是慢，不是错。
    */
   archive?(): Promise<TimelineArchive | null>;
+  /** A fill only: hand out settled turns as the record streams, so a long record never sits on one heap. */
+  drainSettled?(): { turns: TranscriptTurn[]; starts: Array<number | null>; prunedDrops: number; resets: number };
+  /** A fill only: where each turn still held (committed, then the active one) starts in the record, if the source says. */
+  heldStarts?(): ReadonlyArray<number | null>;
 }
 
 // ─── agent 的跨机器动作(机器 ↔ 机器)──────────────────────────────────────────────────────────────────

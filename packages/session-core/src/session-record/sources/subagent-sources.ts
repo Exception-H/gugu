@@ -43,9 +43,10 @@ export function withSubagentSources(
             entry.boundary.kind === 'turn_failed' ? 'failed' : entry.boundary.kind === 'turn_aborted' ? 'stopped' : 'completed') };
           const event = entry.event;
           // A nested launch belongs to this child's stream; nested lifecycle facts already name their own child.
-          if (event.kind === 'subagent_update' || event.kind === 'subagent_done' || event.kind === 'subagent_stream') return entry;
+          // A child's positions are in its own file, never a place in the root record.
+          if (event.kind === 'subagent_update' || event.kind === 'subagent_done' || event.kind === 'subagent_stream') return { ...entry, position: undefined };
           if (event.kind === 'message' && event.role === 'user') return { key: entry.key, at: entry.at, event: childState(id, 'in_progress') };
-          return { ...entry, event: { kind: 'subagent_stream', subagentSessionId: id, event } };
+          return { ...entry, position: undefined, event: { kind: 'subagent_stream', subagentSessionId: id, event } };
         });
         if (!stopped && children.get(id) === source) sink?.onEntries(mapped);
       },
@@ -91,6 +92,9 @@ export function withSubagentSources(
     // The position names its own file (a child's pictures are in the child's record), so any reader of this harness reads it.
     ...(root.readImage ? { readImage: (ref: RecordImageRef) => root.readImage!(ref) } : {}),
     ...(root.getLineage ? { getLineage: () => root.getLineage!() } : {}),
+    // resume-tail: the root record decides where a fill from the tail starts; children are read whole as they appear.
+    startingAt: root.startingAt ? (position) => root.startingAt!(position) : undefined,
+    stamp: root.stamp ? () => root.stamp!() : undefined,
     async resumePoint(budget) {
       if (replacement) return replacement.resumePoint!(budget);
       // The host starts archiving and immediately stops the source. Start every

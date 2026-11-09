@@ -1,0 +1,104 @@
+import type { TranscriptTurn } from '../acp/models/turns/turn';
+import type { RecordLineageNode, SessionRecordLocator, SessionTimeline } from './contract';
+import { createSessionRecordSource } from './index';
+import { SessionRecordNotFoundError } from './sources/shared';
+import { createSessionTimeline } from './timeline';
+
+/**
+ * One streaming read of a native record for a store fill (resume-tail): from `position` (where a turn started, a
+ * `RecordEntry.position`; 0 = the beginning) to its end. Settled turns go to `onSettled` as the record
+ * streams and are forgotten, so the heap holds the open turns and one batch, whatever the record's size.
+ *
+ * Reads only through the record sources (`createSessionTimeline`); no whole-file read of its own.
+ */
+export type FillRead = {
+  /** The turns still held at the end: the last committed one and the active one, if any. */
+  tail: TranscriptTurn[];
+  /** How many of `tail` are committed; a turn after them is the active one. */
+  committed: number;
+  /** Index of `tail[0]` among the turns this read produced. */
+  tailFrom: number;
+  /** Where each of `tail` starts in the record (`startingAt` takes it); null where the source does not say. */
+  tailStarts: Array<number | null>;
+  /** Where the read actually started: the source may refuse `position` (a changed continuation chain) and start at 0. */
+  from: number;
+  prunedDrops: number;
+  lineage: readonly RecordLineageNode[] | null;
+};
+
+export async function readRecordFrom(input: {
+  locator: SessionRecordLocator;
+  sessionId: string;
+  position: number;
+  /** A fork proves its parent's prefix, which only a snapshot read from the start does. */
+  parentLineage?: readonly RecordLineageNode[];
+  snapshot?: boolean;
+  /** `starts[i]`: where `turns[i]` starts in the record, as `startingAt` takes it; null where the source does not say. */
+  onSettled: (turns: TranscriptTurn[], from: number, starts: Array<number | null>) => void;
+}): Promise<FillRead> {
+  if (input.snapshot || input.parentLineage) return read(input, 'snapshot', 0);
+  try {
+    return await read(input, 'live', input.position);
+  } catch (error) {
+    // Only a `.zst` archive is missing to the live mode: it is read as a snapshot, from its start.
+    if (!(error instanceof SessionRecordNotFoundError)) throw error;
+    return read(input, 'snapshot', 0);
+  }
+}
+
+async function read(input: Parameters<typeof readRecordFrom>[0], readMode: 'live' | 'snapshot', position: number): Promise<FillRead> {
+  const source = createSessionRecordSource(input.locator, {
+    ...(readMode === 'snapshot' ? { readMode } : {}),
+    ...(input.parentLineage ? { parentLineage: input.parentLineage } : {}),
+  });
+  const resume = position > 0 ? await source.startingAt?.(position) ?? null : null;
+  let next = 0;
+  let resets = 0;
+  let frozen = false;
+  // A read the caller stops mid-stream can surface as a pipeline abort or the EBADF of its closed fd: keep the reason.
+  let stopped: { reason: unknown } | null = null;
+  const drain = (timeline: SessionTimeline) => {
+    try {
+      handOut(timeline);
+    } catch (reason) {
+      stopped ??= { reason };
+      throw reason;
+    }
+  };
+  const handOut = (timeline: SessionTimeline) => {
+    // After the initial read the live source keeps following the file; what it adds is the next fill's.
+    if (frozen) return;
+    const drained = timeline.drainSettled!();
+    if (drained.resets !== resets) {
+      // The source refused the start point and reads from the beginning: fine before anything was handed out.
+      if (next !== 0 || drained.resets > 1) throw new Error('Record replaced while it was being read');
+      resets = drained.resets;
+    }
+    if (!drained.turns.length) return;
+    input.onSettled(drained.turns, next, drained.starts);
+    next += drained.turns.length;
+  };
+  const timeline = await createSessionTimeline(source, { sessionId: input.sessionId, resume, onApplied: drain })
+    .catch((error: unknown) => { throw stopped ? stopped.reason : error; });
+  try {
+    drain(timeline);
+    frozen = true;
+    const tail = timeline.getSnapshot({ limit: Number.MAX_SAFE_INTEGER }).turns;
+    const committed = timeline.getSnapshot({ limit: Number.MAX_SAFE_INTEGER, committedOnly: true }).turns.length;
+    const tailStarts = [...timeline.heldStarts!()];
+    if (tailStarts.length !== tail.length) throw new Error(`fill-read: ${tail.length} turns held, ${tailStarts.length} starts`);
+    const after = timeline.drainSettled!();
+    if (after.resets !== resets) throw new Error('Record replaced while it was being read');
+    return {
+      tail,
+      committed,
+      tailFrom: next,
+      tailStarts,
+      from: resume && resets === 0 ? position : 0,
+      prunedDrops: after.prunedDrops,
+      lineage: timeline.getRecordLineage?.() ?? null,
+    };
+  } finally {
+    timeline.dispose();
+  }
+}

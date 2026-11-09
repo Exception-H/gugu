@@ -1,6 +1,6 @@
 import { createReadStream } from 'node:fs';
 import { readFile, readdir, stat } from 'node:fs/promises';
-import { dirname, join } from 'node:path';
+import { basename, dirname, join } from 'node:path';
 import { createInterface } from 'node:readline';
 
 import { claudeFilePatch } from '../../acp/transport/claude-file-patch';
@@ -18,7 +18,7 @@ import {
   type SessionRecordSourceEvents
 } from '../contract';
 import { findUnder, isFile } from './find-file';
-import { locateImages, readRecordImage, snapshotRetainer } from './record-images';
+import { locateImages, readRecordImage } from './record-images';
 import {
   SessionRecordNotFoundError,
   SessionRecordForkDivergedError,
@@ -103,7 +103,6 @@ class ClaudeJsonlSource implements SessionRecordSource {
   private ownIncrement = false;
   private consumedFiles = new Map<string, number>();
   private consumedBytes = 0;
-  private readonly retain: ReturnType<typeof snapshotRetainer> | null;
 
   private rememberConsumed(path: string, bytes: number): void {
     this.consumedBytes += bytes - (this.consumedFiles.get(path) ?? 0);
@@ -116,7 +115,6 @@ class ClaudeJsonlSource implements SessionRecordSource {
     private readonly nativeChild = false,
   ) {
     this.warn = warnOf(options);
-    this.retain = options?.readMode === 'snapshot' ? snapshotRetainer() : null;
   }
 
   async start(events: SessionRecordSourceEvents, resume?: SessionRecordResume): Promise<void> {
@@ -227,6 +225,31 @@ class ClaudeJsonlSource implements SessionRecordSource {
     if (this.options?.readMode !== 'snapshot') await this.reader?.catchUp();
   }
 
+  /** resume-tail: `position` is a place in the primary record (`RecordEntry.position`). */
+  async startingAt(position: number): Promise<SessionRecordResume | null> {
+    const path = position > 0 ? await resolveSessionFile(this.locator, this.nativeChild).catch(() => null) : null;
+    if (!path) return null;
+    const info = await stat(path);
+    const tail: TailResume = { ino: info.ino, size: info.size, mtimeMs: info.mtimeMs, lineOffset: position };
+    const data: ClaudeResumeData = { version: CLAUDE_RESUME_VERSION, primaryPath: path, tailPath: path, tail,
+      seenUuids: [], lastUuid: null, launches: {}, childRoots: {}, consumedFiles: [[path, position]] };
+    return { data, fingerprint: `claude:${path}:${tail.ino}:${tail.size}:${tail.mtimeMs}` };
+  }
+
+  async stamp(): Promise<string | null> {
+    const path = await resolveSessionFile(this.locator, this.nativeChild).catch(() => null);
+    if (!path) return null;
+    const info = await stat(path);
+    // Subagents write their own files (one per subagent): a change there must also reach the fill.
+    const folder = join(dirname(path), basename(path, '.jsonl'), 'subagents');
+    let children = '';
+    for (const name of (await readdir(folder).catch(() => [] as string[])).sort()) {
+      const child = await stat(join(folder, name)).catch(() => null);
+      if (child) children += `|${name}:${child.size}:${child.mtimeMs}`;
+    }
+    return `${path}:${info.ino}:${info.size}:${info.mtimeMs}${children}`;
+  }
+
   getLineage(): readonly RecordLineageNode[] | null { return this.lineageValid ? this.lineage : null; }
 
   readImage(ref: RecordImageRef): Promise<string | null> {
@@ -270,8 +293,9 @@ class ClaudeJsonlSource implements SessionRecordSource {
     const events = this.events;
     const path = this.reader?.currentPath;
     emitJsonLines(lines, 'claude', this.warn, (entries) => events.onEntries(entries), (record) => this.decodeRecord(record),
-      path && this.retain ? (entries, index) => this.retain!(entries, lines[index], offsets?.[index], path)
-        : offsets && path ? (entries, index) => locateImages(entries, lines[index], offsets[index], path) : undefined);
+      offsets && path ? (entries, index) => locateImages(entries, lines[index], offsets[index], path) : undefined,
+      // Positions are places in the primary record (`startingAt`); a continuation file's lines have none.
+      path === this.primaryPath ? offsets : undefined);
   }
 
   private decodeRecord(record: Record<string, unknown>): RecordEntry[] {
