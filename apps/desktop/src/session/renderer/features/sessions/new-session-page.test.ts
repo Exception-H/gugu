@@ -220,8 +220,8 @@ vi.mock('@renderer/lib/ui/dropdown-menu', () => ({
     ),
   DropdownMenuSub: ({ children }: { children: React.ReactNode }) => children,
   DropdownMenuSubContent: ({ children }: { children: React.ReactNode }) => children,
-  DropdownMenuSubTrigger: ({ children }: { children: React.ReactNode }) =>
-    React.createElement('button', { type: 'button', role: 'menuitem' }, children),
+  DropdownMenuSubTrigger: ({ children, ...props }: { children: React.ReactNode }) =>
+    React.createElement('button', { type: 'button', role: 'menuitem', ...props }, children),
   DropdownMenuTrigger: ({
     children,
     render,
@@ -636,6 +636,25 @@ describe('NewSessionPage', () => {
     await renderProjectHome();
     expect(mocks.initialPrompt).toBe('继续实现这一段');
     expect(container.querySelector('[data-testid="project-folder-card"]')).not.toBeNull();
+  });
+
+  // 项目与机器解耦:账号上一个文件夹都没有的项目也列出来(identity.list_my_projects),› 里是给它挂第一个文件夹的机器。
+  it('lists an account project that has no folder on any machine, with machines to give it one', async () => {
+    const { accountProjectsStore } = await import('@renderer/features/projects/stores/account-projects-store');
+    accountProjectsStore.projects.replace([
+      { chatId: 'chat-empty', name: 'paper', archived: false, bindings: [] },
+      { chatId: 'chat-old', name: 'retired', archived: true, bindings: [] },
+      { chatId: 'chat-bound', name: 'bound', archived: false, bindings: [{ deviceId: 'd', localProjectId: 'p' }] },
+    ]);
+    try {
+      mocks.orderedProjects = [{ id: 'project-1', state: 'mounted' }];
+      await renderPage();
+      const folderless = Array.from(container.querySelectorAll('[data-testid="folderless-project"]'));
+      expect(folderless.map((item) => item.textContent?.trim())).toEqual(['paper']);
+      expect(folderless[0]?.getAttribute('data-chat-id')).toBe('chat-empty');
+    } finally {
+      accountProjectsStore.projects.clear();
+    }
   });
 
   it('项目已有草稿时保留它,全局首句也仍在', async () => {

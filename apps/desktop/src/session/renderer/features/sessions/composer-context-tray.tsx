@@ -14,6 +14,9 @@ import { observer } from 'mobx-react-lite';
 import { useState } from 'react';
 import { ProjectCreationMenuItems } from '@renderer/features/projects/components/project-creation-menu-items';
 import { RemoteProjectMenuItems } from '@renderer/features/sidebar/remote-project-menu-items';
+import { FolderlessProjectItem } from '@renderer/features/projects/components/folderless-project-item';
+import { accountProjectsStore } from '@renderer/features/projects/stores/account-projects-store';
+import { projectGroupsStore } from '@renderer/features/projects/stores/project-groups-store';
 import {
   getProjectStore,
   projectDisplayName
@@ -106,9 +109,14 @@ export const ComposerProjectPicker = observer(function ComposerProjectPicker({
     : projects;
   const displayName = selectedId ? (projectDisplayName(getProjectStore(selectedId)) ?? translate('task.projectFallbackName')) : null;
   const twins = nameTwinIds(projects.map((p) => ({ id: p.id, name: projectDisplayName(p) })));
+  // 账号上一个文件夹都没有的项目(侧栏上没有它那一行):列在后面,› 里选一台机器给它挂第一个文件夹。
+  const rowGroups = new Set(projects.map((p) => projectGroupsStore.chatIdOf(p.id)).filter(Boolean));
+  const query = projectQuery.trim().toLowerCase();
+  const folderless = accountProjectsStore.withoutFolders
+    .filter((project) => !rowGroups.has(project.chatId) && (!query || project.name.toLowerCase().includes(query)));
 
   return (
-    <DropdownMenu>
+    <DropdownMenu onOpenChange={(open) => { if (open) void accountProjectsStore.refresh(); }}>
       <DropdownMenuTrigger
         render={
           <button type="button" className={sessionComposerTrayTriggerClassName}>
@@ -138,7 +146,7 @@ export const ComposerProjectPicker = observer(function ComposerProjectPicker({
                   <span>{translate('task.projectSkip')}</span>
                 </DropdownMenuItem>
               ) : null}
-              {visibleProjects.length === 0 ? (
+              {visibleProjects.length === 0 && folderless.length === 0 ? (
                 projects.length > 0 ? (
                   <div className="px-3 py-2 text-xs text-foreground-muted">
                     {translate('task.projectNoMatch')}
@@ -156,6 +164,9 @@ export const ComposerProjectPicker = observer(function ComposerProjectPicker({
                   </DropdownMenuItem>
                 ))
               )}
+              {folderless.map((project) => (
+                <FolderlessProjectItem key={project.chatId} project={project} onProjectReady={onSelect} />
+              ))}
             </div>
             <NewProjectSubmenu onProjectReady={onSelect} />
           </>

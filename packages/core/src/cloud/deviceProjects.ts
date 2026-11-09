@@ -179,3 +179,37 @@ export function withDeviceProjects<T extends Pick<Device, 'device_id' | 'project
     return (known ? { ...rest, projects: known } : rest) as T
   })
 }
+
+/** 账号上的一个项目(就是它的项目群):名字与状态是群自己的,`bindings` = 这个账号各台机器上为它记着的本地项目。 */
+export type AccountProject = {
+  chatId: string
+  name: string
+  archived: boolean
+  bindings: Array<{ deviceId: string; localProjectId: string }>
+}
+
+export interface AccountProjectsRpcClient {
+  rpc(fn: 'list_my_projects'): PromiseLike<RpcResult>
+}
+
+/** identity.list_my_projects:这个账号建的 / 当群主的项目群,连同各台机器上的文件夹(一个都没有也是项目)。 */
+export async function listAccountProjects(client: AccountProjectsRpcClient): Promise<AccountProject[]> {
+  const { data, error } = await client.rpc('list_my_projects')
+  if (error) throw new Error(error.message)
+  if (!Array.isArray(data)) throw new Error('Account project list response must be an array')
+  return data.map((row) => {
+    const value = row as { chat_id?: unknown; name?: unknown; status?: unknown; bindings?: unknown }
+    if (typeof value.chat_id !== 'string') throw new Error('Account project row has no chat_id')
+    const bindings = Array.isArray(value.bindings) ? value.bindings : []
+    return {
+      chatId: value.chat_id,
+      name: typeof value.name === 'string' ? value.name : '',
+      archived: value.status === 'archived',
+      bindings: bindings.flatMap((binding) => {
+        const b = binding as { device_id?: unknown; local_project_id?: unknown }
+        return typeof b.device_id === 'string' && typeof b.local_project_id === 'string'
+          ? [{ deviceId: b.device_id, localProjectId: b.local_project_id }] : []
+      }),
+    }
+  })
+}

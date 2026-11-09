@@ -9,21 +9,18 @@ import { electronApi } from '@renderer/lib/electron-api';
 import { toast } from '@renderer/lib/hooks/use-toast';
 import { rpc, rpcOn } from '@renderer/lib/ipc';
 import { useShowModal } from '@renderer/lib/modal/modal-provider';
-import { appState, sidebarStore } from '@renderer/lib/stores/app-state';
+import { sidebarStore } from '@renderer/lib/stores/app-state';
 import { projectGroupsStore } from '@renderer/features/projects/stores/project-groups-store';
 import { machineRegistry } from '@renderer/lib/machine-routing';
 import { remoteHostsStore } from '@renderer/features/remote-hosts/remote-hosts-store';
 import { useEnsureMounted } from '@renderer/features/projects/hooks/use-ensure-mounted';
 import { foldersInScope, machineOfKey, scopeKey, useProjectRunMachine } from './project-device-scope';
 import { ProjectFolderCard, shortHome, type AttachMachine, type FolderCardMachine } from './project-folder-card';
-import { linkFolderOnMachine, planAttach, type LinkFolderDeps } from '@shared/core/projects/project-attach-flow';
+import { linkFolderOnMachine, planAttach } from '@shared/core/projects/project-attach-flow';
+import { projectLinkDeps } from '@renderer/features/projects/project-link-deps';
 import { MAX_PROJECT_FOLDERS, useProjectFolders, type AttachResult } from './project-folders';
 import { useSessionMessages } from '@renderer/localization/use-session-messages';
 import { log } from '@renderer/utils/logger';
-
-function folderName(path: string): string {
-  return path.replace(/[\\/]+$/, '').split(/[\\/]/).pop() || path;
-}
 
 /**
  * 一个项目的文件夹卡和它背后的那一套(#7341):各台机器上的文件夹、设备范围、挂文件夹 / 接进来 / 并进来、
@@ -132,26 +129,7 @@ export function useProjectFolderStage(projectId: string, { floating = false, onC
   };
 
   // 那台机器上还没有这个项目:在那台把文件夹认成项目(并进来的就用那一个),绑到这个项目的群上(product spec,owner 选 A)。
-  const linkDeps: LinkFolderDeps = {
-    ensureGroup: (row) => rpc.projects.ensureProjectGroup(row),
-    createProjectOn: async (machine, path) => {
-      // 那台机器上的这个项目就是这个项目(product spec「项目不属于任何一台机器」):叫同一个名字,
-      // ❌ 用文件夹名 —— 否则那台机器的侧栏、这边的托盘上同一个项目各叫各的(实机:「shop」挂进去成了「shop-on-b」)。
-      const started = await appState.projects.startProjectCreation(
-        machine ? { type: 'local', machine } : { type: 'local' },
-        { mode: 'pick', path, name: displayName || folderName(path), initGitRepository: false, createDirectory: false, allowNonGit: true }
-      );
-      if (started.kind === 'existing') return { projectId: started.projectId, created: false };
-      const completion = await started.completion;
-      if (!completion.success) return null;
-      if (machine) await appState.projects.ensureMounted(started.projectId);
-      return { projectId: started.projectId, created: true };
-    },
-    bind: (machine, linked, chatId) => rpcOn(machine).projects.bindProjectToGroup(linked, chatId),
-    unbind: (machine, linked) => rpcOn(machine).projects.unbindProjectGroup(linked),
-    deleteProject: (linked) => appState.projects.deleteProject(linked),
-    sessionCountOf,
-  };
+  const linkDeps = projectLinkDeps(displayName, sessionCountOf);
   const linkOnMachine = async (machine: string | null, path: string, existingProjectId?: string) => {
     try {
       const linked = await linkFolderOnMachine(linkDeps, { rowId, machine, path, existingProjectId });
