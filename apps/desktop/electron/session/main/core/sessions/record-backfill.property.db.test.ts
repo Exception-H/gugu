@@ -6,7 +6,7 @@
  * Each sample is a seeded random record of Codex, Claude or Hermes turns (repeated prompts, tool calls, short and long
  * pictures, delivery envelopes, an unfinished last turn), written in random appends (cut anywhere, mid-turn too), with
  * rewinds, replaced records and `.zst` archives in between; both fills run after every write. A failure is shrunk to
- * a smaller case and reported with its seed. `RESUME_PROPERTY_SAMPLES` / `RESUME_PROPERTY_SEED` scale and pin a run.
+ * a smaller case and reported with its seed. `RESUME_PROPERTY_SAMPLES` / `RESUME_PROPERTY_SEED` scale and pin a run; `RESUME_PROPERTY_REPORT` names a file for its readings.
  */
 import { openFixture } from '@tooling/utils/db';
 import { afterAll, beforeAll, expect, it, vi } from 'vitest';
@@ -570,5 +570,6 @@ it('fills the same store and answers the same deliveries as a whole-record fill,
     }
     throw new Error(`seed ${seed} fails; smallest case: ${JSON.stringify(smallest, (k, v) => k === 'prompt' && v.length > 20 ? `<envelope:${DELIVERED.findIndex(id => v === envelope(id))}>` : v)}\n${error.message}\n${(error as { diff?: string }).diff ?? ''}`);
   }
-  console.info('[resume-property]', JSON.stringify({ samples, first, ...counts }));
+  // A large run's readings (sample mix), for its report: `RESUME_PROPERTY_REPORT=<file>`.
+  if (process.env.RESUME_PROPERTY_REPORT) await writeFile(process.env.RESUME_PROPERTY_REPORT, `${JSON.stringify({ samples, first, ...counts })}\n`);
 }, 3_600_000);
