@@ -1,5 +1,11 @@
 import { describe, expect, it, vi } from 'vitest';
-import { defaultRunMachine, foldersInScope } from './project-device-scope';
+import { defaultRunMachine, foldersInScope, rememberRunMachine } from './project-device-scope';
+
+const cloud = vi.hoisted(() => ({ remember: vi.fn(async () => ({})) }));
+vi.mock('@/lib/agentCreateDefaults', () => ({
+  readAgentCreateDefaults: async () => ({ deviceId: null, projectByDevice: {}, projectByChat: {}, machineByProject: {} }),
+  rememberAgentCreateRunMachine: cloud.remember,
+}));
 import type { ProjectFoldersState, ShownFolder } from './project-folders';
 
 const folder = (projectId: string): ShownFolder => ({ projectId, workspaceId: projectId, path: '/same/path', kind: 'root', branch: null, attachedAt: null, sessionIds: [], offline: projectId === 'remote', deviceId: projectId === 'remote' ? 'device-b' : null });
@@ -7,6 +13,16 @@ const local = folder('local');
 const remote = folder('remote');
 const state: ProjectFoldersState = { folders: [local, remote], chosen: local, fresh: undefined, loadError: false, unanswered: [], choose: vi.fn(), reload: vi.fn(), attach: vi.fn(), detach: vi.fn() };
 const deviceOf = (id: string) => id === 'remote' ? 'device-b' : null;
+
+describe('remembered run machine (account-wide)', () => {
+  // Round-2 A/B R4-b: keys other devices cannot read (a local project id, the phone's no-project key) were stored forever.
+  it('remembers only under a project group id, and writes it to the account', async () => {
+    rememberRunMachine(undefined, 'gpu');
+    rememberRunMachine('chat-work', 'gpu');
+    await vi.waitFor(() => expect(cloud.remember).toHaveBeenCalledWith('chat-work', 'gpu'));
+    expect(cloud.remember).toHaveBeenCalledTimes(1);
+  });
+});
 
 describe('project device scope', () => {
   // DESIGN「新建任务」默认机器:上次那台且在线 → 本机(有文件夹)→ 在线的第一台 → 都离线才回上次那台 → 第一台。

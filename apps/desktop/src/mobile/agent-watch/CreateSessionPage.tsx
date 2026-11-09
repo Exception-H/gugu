@@ -104,7 +104,7 @@ export function CreateSessionPage({
   const project = projects.find((one) => one.key === projectKey) ?? null
   const rows = useMemo(() => createMachines(project, machines), [project, machines])
   const runKey = project?.key ?? NO_PROJECT_KEY
-  const { machine: machineId, pick } = useProjectRunMachine(runKey, runCandidates(rows))
+  const { machine: machineId, pick } = useProjectRunMachine(runKey, runCandidates(rows), project?.groupId)
   const machine = rows.find((row) => row.device.device_id === machineId)
   const target = (busy: boolean) => (
     <CreateTarget projects={projects} project={project} onProject={setProjectKey} machines={rows} machine={machine} onMachine={pick} machineLabel={machineLabel} busy={busy} />
@@ -126,7 +126,7 @@ export function CreateSessionPage({
       taskGroup={taskGroup}
       onBack={onBack}
       onCreated={(...created) => {
-        rememberRunMachine(runKey, machine.device.device_id)
+        rememberRunMachine(project?.groupId, machine.device.device_id)
         onCreated(machine.device, ...created)
       }}
     />

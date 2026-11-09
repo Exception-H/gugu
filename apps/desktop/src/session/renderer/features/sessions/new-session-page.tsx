@@ -242,8 +242,9 @@ export const NewSessionPage = observer(function NewSessionPage({
   const openProject = (projectId: string | undefined) => {
     setSelectedId(projectId);
     if (!projectId) return;
-    // 先选了机器再选项目:进了项目块,那台机器有这个项目的文件夹就在那台上开(没有就照默认规则)。
-    rememberRunMachine(projectGroupsStore.chatIdOf(projectId) ?? projectId, remote?.deviceId ?? null);
+    // 人先选了别的机器再选项目:进了项目块,那台机器有这个项目的文件夹就在那台上开(没有就照默认规则)。
+    // 机器还是默认的「这台电脑」= 没人选过,❌ 拿它盖掉这个项目记着的机器。
+    if (remote) rememberRunMachine(projectGroupsStore.chatIdOf(projectId), remote.deviceId);
     // gugu-dev#181 ⑩:选项目 = 去那个项目里开新任务,写好的话跟着进项目块新任务框的草稿。
     prepareProjectTask(projectId, NEW_SESSION_DRAFT_KEY);
     navigate('project', { projectId });

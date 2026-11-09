@@ -43,8 +43,13 @@ function subscribe(listener: () => void): () => void {
   return () => { listeners.delete(listener); };
 }
 
-/** 记下这个项目这次选在哪台(null = 这台电脑):这一端立刻生效,账号上那份随后写上。 */
-export function rememberRunMachine(projectKey: string, deviceId: string | null): void {
+/**
+ * 记下这个项目这次选在哪台(null = 这台电脑):这一端立刻生效,账号上那份随后写上。
+ * 只按项目群记(别的设备认得的那个身份);还没有群的项目不记 —— 记成某台机器上的本地 id,别处永远用不上、也没人收。
+ */
+export function rememberRunMachine(groupId: string | undefined, deviceId: string | null): void {
+  if (!groupId) return;
+  const projectKey = groupId;
   const device = deviceId ?? memory.localDeviceId;
   if (!device) {
     log.warn('[projects] this computer has no device id yet; the machine choice is not remembered', { projectKey });
@@ -73,16 +78,16 @@ export function defaultRunMachine(candidates: readonly RunMachineCandidate[], sa
 }
 
 /**
- * 这个项目此刻选着的机器。`pick` = 人选的(记下来,下次默认还是它);候选里没有它(没有文件夹)也照选 ——
+ * 这个项目此刻选着的机器。`projectKey` 分开这一页上的不同项目;`groupId` = 它的项目群(没有 = 不记、也不读记忆)。`pick` = 人选的(记下来,下次默认还是它);候选里没有它(没有文件夹)也照选 ——
  * 那是人刚在那台机器上挂了文件夹、文件夹清单还没读回来。
  */
-export function useProjectRunMachine(projectKey: string, candidates: readonly RunMachineCandidate[]) {
+export function useProjectRunMachine(projectKey: string, candidates: readonly RunMachineCandidate[], groupId: string | undefined) {
   const saved = useSyncExternalStore(subscribe, () => snapshot);
   const [picked, setPicked] = useState<{ projectKey: string; key: string } | null>(null);
-  const chosen = picked && picked.projectKey === projectKey ? picked.key : defaultRunMachine(candidates, saved[projectKey]);
+  const chosen = picked && picked.projectKey === projectKey ? picked.key : defaultRunMachine(candidates, groupId ? saved[groupId] : undefined);
   const pick = (deviceId: string | null) => {
     setPicked({ projectKey, key: scopeKey(deviceId) });
-    rememberRunMachine(projectKey, deviceId);
+    rememberRunMachine(groupId, deviceId);
   };
   return { selected: chosen ? [chosen] : [], machine: chosen === null ? undefined : machineOfKey(chosen), pick };
 }

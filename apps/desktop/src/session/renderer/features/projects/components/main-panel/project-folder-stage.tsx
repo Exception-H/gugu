@@ -58,8 +58,9 @@ export function useProjectFolderStage(projectId: string, { floating = false, onC
   })).values()];
   // 在哪台跑:有这个项目文件夹的机器里选一台(默认规则见 defaultRunMachine);没有文件夹的机器在选择器分隔线下,点了先挂文件夹。
   const runMachine = useProjectRunMachine(
-    projectGroupsStore.chatIdOf(rowId) ?? rowId,
+    rowId,
     projectMachines.map((machine) => ({ key: scopeKey(machine.id), online: machine.online })),
+    projectGroupsStore.chatIdOf(rowId),
   );
   const scopedFolders = foldersInScope(folders, runMachine.selected, (id) => machineRegistry.machineOf(id) ?? null, (deviceId) => {
     const state = remoteHostsStore.connectionState(deviceId);

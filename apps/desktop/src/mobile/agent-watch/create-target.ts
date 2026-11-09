@@ -10,7 +10,7 @@ import { taskFoldersOfChat } from '../chat/phoneTaskFolders'
  * `key` = 项目的跨设备身份(项目群 chatId;还没绑群的本地项目 = 它自己那一行的 id),「上次在这个项目里用的机器」按它记。
  * `homes` = 有这个项目文件夹的机器 → 那台上的本地项目 id(建会话时带给那台机器)。
  */
-export type CreateProject = { key: string; name: string; homes: ReadonlyMap<string, string> }
+export type CreateProject = { key: string; name: string; homes: ReadonlyMap<string, string>; groupId: string | undefined }
 
 /** 账号下的项目:与「伙伴」项目列表同一种按项目群的归并(phoneProjectRows),数据是各台机器发布的 device_projects。 */
 export function accountProjects(devices: readonly Device[], cloudDeviceId: string | null): CreateProject[] {
@@ -20,6 +20,7 @@ export function accountProjects(devices: readonly Device[], cloudDeviceId: strin
     const folders = row.chatId ? taskFoldersOfChat(devices, row.chatId)?.folders ?? [] : row.folders.length > 0 ? [{ deviceId: row.deviceId, projectId: row.localProjectId }] : []
     return {
       key: row.chatId ?? row.id,
+      groupId: row.chatId ?? undefined,
       name: row.label,
       homes: new Map(folders.flatMap((folder) => (folder.deviceId ? [[folder.deviceId, folder.projectId] as const] : []))),
     }
