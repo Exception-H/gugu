@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { fetchInChunks } from '@gugu/core/shared/inChunks';
 import { userIdFromSupabaseAccessToken } from '@gugu/core';
 import { createGuguSupabaseClient } from '@gugu/core/cloud/supabase';
 import type { AppUnreadBinding, StoredUnreadBinding } from '@shared/extensions/unread-binding';
@@ -67,16 +68,35 @@ export async function grantedUnreadBindings(expectedOwner: string): Promise<Reco
   const { token, ownerId } = await account();
   if (ownerId !== expectedOwner) throw denied('Account changed');
   const service = extensionsService();
-  const result: Record<string, StoredUnreadBinding> = {};
+  const candidates: { extensionId: string; binding: StoredUnreadBinding }[] = [];
   for (const { manifest } of service.list().extensions) {
-    const name = manifest.permissions?.bindings?.[0]?.name;
+    const name = manifest.contributes.unreadSource?.binding;
     if (!name || !service.isEnabled(manifest.id) || !service.hasCapability(manifest.id, 'chat:unread')) continue;
-    const binding = service.conversationUnreadBinding(ownerId, manifest.id, name);
-    if (!binding) continue;
-    await member(token, ownerId, binding.chatId);
-    await current(ownerId);
-    if (service.conversationUnreadBinding(ownerId, manifest.id, name)?.handle === binding.handle) result[manifest.id] = binding;
+    try {
+      const binding = service.conversationUnreadBinding(ownerId, manifest.id, name);
+      if (binding) candidates.push({ extensionId: manifest.id, binding });
+    } catch (error) {
+      // Same rule as the re-check below: a denied grant (e.g. no verified publisher) is absence for this App only.
+      if ((error as { code?: string }).code !== 'denied') throw error;
+    }
   }
+  const client = createGuguSupabaseClient({ schema: 'chat', headers: { Authorization: `Bearer ${token}` } });
+  const memberships = await fetchInChunks([...new Set(candidates.map(({ binding }) => binding.chatId))], async ids => {
+    const { data, error } = await client.from('active_members').select('chat_id').eq('user_id', ownerId).in('chat_id', ids);
+    if (error) throw Object.assign(new Error('Could not verify unread source membership'), { code: 'failed' });
+    return (data ?? []) as { chat_id: string }[];
+  });
   await current(ownerId);
+  const active = new Set(memberships.map(row => row.chat_id));
+  const result: Record<string, StoredUnreadBinding> = {};
+  for (const { extensionId, binding } of candidates) {
+    if (!active.has(binding.chatId)) continue;
+    try {
+      if (service.conversationUnreadBinding(ownerId, extensionId, binding.name)?.handle === binding.handle) result[extensionId] = binding;
+    } catch (error) {
+      // Confirmed withdrawal is absence of authority, not a failed/empty unread read.
+      if ((error as { code?: string }).code !== 'denied') throw error;
+    }
+  }
   return result;
 }
