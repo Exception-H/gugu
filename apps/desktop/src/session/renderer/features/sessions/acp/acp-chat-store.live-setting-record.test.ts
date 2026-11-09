@@ -104,6 +104,33 @@ describe('活设置:provider 确认之后才写回会话记录', () => {
 });
 
 describe('model setting recovery stays beside the model control', () => {
+  it('a model change refused because a turn is running leaves nothing on the picker', async () => {
+    const store = makeStore({
+      success: false,
+      error: { type: 'set_config_failed', cause: { name: 'LiveSettingBusy', message: 'Cannot change model while the current turn is in flight' } },
+    });
+    await expect(store.setModel('m2')).resolves.toBeNull();
+    expect(store.modelSettingError).toBeNull();
+    expect(recorded()).toEqual([]);
+  });
+
+  it('locks the model for a running turn on a harness that refuses mid-turn, not for a background agent', () => {
+    const store = makeStore({ success: false, error: {} });
+    const setState = (state: { lifecycle: string; isGenerating: boolean }) => {
+      store.session = { sessionState: { current: () => ({ pendingPermissions: [], ...state }) } } as never;
+    };
+    const reject = { busy: 'reject' };
+    setState({ lifecycle: 'working', isGenerating: true });
+    expect(store.modelLockedForTurn(reject)).toBe(true);
+    expect(store.modelLockedForTurn({ busy: 'queue-next-turn' })).toBe(false);
+    setState({ lifecycle: 'cancelling', isGenerating: true });
+    expect(store.modelLockedForTurn(reject)).toBe(true);
+    setState({ lifecycle: 'idle', isGenerating: true });
+    expect(store.modelLockedForTurn(reject)).toBe(false);
+    setState({ lifecycle: 'idle', isGenerating: false });
+    expect(store.modelLockedForTurn(reject)).toBe(false);
+  });
+
   it('returns the adapter rejection as a recoverable model result', async () => {
     const data = { kind: 'model-unavailable' as const, requestedValue: 'retired-model' };
     const store = makeStore({ success: false, error: { type: 'set_config_failed', cause: { name: 'RequestError', message: 'unknown model: retired-model', data } } });

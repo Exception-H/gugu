@@ -100,7 +100,6 @@ export const WITHHELD_FAMILIES = [
   'grok',
   'junie',
   'kimi',
-  'kiro',
   'mistral',
   'oh-my-pi',
   'qoder',

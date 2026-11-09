@@ -1846,6 +1846,81 @@ describe('AcpRuntime session manager', () => {
     expect(rt.sessionLiveModels('conv-model-rejected')).not.toBeNull();
   });
 
+  it('applies the chosen model once a harness publishes its model option after session/new', async () => {
+    const h = makeAcpHarness();
+    const provider = h.deps.agentHost.resolveAcp('claude');
+    if (!provider) throw new Error('test provider missing');
+    provider.behavior.catalogModelsInConfigUpdate = true;
+    const rt = new AcpRuntime(h.deps);
+    h.agent.newSession.mockImplementationOnce(async () => {
+      setTimeout(() => h.agent.capturedClient!.sessionEvent({
+        sessionId: 'session-late-model',
+        event: decodeSessionUpdate({ sessionUpdate: 'config_option_update', configOptions: modelConfigOptions('default-model') } as never),
+      }), 150);
+      return { sessionId: 'session-late-model' };
+    });
+    h.agent.setSessionConfigOption.mockImplementation(async () => ({ configOptions: modelConfigOptions('gpt-5.5') }));
+    const result = await rt.startSession(makeStartInput({ sessionId: 'conv-late-model', model: 'gpt-5.5' }));
+    expect(isOk(result)).toBe(true);
+    expect(h.agent.setSessionConfigOption).toHaveBeenCalledWith(expect.objectContaining({ value: 'gpt-5.5' }));
+    expect(JSON.stringify(rt.getChatHistory('conv-late-model'))).not.toContain('model-unavailable');
+    await rt.dispose();
+  });
+
+  it('fails the start at once when the process dies while waiting for a late model option', async () => {
+    const h = makeAcpHarness();
+    const provider = h.deps.agentHost.resolveAcp('claude');
+    if (!provider) throw new Error('test provider missing');
+    provider.behavior.catalogModelsInConfigUpdate = true;
+    const rt = new AcpRuntime(h.deps);
+    h.agent.newSession.mockImplementationOnce(async () => {
+      setTimeout(() => h.children[0]?.emitExit(1), 150);
+      return { sessionId: 'session-late-dies' };
+    });
+    const result = await rt.startSession(makeStartInput({ sessionId: 'conv-late-dies', model: 'gpt-5.5' }));
+    expect(isOk(result)).toBe(false);
+    expect(JSON.stringify(result)).toContain('exited during startup (code 1)');
+    await rt.dispose();
+  });
+
+  it('opens the session when a harness never publishes its late model option', async () => {
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'Date'] });
+    try {
+      const h = makeAcpHarness();
+      const provider = h.deps.agentHost.resolveAcp('claude');
+      if (!provider) throw new Error('test provider missing');
+      provider.behavior.catalogModelsInConfigUpdate = true;
+      const rt = new AcpRuntime(h.deps);
+      h.agent.newSession.mockResolvedValueOnce({ sessionId: 'session-late-never' });
+      let settled = false;
+      const start = rt.startSession(makeStartInput({ sessionId: 'conv-late-never' })).finally(() => { settled = true; });
+      await vi.advanceTimersByTimeAsync(29_000);
+      expect(settled).toBe(false);
+      await vi.advanceTimersByTimeAsync(2_000);
+      expect(isOk(await start)).toBe(true);
+      await rt.dispose();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('raises one notice for a session opening on a model its harness declares, and none for another', async () => {
+    const h = makeAcpHarness();
+    const provider = h.deps.agentHost.resolveAcp('claude');
+    if (!provider) throw new Error('test provider missing');
+    provider.behavior.modelsLeakingToolCallMarkers = ['default-model'];
+    const rt = new AcpRuntime(h.deps);
+    h.agent.newSession.mockResolvedValueOnce({ sessionId: 's-listed', configOptions: modelConfigOptions('default-model') });
+    expect(isOk(await rt.startSession(makeStartInput({ sessionId: 'conv-listed' })))).toBe(true);
+    const listed = JSON.stringify(rt.getChatHistory('conv-listed'));
+    expect(listed.match(/"code":"model-leaks-tool-markers"/g)).toHaveLength(1);
+    expect(listed).toContain('"effectiveValue":"default-model"');
+    h.agent.newSession.mockResolvedValueOnce({ sessionId: 's-other', configOptions: modelConfigOptions('gpt-5.5') });
+    expect(isOk(await rt.startSession(makeStartInput({ sessionId: 'conv-other' })))).toBe(true);
+    expect(JSON.stringify(rt.getChatHistory('conv-other'))).not.toContain('model-leaks-tool-markers');
+    await rt.dispose();
+  });
+
   it('explains when Claude user availableModels excludes the selected platform model', async () => {
     const h = makeAcpHarness();
     const provider = h.deps.agentHost.resolveAcp('claude');

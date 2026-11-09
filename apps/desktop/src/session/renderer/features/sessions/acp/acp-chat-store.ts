@@ -804,6 +804,11 @@ export class AcpChatStore {
     return true;
   }
 
+  /** A harness that refuses a model change mid-turn. A background agent is not a turn: the host accepts the change then. */
+  modelLockedForTurn(setting: { busy?: string } | undefined): boolean {
+    return setting?.busy === 'reject' && this.affordances.isWorking;
+  }
+
   get affordances(): AgentAffordances {
     const state = this.session?.sessionState.current();
     // #6448:composer 的「在跑」= agent 在干活(发送改排队、立即发送要先打断、乐观消息不插)。只剩后台子代理的
@@ -1547,6 +1552,12 @@ export class AcpChatStore {
     try {
       this._modelSettingRecovery = false;
       const result = await session.setModelOption('model', model);
+      // The menu locks during a turn; this is the turn that started while it was open. Nothing is wrong with the
+      // model or the session, so nothing stays on the picker.
+      if (!result.success && (result.error as { cause?: { name?: unknown } }).cause?.name === 'LiveSettingBusy') {
+        toast({ title: translateSessionMessage('composer.modelBusy') });
+        return null;
+      }
       const rejection = result.success ? null : modelSettingRejection(result.error);
       const reason = result.success ? undefined : describeFailureCause(result.error);
       const displayReason = rejection ? reason?.split('\n')[0] : reason;
