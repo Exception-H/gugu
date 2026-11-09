@@ -41,10 +41,10 @@ describe('extension data folder (#6387)', () => {
     expect(() => writeExtensionData(root, 'big', 'x'.repeat(MAX_EXTENSION_DATA_FILE_BYTES + 1))).toThrow(/larger than/);
   });
 
-  it('goes away with the extension', () => {
+  it('goes away with the extension', async () => {
     const root = freshRoot();
     writeExtensionData(root, 'notes.json', '[]');
-    removeExtensionData(root);
+    await removeExtensionData(root);
     expect(fs.existsSync(root)).toBe(false);
   });
 });

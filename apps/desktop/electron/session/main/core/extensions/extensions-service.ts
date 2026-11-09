@@ -24,6 +24,7 @@ import { assertConfinedProgramBundle } from './extension-validate';
 import { z } from 'zod';
 import { BUNDLE_SKIP_NAMES } from '@shared/extensions/market';
 import { appVariantsSchema, type AppVariants, type ExtensionVariant } from '@shared/extensions/variants';
+import { removeTreeSync } from '@main/core/utils/remove-tree';
 
 export type { ExtensionOrigin };
 
@@ -358,8 +359,8 @@ export class ExtensionsService {
       }
       throw error;
     } finally {
-      fs.rmSync(staging, { recursive: true, force: true });
-      if (displaced) fs.rmSync(displaced, { recursive: true, force: true });
+      removeTreeSync(staging);
+      if (displaced) removeTreeSync(displaced);
     }
     // No install restores a withdrawal; only the person does, in settings (`keptRevocations`).
     const kept = keptRevocations(revocations[manifest.id] ?? [], { ...manifest, permissions: approved });
@@ -426,7 +427,7 @@ export class ExtensionsService {
     const dir = this.variantDirectory(id, name);
     variants[id] = { ...state, variants: state.variants.filter((variant) => variant.name !== name) };
     this.variantsFile.write(variants);
-    try { fs.rmSync(dir, { recursive: true, force: true }); }
+    try { removeTreeSync(dir); }
     catch (error) { return { removed: true, warning: `The fork registration was removed, but its cache could not be cleared: ${String(error)}` }; }
     return { removed: true };
   }
@@ -455,10 +456,10 @@ export class ExtensionsService {
     fs.mkdirSync(path.dirname(target), { recursive: true });
     try {
       fs.cpSync(sourceDir, staging, { recursive: true, dereference: false, verbatimSymlinks: true, filter: (source) => !BUNDLE_SKIP_NAMES.has(path.basename(source)) });
-      fs.rmSync(target, { recursive: true, force: true });
+      removeTreeSync(target);
       fs.renameSync(staging, target);
     } finally {
-      fs.rmSync(staging, { recursive: true, force: true });
+      removeTreeSync(staging);
     }
     return target;
   }
@@ -542,7 +543,7 @@ export class ExtensionsService {
     for (const entry of fs.readdirSync(this.rootDir, { withFileTypes: true })) {
       if (!entry.isDirectory()) continue;
       if (!entry.name.startsWith(STAGING_PREFIX) && !entry.name.startsWith(TRASH_PREFIX)) continue;
-      fs.rmSync(path.join(this.rootDir, entry.name), { recursive: true, force: true });
+      removeTreeSync(path.join(this.rootDir, entry.name));
     }
   }
 
@@ -768,7 +769,7 @@ export class ExtensionsService {
     const variants = this.variantsFile.read();
     delete variants[extensionId];
     this.variantsFile.write(variants);
-    fs.rmSync(path.dirname(this.variantDirectory(extensionId, 'upstream')), { recursive: true, force: true });
+    removeTreeSync(path.dirname(this.variantDirectory(extensionId, 'upstream')));
     const origins = this.origins();
     if (origins[extensionId]) {
       delete origins[extensionId];
@@ -796,7 +797,7 @@ export class ExtensionsService {
 
     const trash = path.join(this.rootDir, `${TRASH_PREFIX}${extensionId}-${randomHex()}`);
     fs.renameSync(target, trash);
-    fs.rmSync(trash, { recursive: true, force: true });
+    removeTreeSync(trash);
   }
 
   /**
