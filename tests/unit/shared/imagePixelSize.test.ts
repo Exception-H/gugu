@@ -15,6 +15,14 @@ describe('an image\'s pixel size from its header', () => {
   it.each(encoded)('reads a %s', (_format, base64) => {
     expect(imagePixelSize(Buffer.from(base64, 'base64'))).toEqual({ width: 37, height: 11 })
   })
+  // Real JPEG encodings of the same 37×11 pixels naming an EXIF orientation: 5–8 are shown turned a quarter.
+  it.each([
+    [3, '/9j/4AAQSkZJRgABAQAAAQABAAD/4QAiRXhpZgAATU0AKgAAAAgAAQESAAMAAAABAAMAAAAAAAD/2wBDAAgGBgcGBQgHBwcJCQgKDBQNDAsLDBkSEw8UHRofHh0aHBwgJC4nICIsIxwcKDcpLDAxNDQ0Hyc5PTgyPC4zNDL/2wBDAQkJCQwLDBgNDRgyIRwhMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjL/wAARCAALACUDASIAAhEBAxEB', { width: 37, height: 11 }],
+    [6, '/9j/4AAQSkZJRgABAQAAAQABAAD/4QAiRXhpZgAATU0AKgAAAAgAAQESAAMAAAABAAYAAAAAAAD/2wBDAAgGBgcGBQgHBwcJCQgKDBQNDAsLDBkSEw8UHRofHh0aHBwgJC4nICIsIxwcKDcpLDAxNDQ0Hyc5PTgyPC4zNDL/2wBDAQkJCQwLDBgNDRgyIRwhMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjL/wAARCAALACUDASIAAhEBAxEB', { width: 11, height: 37 }],
+    [8, '/9j/4AAQSkZJRgABAQAAAQABAAD/4QAiRXhpZgAATU0AKgAAAAgAAQESAAMAAAABAAgAAAAAAAD/2wBDAAgGBgcGBQgHBwcJCQgKDBQNDAsLDBkSEw8UHRofHh0aHBwgJC4nICIsIxwcKDcpLDAxNDQ0Hyc5PTgyPC4zNDL/2wBDAQkJCQwLDBgNDRgyIRwhMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjL/wAARCAALACUDASIAAhEBAxEB', { width: 11, height: 37 }],
+  ] as const)('reads a JPEG with EXIF orientation %i as it is shown', (_orientation, base64, shown) => {
+    expect(imagePixelSize(Buffer.from(base64, 'base64'))).toEqual(shown)
+  })
   it('says nothing for other bytes, a header cut before its size, or a zero size', () => {
     expect(imagePixelSize(new TextEncoder().encode('<svg xmlns="http://www.w3.org/2000/svg"/>'))).toBeNull()
     expect(imagePixelSize(Buffer.from(encoded[1][1], 'base64').subarray(0, 100))).toBeNull()
