@@ -18,6 +18,11 @@ function isAdjacentSettingsTarget(target: EventTarget | null): boolean {
   return target instanceof Element && target.closest(adjacentSettingsSelector) !== null
 }
 
+/** On the phone the card is a bottom sheet, outside the popover: the sheet owns its dismissal, a press in it is not outside. */
+function isInProfileSheet(target: EventTarget | null): boolean {
+  return target instanceof Element && !!target.closest('.gg-sheet-content')?.querySelector('[data-profile-member-id]')
+}
+
 /**
  * A host's one profile card. Every avatar / member row that opens it is a `Popover.Trigger` of `handle` with the profile as
  * payload, so Base UI owns the toggle: a second press on the same avatar closes the card, another avatar moves it.
@@ -40,9 +45,10 @@ export function MemberProfileRoot({ handle, onOpenChange, children }: {
           const nextTarget = eventDetails.event instanceof FocusEvent
             ? eventDetails.event.relatedTarget
             : null
-          const opensAdjacentSettings = (eventDetails.reason === 'outside-press' || eventDetails.reason === 'focus-out')
-            && (isAdjacentSettingsTarget(eventDetails.event.target) || isAdjacentSettingsTarget(nextTarget))
-          if (opensAdjacentSettings) {
+          const keepsCard = (target: EventTarget | null) => isAdjacentSettingsTarget(target) || isInProfileSheet(target)
+          const staysOpen = (eventDetails.reason === 'outside-press' || eventDetails.reason === 'focus-out')
+            && (keepsCard(eventDetails.event.target) || keepsCard(nextTarget))
+          if (staysOpen) {
             eventDetails.cancel()
             return
           }

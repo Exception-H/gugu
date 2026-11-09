@@ -73,6 +73,18 @@ describe('#6836 member profile card on the phone', () => {
     expect(card(), 'Base UI keeps the payload after closing; the sheet must not stay up').toBeNull()
   })
 
+  it('a press inside the sheet (the alias field, a button) is not an outside press: the card stays', async () => {
+    shell.mobile = true
+    await renderWithAppProviders(harness, profileCardWithOpener({ member, preferredSide: 'left' }, { onClose: vi.fn() }), { chat: {}, contacts: {} })
+    await pressProfileOpener()
+    const inside = card()!.querySelector<HTMLElement>('[data-profile-member-id] *')!
+    for (const type of ['pointerdown', 'mousedown', 'pointerup', 'mouseup', 'click'] as const) {
+      await act(async () => { inside.dispatchEvent(new MouseEvent(type, { bubbles: true, cancelable: true })) })
+    }
+    await act(async () => { inside.focus(); await Promise.resolve() })
+    expect(card(), 'pressing inside the sheet keeps the card').not.toBeNull()
+  })
+
   it('desktop: still the popover beside the element that opened it', async () => {
     shell.mobile = false
     const page = (child: ReturnType<typeof createNode> | null) => createElement(RightPanel, { testId: 'member-page', onClose: vi.fn(), children: child })
