@@ -72,7 +72,8 @@ export function createClaudeJsonlSource(
   const root = new ClaudeJsonlSource(locator, options, nativeChild);
   return withSubagentSources(
     root,
-    (id) => createClaudeJsonlSource({ ...locator, providerSessionId: id, roots: root.childRoots[id] }, options, true),
+    // A child's pictures are in its own file: the filter's positions are the root record's.
+    (id) => createClaudeJsonlSource({ ...locator, providerSessionId: id, roots: root.childRoots[id] }, options && { ...options, pictures: undefined }, true),
     () => createClaudeJsonlSource(locator, options, nativeChild),
     options,
   );
@@ -139,7 +140,8 @@ class ClaudeJsonlSource implements SessionRecordSource {
           events.onReset(reason);
         }
       },
-      this.warn
+      this.warn,
+      this.options?.pictures
     );
     const resumed = this.options?.readMode !== 'snapshot' && resume ? await this.resumeRead(path, resume) : false;
     if (!resumed) {

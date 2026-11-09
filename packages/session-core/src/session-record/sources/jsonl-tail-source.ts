@@ -67,7 +67,8 @@ export function createJsonlTailSource<S>(
             events.onReset(reason);
           }
         },
-        warn
+        warn,
+        options?.pictures
       );
       if (options?.readMode === 'snapshot') {
         if (resume) events.onReset('source_replaced');

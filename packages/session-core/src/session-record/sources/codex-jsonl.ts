@@ -94,7 +94,8 @@ export function createCodexJsonlSource(locator: SessionRecordLocator, options?: 
   });
   return withSubagentSources(
     root,
-    (id) => createCodexJsonlSource({ ...locator, providerSessionId: id }, options, true),
+    // A child's pictures are in its own file: the filter's positions are the root record's.
+    (id) => createCodexJsonlSource({ ...locator, providerSessionId: id }, options && { ...options, pictures: undefined }, true),
     () => createCodexJsonlSource(locator, options, nativeChild),
     options,
   );

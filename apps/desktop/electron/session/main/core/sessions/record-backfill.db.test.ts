@@ -303,3 +303,26 @@ it('stores only a proved Claude fork increment after canonical storage renumbers
     await rm(root, { recursive: true, force: true });
   }
 });
+
+it('writes the turns it fills with their pictures, and reads on from the cursor past passed-over ones', async () => {
+  const picture = (n: number) => String(n).padStart(4, '0').repeat(20_000);
+  const pictureTurn = (n: number) => [
+    line('event_msg', { type: 'task_started' }),
+    line('response_item', { type: 'message', role: 'user', content: [{ type: 'input_text', text: `question ${n}` }] }),
+    line('response_item', { type: 'function_call', name: 'shot', arguments: '{}', call_id: `shot-${n}` }),
+    line('response_item', { type: 'function_call_output', call_id: `shot-${n}`, output: [{ type: 'input_image', image_url: `data:image/png;base64,${picture(n)}` }] }),
+    line('response_item', { type: 'message', role: 'assistant', content: [{ type: 'output_text', text: `answer ${n}` }] }),
+    line('event_msg', { type: 'task_complete' }),
+  ];
+  const stored = () => rows().map(row => (JSON.parse(row.data) as TranscriptTurn).items
+    .flatMap(item => (item as { images?: Array<{ data: string }> }).images?.map(image => image.data.length) ?? []));
+  await writeRecord([0, 1, 2].flatMap(pictureTurn));
+  expect(await sync()).toEqual({ inserted: 3, status: 'complete' });
+  expect(stored()).toEqual([[80_000], [80_000], [80_000]]);
+  expect(rows().map(row => JSON.parse(row.data).items.find((item: { kind: string }) => item.kind !== 'message').images[0].data.slice(0, 8)))
+    .toEqual([picture(0), picture(1), picture(2)].map(data => data.slice(0, 8)));
+  await appendRecord([3, 4].flatMap(pictureTurn));
+  expect(await sync()).toEqual({ inserted: 2, status: 'complete' });
+  expect(stored()).toEqual([[80_000], [80_000], [80_000], [80_000], [80_000]]);
+  expect(texts().at(-1)).toBe('question 4 / answer 4');
+});

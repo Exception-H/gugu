@@ -6,6 +6,7 @@ import { log } from '@main/lib/logger';
 import { sessionRecordHarnessForProvider } from '@main/core/session-timeline/locate';
 import { indexHermesPrompts, originalHermesPrompt } from '@gugu/session-core/acp/hermes-prompt';
 import { hashIdentity, identify, matchAfterStore, matchAfterStoreAt, recordIdentityFor, type Identity, type RecordIdentity } from './record-backfill-match';
+import { ELIDED_PICTURE, type PictureFilter } from '@gugu/session-core/session-record/picture-elider';
 import { appendRecordTurnNow, readUnfinishedRecordRowsNow, reviseRecordTurnNow, storedHeadNow, storedTurnsNewestFirstNow, withStoredTurns } from './session-turn-store';
 import { sessionEngine, sessionProcess } from './session-process';
 
@@ -117,24 +118,26 @@ export async function syncStoredHistoryFromRecord(sessionId: string, options: { 
     try {
       if (parentRow && parentLocation?.supported) {
         // A fork proves its parent's prefix once, by a snapshot read of the parent; nothing of it is kept.
-        const parent = await readRecordFrom({ locator: parentLocation.locator, sessionId: parentRow.id, position: 0, snapshot: true, onSettled: () => {} });
+        const parent = await readRecordFrom({ locator: parentLocation.locator, sessionId: parentRow.id, position: 0, snapshot: true, pictures: NO_PICTURES, onSettled: () => {} });
         parentLineage = parent.lineage ?? undefined;
         if (!parentLineage?.length) return result('diverged');
       }
 
-      // First pass: turn identities only, from the cursor, else from the beginning.
+      // First pass: turn identities and where each turn starts, no picture decoded; from the cursor, else the beginning.
       const scan = async (position: number) => {
         const seen: Identity[] = [];
+        const starts: Array<number | null> = [];
         let unreceipted = false;
-        const take = (turn: TranscriptTurn) => {
+        const take = (turn: TranscriptTurn, start: number | null) => {
           if (hermes && turn.items.some(item => item.kind === 'message' && item.role === 'user' && originalHermesPrompt(item.text, hermes) === null)) unreceipted = true;
           seen.push(hashIdentity(identify(turn, hermes), digest));
+          starts.push(start);
         };
         const read = await readRecordFrom({ locator: location.locator, sessionId, position, ...(parentLineage ? { parentLineage } : {}),
-          onSettled: turns => turns.forEach(take) });
+          pictures: NO_PICTURES, onSettled: (turns, _from, at) => turns.forEach((turn, index) => take(turn, at[index])) });
         const prefix = committedOnly && read.tail.length > read.committed ? read.tail.slice(0, read.committed) : read.tail;
-        prefix.forEach(take);
-        return { seen, unreceipted, from: read.from, complete: prefix.length === read.tail.length, lastSettled: !!prefix.at(-1)?.outcome };
+        prefix.forEach((turn, index) => take(turn, read.tailStarts[index]));
+        return { seen, starts, unreceipted, from: read.from, complete: prefix.length === read.tail.length, lastSettled: !!prefix.at(-1)?.outcome };
       };
       let plan: Plan | null = null;
       const cursor = !parentLineage && saved?.cursor ? saved.cursor : null;
@@ -149,7 +152,7 @@ export async function syncStoredHistoryFromRecord(sessionId: string, options: { 
           && matchAfterStoreAt(scanned.seen.slice(0, 1), [first.identity], identity)?.anchor) {
           const found = matchPlan(scanned.seen, since, unfinished, identity, true);
           if (found === 'diverged') return result('diverged');
-          if (found) plan = { ...found, from: cursor.position, complete: scanned.complete, lastSettled: scanned.lastSettled };
+          if (found) plan = { ...found, from: cursor.position, starts: scanned.starts, complete: scanned.complete, lastSettled: scanned.lastSettled };
         }
         // A cursor the record no longer shows (replaced, rewritten) is dropped: match as if there were none.
       }
@@ -163,12 +166,14 @@ export async function syncStoredHistoryFromRecord(sessionId: string, options: { 
         if (found === null && window.rows.length >= STORE_WINDOW) found = matchPlan(scanned.seen, storeIdentities(Number.MAX_SAFE_INTEGER).rows, unfinished, identity, true);
         if (found === null) log.warn('[record-backfill] the record and the store diverged; nothing filled in', { sessionId });
         if (found === null || found === 'diverged') return result('diverged');
-        plan = { ...found, from: scanned.from, complete: scanned.complete, lastSettled: scanned.lastSettled };
+        plan = { ...found, from: scanned.from, starts: scanned.starts, complete: scanned.complete, lastSettled: scanned.lastSettled };
       }
 
-      // Second pass: the same start; turns after the anchor are written as they stream, pictures within the budget. The
-      // newest settled turn whose stored row is known becomes the next fill's cursor.
-      let inserted = 0, index = 0, pictures = FILL_PICTURE_CHARS;
+      // Second pass: the same start; turns after the anchor are written as they stream. Only their pictures are decoded,
+      // within the budget (as before); the others keep their size. The newest settled turn whose stored row is known
+      // becomes the next fill's cursor.
+      let inserted = 0, index = 0;
+      const pictures = writtenPictures(plan, FILL_PICTURE_CHARS);
       let next: Cursor | null = null;
       const write = (turn: TranscriptTurn, start: number | null) => {
         const at = index++;
@@ -183,13 +188,13 @@ export async function syncStoredHistoryFromRecord(sessionId: string, options: { 
         if (!current()) throw new FillStopped('runtime-changed');
         // If a new turn started during an idle snapshot, leave its unproved suffix for the settled edge.
         if (row.runtime !== 'acp' && !committedOnly && active()) throw new FillStopped('active');
-        const kept = withinPictureBudget(turn, (chars) => (pictures -= chars) >= 0);
+        const kept = elidedAsRefs(turn);
         if (seq !== undefined) { reviseRecordTurnNow(sessionId, seq, kept); known(seq); }
         else { known(appendRecordTurnNow(sessionId, kept)); inserted++; }
       };
       try {
         const read = await readRecordFrom({ locator: location.locator, sessionId, position: plan.from, ...(parentLineage ? { parentLineage } : {}),
-          onSettled: (turns, _from, starts) => turns.forEach((turn, at) => write(turn, starts[at])) });
+          pictures, onSettled: (turns, _from, starts) => turns.forEach((turn, at) => write(turn, starts[at])) });
         if (read.from !== plan.from) throw new Error('record-backfill: the second pass started elsewhere than the first');
         const held = committedOnly && read.tail.length > read.committed ? read.committed : read.tail.length;
         for (let at = 0; at < held; at += 1) write(read.tail[at], read.tailStarts[at]);
@@ -226,6 +231,8 @@ type Plan = {
   /** Whether a record turn is appended: the matched ones, and any the record grew by between the passes. */
   append: (index: number) => boolean;
   appended: number;
+  /** Where each turn read (index from `from`) starts in the record; null where the source does not say. */
+  starts: Array<number | null>;
   /** The newest record turn recognized as a stored row, and that row's seq. */
   anchor: { seen: number; seq: number } | null;
   complete: boolean;
@@ -247,7 +254,7 @@ function matchPlan(
   unfinished: Array<{ seq: number; identity: Identity }>,
   identity: RecordIdentity,
   storeComplete: boolean,
-): Omit<Plan, 'from' | 'complete' | 'lastSettled'> | 'diverged' | null {
+): Omit<Plan, 'from' | 'starts' | 'complete' | 'lastSettled'> | 'diverged' | null {
   const revise = new Map<number, number>();
   for (let at = 0; at < seen.length; at += 1) {
     const hits = unfinished.filter(one => matchAfterStore([seen[at]], [one.identity], identity)?.length === 0);
@@ -275,16 +282,41 @@ function matchPlan(
   };
 }
 
-/** Pictures past the fill's budget keep only their size (`imageRefs`), as the transport projections show them. */
-function withinPictureBudget(turn: TranscriptTurn, take: (chars: number) => boolean): TranscriptTurn {
+const NO_PICTURES: PictureFilter = { keep: () => false, kept: () => {} };
+
+/**
+ * The second pass decodes a picture only when it lies in a turn the fill writes (by the turn starts the first pass
+ * saw) and the budget still has room, as before resume-tail. Turns with no start keep theirs within the budget.
+ */
+function writtenPictures(plan: Plan, budget: number): PictureFilter {
+  const known = plan.starts.flatMap((start, index) => start === null ? [] : [{ start, index }]);
+  const turnAt = (at: number) => {
+    let low = 0, high = known.length;
+    while (low < high) { const mid = (low + high) >> 1; if (known[mid].start <= at) low = mid + 1; else high = mid; }
+    return low === 0 ? null : known[low - 1].index;
+  };
+  let left = budget;
+  return {
+    keep(at) {
+      if (left <= 0) return false;
+      const index = turnAt(at);
+      return index === null || plan.revise.has(index) || plan.append(index);
+    },
+    kept(chars) { left -= chars; },
+  };
+}
+
+/** A picture the second pass left undecoded keeps only its size (`imageRefs`), as the transport projections show it. */
+function elidedAsRefs(turn: TranscriptTurn): TranscriptTurn {
   const visit = (items: TranscriptTurn['items']): TranscriptTurn['items'] => {
     let changed = false;
     const next = items.map((item) => {
       const node = item as unknown as { images?: Array<{ mimeType: string; data: string }>; children?: TranscriptTurn['items'] };
       let out = item;
-      if (node.images?.length && !take(node.images.reduce((sum, image) => sum + image.data.length, 0))) {
+      if (node.images?.some(image => image.data.startsWith(ELIDED_PICTURE))) {
         const { images, ...rest } = node;
-        out = { ...rest, imageRefs: images.map(({ mimeType, data }) => ({ mimeType, chars: data.length })) } as unknown as typeof item;
+        out = { ...rest, imageRefs: images.map(({ mimeType, data }) => ({ mimeType,
+          chars: data.startsWith(ELIDED_PICTURE) ? Number(data.slice(ELIDED_PICTURE.length)) : data.length })) } as unknown as typeof item;
       }
       const children = (out as typeof node).children;
       const kept = children ? visit(children) : children;
@@ -297,4 +329,3 @@ function withinPictureBudget(turn: TranscriptTurn, take: (chars: number) => bool
   const items = visit(turn.items);
   return items === turn.items ? turn : { ...turn, items };
 }
-

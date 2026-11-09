@@ -7,6 +7,7 @@ import { afterEach, describe, expect, it } from 'vitest';
 import type { TranscriptTurn } from '../acp/models/turns/turn';
 import type { SessionRecordLocator } from './contract';
 import { readRecordFrom } from './fill-read';
+import { ELIDED_PICTURE, type PictureFilter } from './sources/picture-elider';
 import { createSessionRecordSource, createSessionTimeline } from './index';
 
 const disposers: Array<() => Promise<void>> = [];
@@ -31,7 +32,8 @@ async function codexRecord(): Promise<SessionRecordLocator> {
     line('event_msg', { type: 'task_started' }),
     line('response_item', { type: 'message', role: 'user', content: [{ type: 'input_text', text: `question ${n % 7}` }] }),
     line('response_item', { type: 'function_call', name: 'shell', arguments: '{}', call_id: `call-${n}` }),
-    line('response_item', { type: 'function_call_output', call_id: `call-${n}`, output: `out ${n}` }),
+    line('response_item', { type: 'function_call_output', call_id: `call-${n}`, output: n % 10 ? `out ${n}`
+      : [{ type: 'input_image', image_url: `data:image/png;base64,${String(n).padStart(4, '0').repeat(25_000)}` }] }),
     line('response_item', { type: 'message', role: 'assistant', content: [{ type: 'output_text', text: `answer ${n % 7}` }] }),
     line('event_msg', { type: 'task_complete' }),
   ]).flat();
@@ -90,11 +92,13 @@ async function hermesRecord(): Promise<SessionRecordLocator> {
 const said = (turns: readonly TranscriptTurn[]) => turns.map((turn) => turn.items.flatMap((item) =>
   item.kind === 'message' ? [`${item.role}: ${item.text}`] : []).join(' | '));
 
-async function readAll(locator: SessionRecordLocator, position: number) {
+const ALL: PictureFilter = { keep: () => true, kept: () => {} };
+
+async function readAll(locator: SessionRecordLocator, position: number, pictures = ALL) {
   const turns: TranscriptTurn[] = [];
   const starts: Array<number | null> = [];
   let handedOut = 0;
-  const read = await readRecordFrom({ locator, sessionId: 'fill', position, onSettled: (batch, from, at) => {
+  const read = await readRecordFrom({ locator, sessionId: 'fill', position, pictures, onSettled: (batch, from, at) => {
     expect(from).toBe(turns.length);
     handedOut += batch.length;
     turns.push(...batch); starts.push(...at);
@@ -138,4 +142,21 @@ it('reads a grown Codex record from a position without the lines before it', asy
   ].join('\n') + '\n');
   const from = await readAll(locator, whole.starts[at]!);
   expect(said(from.turns)).toEqual([...said(whole.turns.slice(at)), 'user: grown']);
+});
+
+it('passes pictures over without moving a turn start, and keeps the ones asked for', async () => {
+  const locator = await codexRecord();
+  const whole = await readAll(locator, 0);
+  const asked: number[] = [];
+  const kept: number[] = [];
+  const passed = await readAll(locator, 0, { keep: (at) => { asked.push(at); return asked.length === 2; }, kept: (chars) => { kept.push(chars); } });
+  expect(passed.starts).toEqual(whole.starts);
+  expect(said(passed.turns)).toEqual(said(whole.turns));
+  const images = (turns: TranscriptTurn[]) => turns.flatMap((turn) => turn.items.flatMap((item) =>
+    (item as { images?: Array<{ data: string }> }).images?.map((image) => image.data) ?? []));
+  expect(asked).toHaveLength(TURNS / 10);
+  expect(kept).toEqual([100_000]);
+  const shown = images(passed.turns);
+  expect(shown.filter((data) => data.startsWith(ELIDED_PICTURE))).toHaveLength(TURNS / 10 - 1);
+  expect(shown.filter((data) => !data.startsWith(ELIDED_PICTURE))).toEqual([images(whole.turns)[1]]);
 });

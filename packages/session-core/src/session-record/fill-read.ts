@@ -1,6 +1,7 @@
 import type { TranscriptTurn } from '../acp/models/turns/turn';
 import type { RecordLineageNode, SessionRecordLocator, SessionTimeline } from './contract';
 import { createSessionRecordSource } from './index';
+import type { PictureFilter } from './sources/picture-elider';
 import { SessionRecordNotFoundError } from './sources/shared';
 import { createSessionTimeline } from './timeline';
 
@@ -33,6 +34,8 @@ export async function readRecordFrom(input: {
   /** A fork proves its parent's prefix, which only a snapshot read from the start does. */
   parentLineage?: readonly RecordLineageNode[];
   snapshot?: boolean;
+  /** Which pictures' bytes are decoded at all; the rest reach the turns as `ELIDED_PICTURE` and their length. */
+  pictures: PictureFilter;
   /** `starts[i]`: where `turns[i]` starts in the record, as `startingAt` takes it; null where the source does not say. */
   onSettled: (turns: TranscriptTurn[], from: number, starts: Array<number | null>) => void;
 }): Promise<FillRead> {
@@ -50,6 +53,7 @@ async function read(input: Parameters<typeof readRecordFrom>[0], readMode: 'live
   const source = createSessionRecordSource(input.locator, {
     ...(readMode === 'snapshot' ? { readMode } : {}),
     ...(input.parentLineage ? { parentLineage: input.parentLineage } : {}),
+    pictures: input.pictures,
   });
   const resume = position > 0 ? await source.startingAt?.(position) ?? null : null;
   let next = 0;
