@@ -16,7 +16,6 @@ import { useSourceMessageReveal } from '../hooks/useSourceMessageReveal'
 import { useChatHistoryPagination } from './chat/useChatHistoryPagination'
 import { useGroupCollabLoader, EMPTY_GROUP_COLLAB } from '../hooks/useGroupCollabLoader'
 import { useRoomAuthorityRevision } from '../hooks/useRoomAuthorityRevision'
-import { useTopicScopedMemberProfile } from '../hooks/useTopicScopedMemberProfile'
 import { LiveForwardMessageDialog } from './chat/ForwardMessageDialog'
 import { AUTOMATION_TEST_IDS } from '../lib/automationDom'
 import { UI_EVENTS } from '../lib/uiEvents'
@@ -34,19 +33,16 @@ import { AgentConversationNoticeSlot } from './AgentTurnFailureBar'
 import { useAgentDisplayStatuses, useAgentRecentActivity } from '../hooks/useAgentDisplayStatus'
 import { groupAgentStatusIndicatorProps } from '../lib/groupAgentStatus'
 import { useMessageFilePreview } from './chat/useMessageFilePreview'
-import type { MemberProfileCardModel, MemberProfileChatTarget, MemberProfileEditControls } from './MemberProfileCard'
+import type { MemberProfileCardModel, MemberProfileChatTarget } from './MemberProfileCard'
 import { useShownAgentStatus } from './chat/useAgentsOnCloudComputer'
-import { MemberProfilePopover, MemberProfileRoot } from './MemberProfilePopover'
-import { Popover } from './ui/Popover'
+import { MessageMemberProfileLayer } from './chat/MessageMemberProfileCard'
+import { useMessageProfileCard } from '../hooks/useMessageProfileCard'
 import { ReadReceiptPopover } from './ReadReceiptPopover'
 import { useListenModeEditControls } from './chat/useListenModeEditControls'
 import { groupRoleRevision, useGroupChatSettings } from './chat/useGroupChatSettings'
 import { RightPanel } from './chat/RightPanel'
 import {
   buildMemberProfileMap,
-  type ActiveMemberProfile,
-  type MemberProfileHandle,
-  type MemberProfileOpener,
   toIdentityProfile,
 } from './memberProfileModels'
 import { ChatMessageComposer, type ChatMessageComposerProps, type ComposerAttachAction } from './chat/ChatMessageComposer'
@@ -139,10 +135,7 @@ function ChatAreaSurface({ viewportKey = 'chats', imPage = false, navigationTarg
   // @@@whisper (#820) — 悄悄话目标：设置后 ChatMessageComposer 进入悄悄话模式，发送强制 isWhisper+toUserIds。
   const [whisperTarget, setWhisperTarget] = useState<{ userId: string; displayName: string } | null>(null)
   const [groupCollabSnapshot, setGroupCollabSnapshot] = useState<GroupCollabSnapshot>(EMPTY_GROUP_COLLAB)
-  // 消息头像点开的资料卡:主线和话题分栏共用这一张,每个头像是它的 Trigger(再点同一个头像就关)。
-  const [messageProfileCard] = useState(() => Popover.createHandle<ActiveMemberProfile>())
-  const mainProfileOpener = useMemo((): MemberProfileOpener => ({ handle: messageProfileCard, openedFrom: 'main' }), [messageProfileCard])
-  const asideProfileOpener = useMemo((): MemberProfileOpener => ({ handle: messageProfileCard, openedFrom: 'aside' }), [messageProfileCard])
+  const messageProfile = useMessageProfileCard()
   const peerIdentity = identitiesById[activeChat?.peer_user_id ?? '']
   const isGroupChat = activeChat?.kind === 'group'
   // @@@5856 场所型会话 = 群 + 话题:都有自己的名字、成员、文件与响应档位。头栏的搜索/工作区/成员
@@ -208,11 +201,11 @@ function ChatAreaSurface({ viewportKey = 'chats', imPage = false, navigationTarg
     isAtBottomRef.current = true
     // @@@2169/@@@group-collab-swr - invalidate 在途加载 + 取消后台重试 + 按 in-memory cache 重铺首帧,细节见 useGroupCollabLoader。
     resetGroupCollabForChat()
-    messageProfileCard.close()
+    messageProfile.card.close()
     setWhisperTarget(null)
     // @@@chat-open-nonce (#461) - also reset on mobile reopen of the SAME chat (openNonce bump), where
     // activeChatId is unchanged — so isAtBottomRef doesn't stay stale-false from a prior scroll-up.
-  }, [activeChatId, isRoomChatSurface, openNonce, closeRightSurfaces, resetGroupCollabForChat, messageProfileCard])
+  }, [activeChatId, isRoomChatSurface, openNonce, closeRightSurfaces, resetGroupCollabForChat, messageProfile.card])
 
   // @@@chat-open-nonce (#461) - reload on openNonce too, symmetric with the reset effect (which clears
   useEffect(() => {
@@ -465,7 +458,7 @@ function ChatAreaSurface({ viewportKey = 'chats', imPage = false, navigationTarg
     onForward: handleForward,
     onDelete: handleDelete,
     onVisible: handleMessageVisible,
-    memberProfileOpener: Object.keys(messageMemberProfiles).length > 0 ? mainProfileOpener : undefined,
+    memberProfileOpener: Object.keys(messageMemberProfiles).length > 0 ? messageProfile.mainOpener : undefined,
     // @@@5856 消息 ⋯ 菜单「开话题」→ 从这条消息开一条真的话题并分栏打开。
     // 悄悄话的守卫内联在 MessageBubble(`onOpenTopic && !msg.is_whisper`,按每条消息判、那边冻结
     // 没有注释位):话题名截自来源消息且对全线可见 ⇒ 拿悄悄话开就是公开它。判据见 chatAreaRoomSurface5856。
@@ -495,7 +488,7 @@ function ChatAreaSurface({ viewportKey = 'chats', imPage = false, navigationTarg
     handleForward,
     handleDelete,
     handleMessageVisible,
-    mainProfileOpener,
+    messageProfile.mainOpener,
     activeChat?.kind, topicSurface.openTopicFromMessage, topicSurface.anchorsByMessageId, openTopicFromAnchor,
     agentFlood.noticeMessageId, agentFlood.reload,
     openFilePreview,
@@ -608,7 +601,7 @@ function ChatAreaSurface({ viewportKey = 'chats', imPage = false, navigationTarg
       agentStatuses={groupAgentStatuses}
       runningTokens={mobile ? groupRunTokens : undefined}
       runningPreviewChatId={activeChatId}
-      memberProfileOpener={Object.keys(messageMemberProfiles).length > 0 ? asideProfileOpener : undefined}
+      memberProfileOpener={Object.keys(messageMemberProfiles).length > 0 ? messageProfile.asideOpener : undefined}
       onOpenAttachment={(file, message) => { const split = topicSurface.splitTopic; openFilePreview(file, message, split ? () => topicSurface.openSplit(split) : undefined) }}
       onClose={topicSurface.closeSplit}
       embedded={Boolean(blockHost)}
@@ -855,23 +848,18 @@ function ChatAreaSurface({ viewportKey = 'chats', imPage = false, navigationTarg
 
         {filePreview.panel}
       </div>
-      <MemberProfileRoot handle={messageProfileCard}>
-        {(opened) => (
-          <MessageMemberProfileCard
-            opened={opened}
-            card={messageProfileCard}
-            memberProfiles={messageMemberProfiles}
-            authorityRevision={authorityRevision}
-            topicChatId={topicSurface.splitTopic?.chatId ?? null}
-            chatId={activeChatId}
-            currentUserId={user?.id ?? null}
-            isGroupChat={isGroupChat}
-            groupEditControlsFor={messageListenEditControlsFor}
-            onOpenUserChat={onOpenUserChat}
-            onWhisper={(target) => setWhisperTarget({ userId: target.id, displayName: target.displayName })}
-          />
-        )}
-      </MemberProfileRoot>
+      <MessageMemberProfileLayer
+        card={messageProfile.card}
+        memberProfiles={messageMemberProfiles}
+        authorityRevision={authorityRevision}
+        topicChatId={topicSurface.splitTopic?.chatId ?? null}
+        chatId={activeChatId}
+        currentUserId={user?.id ?? null}
+        isGroupChat={isGroupChat}
+        groupEditControlsFor={messageListenEditControlsFor}
+        onOpenUserChat={onOpenUserChat}
+        onWhisper={(target) => setWhisperTarget({ userId: target.id, displayName: target.displayName })}
+      />
       <ReadReceiptPopover handle={readReceiptHandle} receiptOf={receiptOf} testId="message-read-receipt-panel" />
       {forwardMessages.length > 0 && activeChatId ? (
         <LiveForwardMessageDialog
@@ -884,44 +872,5 @@ function ChatAreaSurface({ viewportKey = 'chats', imPage = false, navigationTarg
         />
       ) : null}
     </div></ChatClashNames.Provider>
-  )
-}
-
-/** The card a message avatar opened, refreshed from the roster and scoped to the topic it was opened in. */
-function MessageMemberProfileCard({ opened, card, memberProfiles, authorityRevision, topicChatId, chatId, currentUserId, isGroupChat, groupEditControlsFor, onOpenUserChat, onWhisper }: {
-  opened: ActiveMemberProfile
-  card: MemberProfileHandle
-  memberProfiles: Record<string, MemberProfileCardModel>
-  authorityRevision: number
-  topicChatId: string | null
-  chatId: string | null
-  currentUserId: string | null
-  isGroupChat: boolean
-  groupEditControlsFor: (profile: MemberProfileCardModel) => MemberProfileEditControls | undefined
-  onOpenUserChat?: (target: MemberProfileChatTarget) => void
-  onWhisper: (target: MemberProfileChatTarget) => void
-}) {
-  const latest = memberProfiles[opened.member.id]
-  const profile = latest ? { ...opened, member: latest } : opened
-  const shown = useTopicScopedMemberProfile({ profile, authorityRevision, topicChatId, currentUserId, groupEditControlsFor })
-  if (!shown) return null
-  return (
-    <MemberProfilePopover
-      profile={shown.profile}
-      // @@@5856 从话题分栏点开的卡片 ❌ 不给悄悄话:这个动作落在**主线**的输入框上,
-      // 而用户此刻在看的是话题 —— 发出去会落进源群。要在话题里悄悄话,得先有话题自己的入口。
-      onClose={() => card.close()}
-      onOpenChat={shown.profile.member.id !== currentUserId && onOpenUserChat ? (target) => {
-        card.close()
-        onOpenUserChat(target)
-      } : undefined}
-      onWhisper={isGroupChat && shown.profile.openedFrom !== 'aside' ? (target) => {
-        card.close()
-        onWhisper(target)
-      } : undefined}
-      searchChatId={(shown.profile.openedFrom === 'aside' ? topicChatId : chatId) ?? undefined}
-      editControls={shown.editControls}
-      testId={AUTOMATION_TEST_IDS.messageAvatarProfileMenu}
-    />
   )
 }
