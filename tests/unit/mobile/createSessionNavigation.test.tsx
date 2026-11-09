@@ -25,6 +25,11 @@ vi.mock('../../../apps/desktop/src/store/devicesContext', () => ({ useDevicesSto
 vi.mock('../../../apps/desktop/src/hooks/useWakeCloudComputer', () => ({
   useCloudComputerWake: () => ({ issue: null, dropped: false, retry: vi.fn() }),
 }))
+const rememberRunMachineCloud = vi.hoisted(() => vi.fn(async () => ({})))
+vi.mock('../../../apps/desktop/src/lib/agentCreateDefaults', () => ({
+  readAgentCreateDefaults: async () => ({ deviceId: null, projectByDevice: {}, projectByChat: {}, machineByProject: {} }),
+  rememberAgentCreateRunMachine: rememberRunMachineCloud,
+}))
 vi.mock('../../../apps/desktop/src/mobile/agent-watch/CreateOptionsPill', () => ({ CreateOptionsPill: () => null }))
 vi.mock('../../../apps/desktop/src/mobile/agent-watch/sessionpage-rpc', () => ({
   SessionpageRpcError: class SessionpageRpcError extends Error { readonly code = 'test' },
@@ -123,6 +128,7 @@ describe('creation keeps its navigation and draft ownership', () => {
     expect(rpc.create).toHaveBeenCalledWith('gpu', expect.objectContaining({ projectId: 'gpu-work', prompt: '原来的任务' }))
     expect(onCreated).toHaveBeenCalledWith(gpu, expect.objectContaining({ conversationId: 'created-task' }), expect.anything(), result)
     // 记下这个项目上次用的机器(键 = 项目群),下次默认还是它。
-    expect(JSON.parse(localStorage.getItem('gugu.projectRunMachine.v1') ?? '{}')).toMatchObject({ 'chat-work': 'gpu' })
+    // The machine choice is remembered on the account (agentCreateDefaults.machineByProject), shared with other clients.
+    await vi.waitFor(() => expect(rememberRunMachineCloud).toHaveBeenCalledWith('chat-work', 'gpu'))
   })
 })

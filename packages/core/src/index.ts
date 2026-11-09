@@ -311,7 +311,8 @@ export {
 export {
   readAgentCreateDefaults,
   rememberAgentCreateDevice,
-  rememberAgentCreateProject
+  rememberAgentCreateProject,
+  rememberAgentCreateRunMachine
 } from './cloud/agentCreateDefaults'
 export {
   agentCreateDeviceBlockMessage,

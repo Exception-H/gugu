@@ -98,6 +98,8 @@ const RETIRED_PROJECT_CACHE_KEYS = [
   // 项目与机器解耦:新建框不再按机器列「最近用过的文件夹」,项目页不再有多选的设备范围(换成 gugu.projectRunMachine.v1)。
   'gugu:remote-recent-folders:v1',
   'gugu.projectDeviceScope.v1',
+  // 「每个项目上次在哪台跑」改记在账号上(agentCreateDefaults.machineByProject)。
+  'gugu.projectRunMachine.v1',
 ] as const;
 
 export function forgetRetiredProjectCaches(storage: Pick<Storage, 'removeItem'> | null): void {

@@ -10,7 +10,8 @@ import {
   resolveAgentCreateDevice,
   resolveAgentCreateProject,
   EMPTY_AGENT_CREATE_DEFAULTS,
-  type AgentCreateDefaults
+  type AgentCreateDefaults,
+  mergeAgentCreateRunMachine,
 } from '@gugu/core/shared/ui/agentCreateDefaultsModels'
 import type { Device } from '@gugu/core/shared/types/chat'
 import { fakeSettingsClient } from '../../../support/userSettingsTestDouble'
@@ -42,10 +43,18 @@ const REMOTE_OFFLINE = device({
 })
 
 function defaults(overrides: Partial<AgentCreateDefaults> = {}): AgentCreateDefaults {
-  return { deviceId: null, projectByDevice: {}, projectByChat: {}, ...overrides }
+  return { deviceId: null, projectByDevice: {}, projectByChat: {}, machineByProject: {}, ...overrides }
 }
 
 describe('agent create defaults — 存储格式', () => {
+  it('记住每个项目上次在哪台机器上跑,别的键原样留着', () => {
+    const merged = mergeAgentCreateRunMachine({ other: 1, agent_create: { device_id: 'dev-a', project_by_device: { 'dev-a': 'p' } } }, 'chat-work', 'dev-gpu')
+    expect(merged.other).toBe(1)
+    expect(parseAgentCreateDefaults(merged)).toMatchObject({ deviceId: 'dev-a', projectByDevice: { 'dev-a': 'p' }, machineByProject: { 'chat-work': 'dev-gpu' } })
+    expect(parseAgentCreateDefaults(mergeAgentCreateRunMachine(merged, 'chat-work', 'dev-mac')).machineByProject).toEqual({ 'chat-work': 'dev-mac' })
+    expect(parseAgentCreateDefaults({ agent_create: { machine_by_project: { x: 3, y: '' } } }).machineByProject).toEqual({})
+  })
+
   it('把读不懂的配置当作"没有记忆"，而不是猜一个出来', () => {
     expect(parseAgentCreateDefaults(null)).toEqual(EMPTY_AGENT_CREATE_DEFAULTS)
     expect(parseAgentCreateDefaults('nonsense')).toEqual(EMPTY_AGENT_CREATE_DEFAULTS)
@@ -64,7 +73,7 @@ describe('agent create defaults — 存储格式', () => {
           project_by_device: { 'dev-local': 'proj-a', 'dev-studio': 42, 'dev-x': '' }
         }
       })
-    ).toEqual({ deviceId: 'dev-studio', projectByDevice: { 'dev-local': 'proj-a' }, projectByChat: {} })
+    ).toEqual({ deviceId: 'dev-studio', projectByDevice: { 'dev-local': 'proj-a' }, projectByChat: {}, machineByProject: {} })
   })
 })
 
@@ -174,13 +183,14 @@ describe('agent create defaults — per-user 持久化', () => {
     expect(fake.upserts).toHaveLength(1)
     expect(fake.upserts[0]).toMatchObject({ user_id: 'user-1', scope: 'user' })
     expect(fake.rows['user-1::user']).toEqual({
-      agent_create: { device_id: 'dev-studio', project_by_device: {}, project_by_chat: {} }
+      agent_create: { device_id: 'dev-studio', project_by_device: {}, project_by_chat: {}, machine_by_project: {} }
     })
     // 同一账号在另一个客户端读回来的就是这一份
     await expect(readAgentCreateDefaults(fake.client, 'user-1')).resolves.toEqual({
       deviceId: 'dev-studio',
       projectByDevice: {},
-      projectByChat: {}
+      projectByChat: {},
+      machineByProject: {}
     })
   })
 
@@ -193,7 +203,8 @@ describe('agent create defaults — per-user 持久化', () => {
     await expect(rememberAgentCreateDevice(fake.client, 'user-1', 'dev-studio')).resolves.toEqual({
       deviceId: 'dev-studio',
       projectByDevice: { 'dev-local': 'proj-a' },
-      projectByChat: {}
+      projectByChat: {},
+      machineByProject: {}
     })
   })
 
@@ -205,12 +216,13 @@ describe('agent create defaults — per-user 持久化', () => {
       agent_create: {
         device_id: null,
         project_by_device: { 'dev-local': 'proj-a', 'dev-studio': 'proj-b' },
-        project_by_chat: {}
+        project_by_chat: {},
+        machine_by_project: {}
       }
     })
     await expect(
       rememberAgentCreateProject(fake.client, 'user-1', 'dev-local', null)
-    ).resolves.toEqual({ deviceId: null, projectByDevice: { 'dev-studio': 'proj-b' }, projectByChat: {} })
+    ).resolves.toEqual({ deviceId: null, projectByDevice: { 'dev-studio': 'proj-b' }, projectByChat: {}, machineByProject: {} })
   })
 
   it('gugu-dev#181 在一个对话里选的项目记成这个对话的,也是最近一次选的;别的对话回落到最近一次', async () => {

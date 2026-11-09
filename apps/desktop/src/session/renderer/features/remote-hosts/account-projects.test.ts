@@ -94,6 +94,7 @@ describe('账号上那份 → 会话页的形状', () => {
       'gugu.projectFolders.v1',
       'gugu:remote-recent-folders:v1',
       'gugu.projectDeviceScope.v1',
+      'gugu.projectRunMachine.v1',
     ]);
   });
 });
