@@ -2,6 +2,7 @@ import { createChatContext } from '@session-chat/chat-context';
 import { createChatState } from '@session-chat/state/chat-state';
 import { createChatView } from '@session-chat/chat-view';
 import { until, untilStable } from '../../../../tests/support/awaitCondition';
+import { pinnedSummaryShown } from '../../../../tests/support/pinnedSummaryShown';
 import { describe, expect, it } from 'vitest';
 import { turnProcessUnitDef } from '@session-chat/components/rows/turn-process/turn-process.def';
 import { DEFAULT_THEME } from '@session-chat/core/theme';
@@ -145,7 +146,7 @@ it('pins a long question as two lines in any column, with the reply readable bel
       const summaryEl = host.querySelector<HTMLElement>('[data-pin-summary="question"]')!, summary = summaryEl.getBoundingClientRect();
       expect(summary.height, `two lines at ${width}`).toBeLessThanOrEqual(2 * context.theme.fonts.body.lineHeight + 24 + 1);
       // Above the reply sits the summary once the question has gone by, else the question's own end.
-      const stuck = summaryEl.closest<HTMLElement>('[data-index]')!.dataset.pinStuck === 'true';
+      const stuck = pinnedSummaryShown(summaryEl);
       const above = stuck ? summary : host.querySelector<HTMLElement>('[data-user-card="question"]')!.getBoundingClientRect();
       const reply = host.querySelector<HTMLElement>('[data-agent-conversation-message="answer"]')!;
       const line = reply.querySelector<HTMLElement>('p')!.getBoundingClientRect();

@@ -6,6 +6,7 @@ import { buildChatTheme, DEFAULT_CONFIG } from '../core/theme';
 import type { TranscriptTurn } from '../model';
 import { createChatState } from '../state/chat-state';
 import { until, untilStable } from '../../../../tests/support/awaitCondition';
+import { pinnedSummaryShown } from '../../../../tests/support/pinnedSummaryShown';
 
 describe('source message visibility below the pinned question', () => {
   it.each([
@@ -48,7 +49,7 @@ describe('source message visibility below the pinned question', () => {
       const firstLine = range.getBoundingClientRect();
       // The question's summary shows only once the question has gone by; until then the question itself is the top.
       const summary = host.querySelector<HTMLElement>('[data-pin-summary="question"]')!;
-      const stuck = summary.closest<HTMLElement>('[data-index]')!.dataset.pinStuck === 'true';
+      const stuck = pinnedSummaryShown(summary);
       const readableTop = (stuck ? summary : question).getBoundingClientRect().bottom;
       expect(scroll.scrollTop).toBeGreaterThan(0);
       expect(firstLine.top).toBeGreaterThanOrEqual(readableTop - 1);
