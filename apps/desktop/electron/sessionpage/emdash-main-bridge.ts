@@ -74,6 +74,8 @@ export {
   // agent 的 session_* 跨机器(owner 2026-09-30):别的机器发来的动作、本机发起方的自述、「这个 id 在不在本机」。
   // 同 runEmdashExtensionAction 那条教训:漏在这张清单外只会在真有人跨机器时才炸。
   runRemoteSessionAction,
+  // 交给别的机器的 spawn:本机项目换成它的项目群(本地项目 id 不出这台机器)。
+  outboundSessionAction,
   readAssistantWorkReceipts,
   sessionCallerFacts,
   localSessionIds,

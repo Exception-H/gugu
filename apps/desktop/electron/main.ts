@@ -5005,7 +5005,7 @@ app.whenReady().then(async () => {
       if (typeof record.device === 'string') {
         const { device, ...rest } = record
         if (!(await crossMachine().isThisDevice(device as string))) {
-          return projectResult(await crossMachine().runOnDevice(device as string, await remoteCaller(auth, context), rest as { action: string }, signal))
+          return projectResult(await crossMachine().runOnDevice(device as string, await remoteCaller(auth, context), await emdash.outboundSessionAction(rest as { action: string }), signal))
         }
         record = rest
       }

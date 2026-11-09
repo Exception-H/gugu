@@ -197,6 +197,7 @@ import { getPlugin } from '../agents/plugin-registry';
 import { appSettingsService } from '@main/core/settings/settings-service';
 import {
   messageSessionFrom,
+  outboundSessionAction,
   runRemoteSessionAction,
   runSessionAction,
   sessionCallerFacts,
@@ -828,6 +829,36 @@ describe('session orchestration', () => {
       const result = await runRemoteSessionAction(remoteCaller, { action: 'spawn', prompt: 'inspect' }) as { session_id: string };
       expect(result).toMatchObject({ project_id: IMPLICIT_SESSION_HOME_PROJECT_ID, project_note: expect.stringContaining('no caller project group supplied') });
       expect(workspaceOf(result.session_id)).toBe('workspace-home');
+    });
+
+    // 项目与机器解耦:跨机器点名项目用项目群(发起方本机的本地项目 id 在这台机器上不指任何东西)。
+    it('runs a project named by its project group in this device’s folder for it', async () => {
+      project2Root();
+      setProjectGroupHost({
+        listBindings: async () => ok([{ projectId: 'project-2', chatId: 'named-group' }, { projectId: 'other', chatId: 'shared-project-group' }]),
+        ensureGroup: vi.fn(), bindToGroup: vi.fn(), unbind: vi.fn(),
+      });
+      const result = await runRemoteSessionAction({ ...remoteCaller, groupChatId: 'shared-project-group' }, { action: 'spawn', prompt: 'inspect', project_group: 'named-group' }) as { session_id: string; project_note: string };
+      expect(mocks.resolveProjectWorkspace).toHaveBeenCalledWith({ projectId: 'project-2', projectPath: '' });
+      expect(result).toMatchObject({ project_id: 'project-2', project_note: expect.stringContaining('named project') });
+      expect(workspaceOf(result.session_id)).toBe('workspace-p2');
+    });
+
+    it('names a project of this machine by its project group when the spawn goes to another device', async () => {
+      bindings('project-2');
+      expect(await outboundSessionAction({ action: 'spawn', prompt: 'x', project_id: 'project-2' })).toEqual({ action: 'spawn', prompt: 'x', project_group: 'shared-project-group' });
+      // Not a project here = the other device's own id: passed as it is. Other actions are untouched.
+      expect(await outboundSessionAction({ action: 'spawn', prompt: 'x', project_id: 'their-project' })).toEqual({ action: 'spawn', prompt: 'x', project_id: 'their-project' });
+      expect(await outboundSessionAction({ action: 'get', project_id: 'project-2' })).toEqual({ action: 'get', project_id: 'project-2' });
+      bindings();
+      await expect(outboundSessionAction({ action: 'spawn', prompt: 'x', project_id: 'project-2' })).rejects.toThrow('no project group');
+    });
+
+    it('refuses a named project group this device has no folder for, instead of the task workspace', async () => {
+      taskWorkspace();
+      bindings('project-2');
+      await expect(runRemoteSessionAction({ ...remoteCaller, groupChatId: 'shared-project-group' }, { action: 'spawn', prompt: 'inspect', project_group: 'unknown-group' }))
+        .rejects.toThrow('project_add_device');
     });
 
     it.each([{ project_id: 'project-2' }, { project_path: '/other' }])('keeps explicit project placement ahead of the caller group: %j', async (named) => {

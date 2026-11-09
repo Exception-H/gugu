@@ -14,7 +14,7 @@ import { parseConversationLink } from '@gugu/core/shared/ui/guguLink';
 import { readCurrentActivitySource } from './session-activity-source';
 import { receiveAssistantWorkReport, workReportSchema, type WorkReport } from '../../../../sessionpage/assistant-work';
 import { isProjectAgentAction, runProjectAgentAction, type ProjectAgentAction } from '../projects/project-agent-actions';
-import { localProjectOfGroup } from '../projects/operations/project-groups';
+import { listProjectGroupBindings, localProjectOfGroup } from '../projects/operations/project-groups';
 import { getProjectById } from '../projects/operations/getProjects';
 import { isLibraryAgentAction, runLibraryAgentAction, type LibraryAgentAction } from '../app/user-library';
 import { randomUUID } from 'node:crypto';
@@ -164,6 +164,11 @@ export type SessionAction =
       title?: string;
       /** The `project` parameter, decoded at the host boundary: a project id, or a folder on this machine. */
       project_id?: string;
+      /**
+       * Across machines a project is named by its project group (a local project id means nothing on another machine):
+       * the target runs in its own local project bound to this group. Set by outboundSessionAction, never by an agent.
+       */
+      project_group?: string;
       project_path?: string;
       parent_session_id?: string | null;
       transport?: SessionRuntime;
@@ -2176,6 +2181,23 @@ async function runTargetAction(
   throw new Error(`${(action as { action: string }).action} is not a session action`);
 }
 
+/**
+ * 一个要交给别的机器执行的 session 动作:项目的跨机器身份是项目群,本机的本地项目 id 到了那台机器上不指任何东西。
+ * spawn 点名的是本机的本地项目 ⇒ 换成它绑的项目群(那台机器按群找自己的本地项目);点名的不是本机的项目 = 那台机器自己的 id,原样交过去。
+ * 本机项目还没有项目群:说清楚,❌ 原样交过去让那台机器报一个看不懂的「找不到项目」。
+ */
+export async function outboundSessionAction<A extends { action: string; project_id?: unknown }>(action: A): Promise<A> {
+  if (action.action !== 'spawn' || typeof action.project_id !== 'string') return action;
+  const local = await getProjectById(action.project_id);
+  if (!local) return action;
+  const bindings = await listProjectGroupBindings();
+  if (!bindings.success) throw new Error(bindings.error.message);
+  const chatId = bindings.data.find((binding) => binding.projectId === local.id)?.chatId;
+  if (!chatId) throw new Error(`Project "${local.name}" has no project group yet, so another device cannot find it; open it once in 咕咕 or spawn without project`);
+  const { project_id: _local, ...rest } = action;
+  return { ...rest, project_group: chatId } as unknown as A;
+}
+
 /** 本机发起方在跨机器请求里的自述;机器与 Agent ID 由宿主补。 */
 export async function sessionCallerFacts(
   context: SessionCallerContext,
@@ -2272,23 +2294,33 @@ async function spawnForRemoteCaller(
   // 与本机同一条默认(spawnedBy):挂在发起会话下面(它在别的机器上,记在 config 里),点没点名项目都一样。
   const named = namedPlacement(action);
 
+  // 点名了项目(发起方那台换成了项目群):这台机器上绑在这个群上的本地项目,落在根工作区;这台没有它的文件夹就说清。
+  let groupNamed: { project_id: string } | null = null;
+  if (!named && action.project_group) {
+    const bound = await localProjectOfGroup(action.project_group);
+    if (!bound.success) throw new Error(bound.error.message);
+    if (!bound.data) throw new Error('This device has no folder for that project. Link one with project_add_device, then spawn again');
+    groupNamed = { project_id: bound.data };
+  }
   // 跨机默认与人在项目里选设备一样,按同一项目群找本机项目,落在根工作区。
   // 没有关联仍走原任务工作区,但回执要说清原因与关联入口。
   let matchedProjectId: string | undefined;
-  if (!named && caller.groupChatId) {
+  if (!named && !groupNamed && caller.groupChatId) {
     const matched = await localProjectOfGroup(caller.groupChatId);
     if (!matched.success) throw new Error(matched.error.message);
     matchedProjectId = matched.data;
   }
   const { projectId, workspaceId } = await projectRootPlacement(
-    named ?? (matchedProjectId ? { project_id: matchedProjectId } : {}),
-    named ? `project ${named.project_path ?? named.project_id} on this machine` : 'default project on this machine',
+    named ?? groupNamed ?? (matchedProjectId ? { project_id: matchedProjectId } : {}),
+    named ? `project ${named.project_path ?? named.project_id} on this machine` : groupNamed ? 'the named project on this machine' : 'default project on this machine',
   );
   let projectNote: string | undefined;
   if (!named) {
     const project = await getProjectById(projectId);
     if (!project) throw new Error(`Project not found: ${projectId}`);
-    projectNote = matchedProjectId
+    projectNote = groupNamed
+      ? `Project "${project.name}" (root workspace of this device's folder for the named project).`
+      : matchedProjectId
       ? `Project "${project.name}" (root workspace, matched the caller's project group).`
       : caller.groupChatId
         ? `Task workspace "${project.name}": this device has no local project associated with the caller's project group. Use project_add_device to associate a folder first.`
