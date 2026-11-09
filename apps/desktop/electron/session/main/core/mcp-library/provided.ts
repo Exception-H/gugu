@@ -2,6 +2,7 @@ import type { Tool } from '@modelcontextprotocol/sdk/types.js';
 import { integrationPluginRegistry } from '@gugu/session-plugins/integrations';
 import { sessionHostLocale } from '@main/core/host-locale';
 import { localizedManifestText } from '@shared/extensions/catalog';
+import { programName } from '@shared/extensions/manifest';
 import type { LibraryMcpCheck, LibraryMcpProvided, LibraryMcpProvidedServer } from '@shared/mcp-library';
 import { GUGU_MCP_SERVER_NAME } from '../../../../mcp/gugu-mcp-name.mjs';
 import { listConnectedTools } from '../../../../integration-mcp-bridge';
@@ -35,12 +36,18 @@ export async function libraryMcpProvided(): Promise<LibraryMcpProvided> {
   const locale = sessionHostLocale();
   for (const program of extensionPrograms.installed()) {
     const refusal = extensionPrograms.agentToolsRefusal(program.extensionId);
+    const { manifest } = extensions.get(program.extensionId);
+    // 命令照 App 清单里写的(`node launch.mjs`、工具模块 `tools.js`;原生能力没有命令),
+    // ❌ 咕咕解析后的那一串(本机的 Electron 路径、快照目录)。
+    const declared = (manifest.contributes.mcpServers ?? []).find((entry) => programName(entry, program.extensionId) === program.server);
     servers.push({
       key: `app:${program.extensionId}/${program.server}`,
       group: 'apps',
       name: extensionServerName(program.extensionId, program.server),
-      ...(program.native ? {} : { transport: 'stdio' as const, command: program.command, args: program.args }),
-      from: [localizedManifestText(extensions.get(program.extensionId).manifest, locale).name],
+      ...(program.native ? {} : { transport: 'stdio' as const }),
+      ...(declared && 'command' in declared ? { command: declared.command, ...(declared.args?.length ? { args: declared.args } : {}) } : {}),
+      ...(declared && 'tools' in declared ? { command: declared.tools } : {}),
+      from: [localizedManifestText(manifest, locale).name],
       reach: refusal ? 'off' : extensions.disclosure(program.extensionId) === 'full' ? 'every-task' : 'on-demand',
       ...(refusal ? { refusal } : {}),
     });
