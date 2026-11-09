@@ -415,7 +415,7 @@
   --menu-bg: var(--popover);
   --menu-fg: var(--fg);
   --menu-icon: var(--faint-fg);
-  --menu-item-hover: var(--hover);                 /* @@@2322 收敛别名 → --hover */
+  --menu-item-hover: var(--selected);              /* 菜单每一行都可点,4% 的 --hover 在菜单底上几乎看不出高亮落在哪行 */
 
   /* ══════════════════════════════════════════════════════════════════════════
      @@@shadow-lift (Refs #6104) — design.md:「**Shadows are zeroed globally.
@@ -441,7 +441,7 @@
      三档各管一类:--shadow-lift 菜单/popover/tooltip/toast;--shadow-dialog 较大的 Sheet/Dialog 外壳;
      --shadow-composer 主输入入口。非浮层照旧不给阴影(靠表面分层)。半像素轮廓画在阴影里,不另加 border。 */
   /* 两套取值各起一个名字:会话页的 .emlight / .emdark 作用域(看图面板)要能拿到**它那一套**,不跟宿主主题走。 */
-  --shadow-lift-dark: 0 0 0 0.5px rgb(255 255 255 / 0.16), 0 8px 28px rgb(0 0 0 / 0.36);
+  --shadow-lift-dark: 0 0 0 0.5px rgb(255 255 255 / 0.28), 0 8px 28px rgb(0 0 0 / 0.56);
   --shadow-lift-light: 0 0 0 0.5px rgb(0 0 0 / 0.12), 0 3px 7.5px rgb(0 0 0 / 0.04), 0 0 20px rgb(0 0 0 / 0.05);
   --shadow-lift: var(--shadow-lift-dark);
   --shadow-dialog: 0 0 0 0.5px rgb(255 255 255 / 0.14), 0 16px 48px rgb(0 0 0 / 0.5);
@@ -663,7 +663,7 @@
   --bg:       #181818; /* 内容表面 */
   --page:     #121212; /* 窗口底层:rail、会话列表 */
   --card:     #212121; /* 局部表面:分组卡、浮层(gray-fixed-800) */
-  --popover:  #212121;
+  --popover:  #2a2a2a; /* 浮层比气泡(#262626)高一档:同色或更深时菜单像气泡上的一个洞 */
   --sidebar:  var(--page);
   --fg:       #dfdfdf; /* gray-fixed-150 */
   --muted:    #2a2a2a; /* 填充面(分段底、输入底):比 --card 高一档,卡片里也分得出 */
