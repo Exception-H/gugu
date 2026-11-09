@@ -26,7 +26,11 @@ export function imagePixelSize(b: Uint8Array): { width: number; height: number }
       if (b[i] !== 0xff) return null
       const marker = b[i + 1]!
       if (marker === 0xd8 || marker === 0x01 || (marker >= 0xd0 && marker <= 0xd7)) { i += 2; continue }
-      if (marker === 0xe1) { const o = exifOrientation(b, i + 4, i + 2 + u16be(i + 2)); turned = o >= 5 && o <= 8 }
+      if (marker === 0xe1) {
+        // An XMP packet is APP1 too, often right after the EXIF one: only the EXIF segment names the orientation.
+        const o = exifOrientation(b, i + 4, i + 2 + u16be(i + 2))
+        if (o !== null) turned = o >= 5 && o <= 8
+      }
       if (marker >= 0xc0 && marker <= 0xcf && marker !== 0xc4 && marker !== 0xc8 && marker !== 0xcc) return turned ? size(u16be(i + 5), u16be(i + 7)) : size(u16be(i + 7), u16be(i + 5))
       i += 2 + u16be(i + 2)
     }
@@ -34,9 +38,9 @@ export function imagePixelSize(b: Uint8Array): { width: number; height: number }
   return null
 }
 
-/** EXIF orientation of an APP1 segment whose payload is b[at, end); 1 when it has none or it cannot be read. */
-function exifOrientation(b: Uint8Array, at: number, end: number): number {
-  if (end > b.length || String.fromCharCode(...b.subarray(at, at + 6)) !== 'Exif\0\0') return 1
+/** EXIF orientation of an APP1 segment whose payload is b[at, end): null when the segment is not EXIF, 1 when it names none. */
+function exifOrientation(b: Uint8Array, at: number, end: number): number | null {
+  if (end > b.length || String.fromCharCode(...b.subarray(at, at + 6)) !== 'Exif\0\0') return null
   const t = at + 6, le = b[t] === 0x49 && b[t + 1] === 0x49
   const u16 = (i: number) => (i + 2 > end ? -1 : le ? b[i]! | (b[i + 1]! << 8) : (b[i]! << 8) | b[i + 1]!)
   const u32 = (i: number) => (le ? (b[i]! | (b[i + 1]! << 8) | (b[i + 2]! << 16) | (b[i + 3]! << 24)) >>> 0 : ((b[i]! << 24) | (b[i + 1]! << 16) | (b[i + 2]! << 8) | b[i + 3]!) >>> 0)
