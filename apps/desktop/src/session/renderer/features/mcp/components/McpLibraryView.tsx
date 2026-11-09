@@ -72,7 +72,6 @@ export const McpLibraryView: React.FC<{ onOpenIntegrations: () => void }> = ({ o
         <PageHeader
           sticky
           title={translate('mcpLibrary.title')}
-          description={translate('mcpLibrary.subtitle')}
         />
         {notice && <DeviceScopeNoticeLine notice={notice} onRetry={library.reload} />}
         {library.isLoading ? (
@@ -83,7 +82,7 @@ export const McpLibraryView: React.FC<{ onOpenIntegrations: () => void }> = ({ o
               <h3 className="text-base font-semibold text-foreground">{translate('mcpLibrary.ownGroup')}</h3>
               <FoldGroup slot="mcp-library-builtin" title={translate('mcpLibrary.builtInGroup')} fixed>
                 {library.provided?.builtIn.map((name) => (
-                  <ProvidedRow key={name} name={name} note={translate('mcpLibrary.builtInNote')} />
+                  <ProvidedRow key={name} name={name} />
                 ))}
               </FoldGroup>
               <FoldGroup
@@ -276,12 +275,11 @@ function FoldGroup({
   );
 }
 
-/** 内置那一台:名字,加一句它怎么进任务。 */
-function ProvidedRow({ name, note }: { name: string; note: string }) {
+/** 内置那一台:只有名字 —— 「内置」这个组名已经说了它每个任务都带。 */
+function ProvidedRow({ name }: { name: string }) {
   return (
     <div data-slot="mcp-library-provided" data-server-id={name} className="flex min-h-12 items-center gap-3 px-3 py-2">
       <span className="min-w-0 flex-1 truncate text-sm text-foreground" title={name}>{name}</span>
-      <span className="shrink-0 text-xs text-foreground-muted">{note}</span>
     </div>
   );
 }

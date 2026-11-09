@@ -688,14 +688,12 @@ export const enUSCapabilityMessages = {
   // @@@mcp-session-toggle —— `/mcp` 弹出的**会话级**面板(只开关、不增删)。
   // 资源库 → MCP(owner 10-18):咕咕自己管的列表 + 各家自己配的(只读)。
   'mcpLibrary.title': 'MCP',
-  'mcpLibrary.subtitle': "MCP servers managed by Gugu and configured in each agent.",
   'mcpLibrary.add': 'Add',
   'mcpLibrary.addTitle': 'Add MCP servers',
   'mcpLibrary.ownGroup': 'Provided by Gugu',
   'mcpLibrary.ownEmpty': 'No MCP servers',
   'mcpLibrary.harnessesGroup': 'Configured in each agent',
   'mcpLibrary.builtInGroup': 'Built in',
-  'mcpLibrary.builtInNote': 'In every task',
   'mcpLibrary.reach.every-task': 'In every task',
   'mcpLibrary.reach.on-demand': 'Found when needed',
   'mcpLibrary.reach.off': 'Off',
@@ -1580,14 +1578,12 @@ export const zhCNCapabilityMessages: Record<CapabilityMessageKey, string> = {
   // ── MCP ─────────────────────────────────────────────────────────────────────
   // 资源库 → MCP(owner 10-18):咕咕自己管的列表 + 各家自己配的(只读)。
   'mcpLibrary.title': 'MCP',
-  'mcpLibrary.subtitle': '咕咕管理的和各智能体自带的 MCP server。',
   'mcpLibrary.add': '添加',
   'mcpLibrary.addTitle': '添加 MCP server',
   'mcpLibrary.ownGroup': '咕咕提供',
   'mcpLibrary.ownEmpty': '还没有 MCP server',
   'mcpLibrary.harnessesGroup': '各智能体自己配的',
   'mcpLibrary.builtInGroup': '内置',
-  'mcpLibrary.builtInNote': '每个任务都带',
   'mcpLibrary.reach.every-task': '每个任务都带',
   'mcpLibrary.reach.on-demand': '按需查找',
   'mcpLibrary.reach.off': '已停用',
