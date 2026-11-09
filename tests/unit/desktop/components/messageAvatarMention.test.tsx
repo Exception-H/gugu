@@ -44,7 +44,7 @@ async function renderList(overrides: Partial<MessageListRowProps> = {}) {
   const rowProps: MessageListRowProps = {
     rows, messages: listMessages, mobile: false, memberReadSeqs: {}, deliveryWaits: new Map(), isGroupChat: true, memberProfiles,
     onReaction: noop, onQuote: noop, onForward: noop, onDelete: noop, onVisible: noop, onOpenMemberProfile: noop, onMentionMember,
-    flashMessageId: undefined, threeParty: undefined, onShowReadReceipt: undefined, onOpenTopic: undefined, topicAnchors: undefined, onOpenTopicAnchor: undefined,
+    flashMessageId: undefined, threeParty: undefined, readReceiptHandle: undefined, onOpenTopic: undefined, topicAnchors: undefined, onOpenTopicAnchor: undefined,
     agentFloodNoticeMessageId: undefined, onAgentFloodUndone: undefined, onOpenFile: undefined,
     selectMode: false, selectedIds: new Set(), onToggleSelect: noop, onEnterSelectMode: noop, ...overrides,
   }
@@ -158,7 +158,7 @@ describe('group avatar sits on the last message of a run', () => {
     const rowProps: MessageListRowProps = {
       rows, messages: run, mobile: false, memberReadSeqs: {}, deliveryWaits: new Map(), isGroupChat: true, memberProfiles,
       onReaction: noop, onQuote: noop, onForward: noop, onDelete: noop, onVisible: noop, onOpenMemberProfile: noop, onMentionMember: noop,
-      flashMessageId: undefined, threeParty: undefined, onShowReadReceipt: undefined, onOpenTopic: undefined, topicAnchors: undefined, onOpenTopicAnchor: undefined,
+      flashMessageId: undefined, threeParty: undefined, readReceiptHandle: undefined, onOpenTopic: undefined, topicAnchors: undefined, onOpenTopicAnchor: undefined,
       agentFloodNoticeMessageId: undefined, onAgentFloodUndone: undefined, onOpenFile: undefined,
       selectMode: false, selectedIds: new Set(), onToggleSelect: noop, onEnterSelectMode: noop,
     }

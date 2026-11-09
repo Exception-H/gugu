@@ -37,7 +37,7 @@ function props(profiles: Record<string, MemberProfileCardModel>) {
   const rowProps: MessageListRowProps = {
     rows, messages, mobile: false, memberReadSeqs: {}, deliveryWaits: new Map(), isGroupChat: true, memberProfiles: profiles,
     onReaction: noop, onQuote: noop, onForward: noop, onDelete: noop, onVisible: noop, onOpenMemberProfile: undefined, onMentionMember: undefined,
-    flashMessageId: undefined, threeParty: undefined, onShowReadReceipt: undefined, onOpenTopic: undefined, topicAnchors: undefined, onOpenTopicAnchor: undefined,
+    flashMessageId: undefined, threeParty: undefined, readReceiptHandle: undefined, onOpenTopic: undefined, topicAnchors: undefined, onOpenTopicAnchor: undefined,
     agentFloodNoticeMessageId: undefined, onAgentFloodUndone: undefined, onOpenFile: undefined,
     selectMode: false, selectedIds: new Set(), onToggleSelect: noop, onEnterSelectMode: noop,
   }

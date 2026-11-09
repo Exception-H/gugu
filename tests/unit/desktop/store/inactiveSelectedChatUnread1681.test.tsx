@@ -204,7 +204,7 @@ function Probe() {
   const rowProps: MessageListRowProps = { rows, messages, mobile: false,
     flashMessageId: null, memberReadSeqs: {}, deliveryWaits: new Map(),
     isGroupChat: false, threeParty: undefined, memberProfiles: {}, onVisible: markMessageVisible,
-    onReaction: noop, onShowReadReceipt: undefined, onQuote: noop, onForward: noop, onDelete: noop,
+    onReaction: noop, readReceiptHandle: undefined, onQuote: noop, onForward: noop, onDelete: noop,
     onOpenMemberProfile: undefined, onOpenTopic: undefined, topicAnchors: undefined, onOpenTopicAnchor: undefined,
     agentFloodNoticeMessageId: null, onAgentFloodUndone: undefined, onOpenFile: undefined,
  onMentionMember: undefined, selectMode: false,

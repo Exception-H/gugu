@@ -455,7 +455,7 @@ function ChatAreaSurface({ viewportKey = 'chats', imPage = false, navigationTarg
     return latest ? { ...activeMessageProfile, member: latest } : activeMessageProfile
   }, [activeMessageProfile, messageMemberProfiles])
 
-  const { readReceiptPanel, onShowReadReceipt: handleShowReadReceipt, onCloseReadReceipt } = useReadReceiptPanel({
+  const { readReceiptHandle, receiptOf } = useReadReceiptPanel({
     chatId: activeChatId, messages, memberReadSeqs, memberProfiles: messageMemberProfiles,
   })
   const groupSettings = useGroupChatSettings(isRoomChatSurface ? activeChatId : null, groupRoleRevision(groupCollabSnapshot), authorityRevision)
@@ -475,7 +475,7 @@ function ChatAreaSurface({ viewportKey = 'chats', imPage = false, navigationTarg
     isGroupChat: isRoomChatSurface,
     memberProfiles: messageMemberProfiles,
     onReaction: handleReaction,
-    onShowReadReceipt: handleShowReadReceipt,
+    readReceiptHandle,
     onQuote: handleQuote, onShowMessage: showMessage,
     onForward: handleForward,
     onDelete: handleDelete,
@@ -505,7 +505,7 @@ function ChatAreaSurface({ viewportKey = 'chats', imPage = false, navigationTarg
     isRoomChatSurface,
     messageMemberProfiles,
     handleReaction,
-    handleShowReadReceipt,
+    readReceiptHandle,
     handleQuote, showMessage,
     handleForward,
     handleDelete,
@@ -891,15 +891,7 @@ function ChatAreaSurface({ viewportKey = 'chats', imPage = false, navigationTarg
           testId={AUTOMATION_TEST_IDS.messageAvatarProfileMenu}
         />
       ) : null}
-      {readReceiptPanel ? (
-        <ReadReceiptPopover
-          anchor={readReceiptPanel.anchor}
-          readers={readReceiptPanel.readers}
-          unreaders={readReceiptPanel.unreaders}
-          testId="message-read-receipt-panel"
-          onClose={onCloseReadReceipt}
-        />
-      ) : null}
+      <ReadReceiptPopover handle={readReceiptHandle} receiptOf={receiptOf} testId="message-read-receipt-panel" />
       {forwardMessages.length > 0 && activeChatId ? (
         <LiveForwardMessageDialog
           messages={forwardMessages}

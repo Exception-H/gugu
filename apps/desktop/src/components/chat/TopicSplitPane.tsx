@@ -230,7 +230,7 @@ export function TopicSplitPane({ viewportKey = 'topic', navigationTarget = false
     [mentionMembers, participantIds],
   )
   const [mentionToInsert, setMentionToInsert] = useState<{ id: string; name: string } | null>(null)
-  const { readReceiptPanel, onShowReadReceipt, onCloseReadReceipt } = useReadReceiptPanel({
+  const { readReceiptHandle, receiptOf } = useReadReceiptPanel({
     chatId: topic.chatId, messages, memberReadSeqs, memberProfiles,
   })
   // 宽度记在本机:拖过一次之后下次打开还是那个宽度(与会话列表同口径)。
@@ -314,7 +314,7 @@ export function TopicSplitPane({ viewportKey = 'topic', navigationTarget = false
     memberProfiles,
     onOpenMemberProfile,
     onOpenFile: onOpenAttachment,
-    onShowReadReceipt,
+    readReceiptHandle,
     onReaction: onReaction ?? noop,
     onShowMessage: showMessage,
     onQuote,
@@ -334,7 +334,7 @@ export function TopicSplitPane({ viewportKey = 'topic', navigationTarget = false
     onToggleSelect: noop,
     onEnterSelectMode: undefined,
     flashMessageId,
-  }), [showMessage, rows, messages, mobile, memberReadSeqs, deliveryWaits, memberProfiles, onOpenMemberProfile, onOpenAttachment, onShowReadReceipt, onReaction, onForward, onDelete, onQuote, flashMessageId, history, visible])
+  }), [showMessage, rows, messages, mobile, memberReadSeqs, deliveryWaits, memberProfiles, onOpenMemberProfile, onOpenAttachment, readReceiptHandle, onReaction, onForward, onDelete, onQuote, flashMessageId, history, visible])
 
   // 手机上话题是来源页的一枚页签:在前面时,返回先回到来源那一枚。
   useBackLayer(onClose, mobile && visible !== false)
@@ -461,13 +461,7 @@ export function TopicSplitPane({ viewportKey = 'topic', navigationTarget = false
         />
         </div>
         </ChatBottomDock>
-        {readReceiptPanel ? (
-          <ReadReceiptPopover
-            {...readReceiptPanel}
-            testId="message-read-receipt-panel"
-            onClose={onCloseReadReceipt}
-          />
-        ) : null}
+        <ReadReceiptPopover handle={readReceiptHandle} receiptOf={receiptOf} testId="message-read-receipt-panel" />
       </div>
     </motion.div>
   )

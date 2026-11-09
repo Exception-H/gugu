@@ -1,4 +1,5 @@
 import type { QuoteSelection } from './messageQuoteContent'
+import type { ReadReceiptHandle } from '@/hooks/useReadReceiptPanel'
 import { memo, useCallback, useEffect, useMemo, useRef } from 'react'
 import type { CSSProperties, MouseEvent, ReactNode, Ref } from 'react'
 import type { MessageItem, MessageSendState, TopicSummary } from '@gugu/core/shared/types/chat'
@@ -95,8 +96,8 @@ export interface MessageListRowProps {
   threeParty: boolean | undefined
   memberProfiles: Record<string, MemberProfileCardModel>
   onReaction: (messageId: string, emoji: string) => void
-  // @@@1345 点击已读圆环 → 父层弹「谁已读/谁未读」名单(稳定回调，避免 reader 列表作对象 prop 破 memo)。
-  onShowReadReceipt: ((messageId: string, anchor: HTMLElement) => void) | undefined
+  // @@@1345 已读圆环是父层「谁已读/谁未读」名单的 Trigger(稳定 handle，避免 reader 列表作对象 prop 破 memo)。
+  readReceiptHandle: ReadReceiptHandle | undefined
   onShowMessage?: (id: string) => void
   onQuote: (msg: MessageItem, selection?: QuoteSelection) => void
   onForward: (msg: MessageItem) => void
@@ -168,7 +169,7 @@ const MessageListRow = memo(function MessageListRow({
   threeParty,
   memberProfiles, bubbleMemberProfiles,
   onReaction,
-  onShowReadReceipt,
+  readReceiptHandle,
   onQuote, onShowMessage,
   onForward,
   onDelete,
@@ -252,7 +253,7 @@ const MessageListRow = memo(function MessageListRow({
       showReadReceipt={msg.is_mine}
       groupedWithPrev={groupedWithPrev}
       groupedWithNext={groupedWithNext}
-      onShowReadReceipt={onShowReadReceipt}
+      readReceiptHandle={readReceiptHandle}
       onQuote={onQuote} onShowMessage={onShowMessage}
       onForward={onForward}
       onDelete={onDelete}
