@@ -1054,6 +1054,7 @@ const enUSCoreMessages = {
   'sidebar.leaveGroup': 'Take out of this group',
   'sidebar.dissolveGroup': 'Ungroup',
   'sidebar.forkFailed': 'Fork failed',
+  'sidebar.forked': "You're now in the fork. The original task hasn't changed.",
   'sidebar.copySessionId': 'Copy session ID',
   'sidebar.sessionIdCopied': 'Session ID copied',
   // 侧栏里把一条会话拖到另一条上 = 挂到它下面(与 agent 的 session_set_parent 同一个动作)。
@@ -2105,6 +2106,7 @@ const zhCNCoreMessages: Record<CoreSessionMessageKey, string> = {
   'sidebar.leaveGroup': '从这一组拿出来',
   'sidebar.dissolveGroup': '拆开这一组',
   'sidebar.forkFailed': 'Fork 失败',
+  'sidebar.forked': '已进入分叉，原任务保持不变。',
   'sidebar.copySessionId': '复制会话 ID',
   'sidebar.sessionIdCopied': '已复制会话 ID',
   'sidebar.nestedUnder': '「{child}」已挂到「{parent}」下面',

@@ -14,7 +14,7 @@ export function forkTask({ projectId, sessionId, navigate, translate }: {
   projectId: string;
   sessionId: string;
   navigate: (view: 'session', params: { projectId: string; sessionId: string }) => void;
-  translate: (key: 'sidebar.forkFailed' | 'sidebar.workspaceNotReady') => string;
+  translate: (key: 'sidebar.forkFailed' | 'sidebar.forked' | 'sidebar.workspaceNotReady') => string;
 }): void {
   const failed = (error: unknown) => {
     toast({ title: translate('sidebar.forkFailed'), description: messageForUser(error), variant: 'destructive' });
@@ -35,6 +35,7 @@ export function forkTask({ projectId, sessionId, navigate, translate }: {
             () => {
               navigate('session', { projectId, sessionId: created.id });
               openSessionInSessionWhenReady({ projectId, sessionId: created.id });
+              toast({ title: translate('sidebar.forked') });
             },
             { timeout: 15_000, onError: failed },
           );

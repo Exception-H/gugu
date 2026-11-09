@@ -29,6 +29,7 @@ it('opens the fork only once the task list has it, since the view guard sends an
   runInAction(() => h.listed!.set('fork', {}));
   expect(navigate).toHaveBeenLastCalledWith('session', { projectId: 'p', sessionId: 'fork' });
   expect(h.open).toHaveBeenCalledWith({ projectId: 'p', sessionId: 'fork' });
+  expect(h.toast).toHaveBeenCalledWith({ title: 'sidebar.forked' });
 });
 
 it('says so when the fork fails', async () => {
