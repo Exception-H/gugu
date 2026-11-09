@@ -76,6 +76,8 @@ export type ChatCommands = {
     text: string;
     pending: boolean;
     canSubmit: boolean;
+    /** What sending will do to the rest of the task, when it does anything. */
+    notice?: string;
     onChange: (text: string) => void;
     onCancel: () => void;
     onSubmit: () => void;

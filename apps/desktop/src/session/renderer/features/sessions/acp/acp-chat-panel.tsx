@@ -2099,6 +2099,8 @@ export const AcpChatPanel = observer(function AcpChatPanel({
         ...messageEdit,
         pending: messageEditPending,
         canSubmit: (historyActionsEnabled || !!store?.isRejectedInput(messageEdit.itemId)) && !messageEditPending && messageEdit.text.trim().length > 0,
+        // A rejected input has no reply yet: sending it removes nothing.
+        notice: store?.isRejectedInput(messageEdit.itemId) ? undefined : translate('transcript.editRemoves'),
         onChange: (text) => store?.changeMessageEdit(messageEdit.itemId, text),
         onCancel: () => store?.cancelMessageEdit(messageEdit.itemId),
         onSubmit: () => void store?.sendMessageEdit(messageEdit.itemId),
@@ -2223,7 +2225,7 @@ export const AcpChatPanel = observer(function AcpChatPanel({
         if (store) dismissSubagent(store.sessionId, entryId);
       },
     }),
-    [store, quotes.onMessageTextMount, quotes.restorePrompt, sourceMessage.reveal, sourceMessage.flashMessageId, conversationAgentName, historyActionsEnabled, messageEdit, messageEditPending, handleViewerOpen, translate, membershipLock?.modelName, outputMenu.commands]
+    [store, translate, quotes.onMessageTextMount, quotes.restorePrompt, sourceMessage.reveal, sourceMessage.flashMessageId, conversationAgentName, historyActionsEnabled, messageEdit, messageEditPending, handleViewerOpen, translate, membershipLock?.modelName, outputMenu.commands]
   );
 
   // A freshly-created task can publish its tab before the resource manager has finished attaching
