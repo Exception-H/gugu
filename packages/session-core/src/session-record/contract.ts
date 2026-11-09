@@ -236,6 +236,8 @@ export interface SessionRecordSource {
    * null = read from the start (also for a record that cannot start elsewhere, a `.zst` archive).
    */
   startingAt?(position: number): Promise<SessionRecordResume | null>;
+  /** The record file as it is now (a snapshot source also finds a `.zst` archive); a filled-in picture is read back from it. */
+  recordPath?(): Promise<string | null>;
   /** Changes whenever the record can have grown or been replaced; null = cannot tell (always read). */
   stamp?(): Promise<string | null>;
 }

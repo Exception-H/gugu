@@ -68,7 +68,7 @@ export function createJsonlTailSource<S>(
           }
         },
         warn,
-        options?.pictures
+        options?.elidePictures
       );
       if (options?.readMode === 'snapshot') {
         if (resume) events.onReset('source_replaced');
@@ -103,6 +103,7 @@ export function createJsonlTailSource<S>(
       const data: ResumeData<S> = { version: format.resumeVersion, path: found, tail, state: format.initial() };
       return { data, fingerprint: `${format.name}:${found}:${tail.ino}:${tail.size}:${tail.mtimeMs}` } satisfies SessionRecordResume;
     },
+    recordPath: () => format.resolve().catch(() => null),
     async stamp() {
       const found = await format.resolve().catch(() => null);
       if (!found) return null;

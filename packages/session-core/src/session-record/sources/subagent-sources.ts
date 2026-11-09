@@ -95,6 +95,7 @@ export function withSubagentSources(
     // resume-tail: the root record decides where a fill from the tail starts; children are read whole as they appear.
     startingAt: root.startingAt ? (position) => root.startingAt!(position) : undefined,
     stamp: root.stamp ? () => root.stamp!() : undefined,
+    recordPath: root.recordPath ? () => root.recordPath!() : undefined,
     async resumePoint(budget) {
       if (replacement) return replacement.resumePoint!(budget);
       // The host starts archiving and immediately stops the source. Start every

@@ -72,8 +72,8 @@ export function createClaudeJsonlSource(
   const root = new ClaudeJsonlSource(locator, options, nativeChild);
   return withSubagentSources(
     root,
-    // A child's pictures are in its own file: the filter's positions are the root record's.
-    (id) => createClaudeJsonlSource({ ...locator, providerSessionId: id, roots: root.childRoots[id] }, options && { ...options, pictures: undefined }, true),
+    // A child's pictures are in its own file: a place kept for them would point into the root record.
+    (id) => createClaudeJsonlSource({ ...locator, providerSessionId: id, roots: root.childRoots[id] }, options && { ...options, elidePictures: undefined }, true),
     () => createClaudeJsonlSource(locator, options, nativeChild),
     options,
   );
@@ -141,7 +141,7 @@ class ClaudeJsonlSource implements SessionRecordSource {
         }
       },
       this.warn,
-      this.options?.pictures
+      this.options?.elidePictures
     );
     const resumed = this.options?.readMode !== 'snapshot' && resume ? await this.resumeRead(path, resume) : false;
     if (!resumed) {
@@ -236,6 +236,10 @@ class ClaudeJsonlSource implements SessionRecordSource {
     const data: ClaudeResumeData = { version: CLAUDE_RESUME_VERSION, primaryPath: path, tailPath: path, tail,
       seenUuids: [], lastUuid: null, launches: {}, childRoots: {}, consumedFiles: [[path, position]] };
     return { data, fingerprint: `claude:${path}:${tail.ino}:${tail.size}:${tail.mtimeMs}` };
+  }
+
+  recordPath(): Promise<string | null> {
+    return resolveSessionFile(this.locator, this.nativeChild).catch(() => null);
   }
 
   async stamp(): Promise<string | null> {

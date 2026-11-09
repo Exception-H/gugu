@@ -7,7 +7,7 @@ import { afterEach, describe, expect, it } from 'vitest';
 import type { TranscriptTurn } from '../acp/models/turns/turn';
 import type { SessionRecordLocator } from './contract';
 import { readRecordFrom } from './fill-read';
-import { ELIDED_PICTURE, type PictureFilter } from './sources/picture-elider';
+import { readElidedPicture } from './sources/picture-elider';
 import { createSessionRecordSource, createSessionTimeline } from './index';
 
 const disposers: Array<() => Promise<void>> = [];
@@ -92,13 +92,11 @@ async function hermesRecord(): Promise<SessionRecordLocator> {
 const said = (turns: readonly TranscriptTurn[]) => turns.map((turn) => turn.items.flatMap((item) =>
   item.kind === 'message' ? [`${item.role}: ${item.text}`] : []).join(' | '));
 
-const ALL: PictureFilter = { keep: () => true, kept: () => {} };
-
-async function readAll(locator: SessionRecordLocator, position: number, pictures = ALL) {
+async function readAll(locator: SessionRecordLocator, position: number, elidePictures = false) {
   const turns: TranscriptTurn[] = [];
   const starts: Array<number | null> = [];
   let handedOut = 0;
-  const read = await readRecordFrom({ locator, sessionId: 'fill', position, pictures, onSettled: (batch, from, at) => {
+  const read = await readRecordFrom({ locator, sessionId: 'fill', position, elidePictures, onSettled: (batch, from, at) => {
     expect(from).toBe(turns.length);
     handedOut += batch.length;
     turns.push(...batch); starts.push(...at);
@@ -144,19 +142,20 @@ it('reads a grown Codex record from a position without the lines before it', asy
   expect(said(from.turns)).toEqual([...said(whole.turns.slice(at)), 'user: grown']);
 });
 
-it('passes pictures over without moving a turn start, and keeps the ones asked for', async () => {
+it('passes pictures over without moving a turn start, keeping their place in the record', async () => {
   const locator = await codexRecord();
   const whole = await readAll(locator, 0);
-  const asked: number[] = [];
-  const kept: number[] = [];
-  const passed = await readAll(locator, 0, { keep: (at) => { asked.push(at); return asked.length === 2; }, kept: (chars) => { kept.push(chars); } });
+  const passed = await readAll(locator, 0, true);
   expect(passed.starts).toEqual(whole.starts);
   expect(said(passed.turns)).toEqual(said(whole.turns));
   const images = (turns: TranscriptTurn[]) => turns.flatMap((turn) => turn.items.flatMap((item) =>
     (item as { images?: Array<{ data: string }> }).images?.map((image) => image.data) ?? []));
-  expect(asked).toHaveLength(TURNS / 10);
-  expect(kept).toEqual([100_000]);
+  const file = join(locator.roots[0], '2026', '06', '18', `rollout-2026-06-18T07-03-21-${locator.providerSessionId}.jsonl`);
+  const bytes = await readFile(file);
   const shown = images(passed.turns);
-  expect(shown.filter((data) => data.startsWith(ELIDED_PICTURE))).toHaveLength(TURNS / 10 - 1);
-  expect(shown.filter((data) => !data.startsWith(ELIDED_PICTURE))).toEqual([images(whole.turns)[1]]);
+  expect(shown).toHaveLength(TURNS / 10);
+  expect(shown.map((data) => {
+    const place = readElidedPicture(data)!;
+    return bytes.subarray(place.start, place.start + place.chars).toString('latin1');
+  })).toEqual(images(whole.turns));
 });

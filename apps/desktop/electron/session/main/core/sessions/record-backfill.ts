@@ -6,7 +6,7 @@ import { log } from '@main/lib/logger';
 import { sessionRecordHarnessForProvider } from '@main/core/session-timeline/locate';
 import { indexHermesPrompts, originalHermesPrompt } from '@gugu/session-core/acp/hermes-prompt';
 import { hashIdentity, identify, matchAfterStore, matchAfterStoreAt, recordIdentityFor, type Identity, type RecordIdentity } from './record-backfill-match';
-import { ELIDED_PICTURE, type PictureFilter } from '@gugu/session-core/session-record/picture-elider';
+import { readElidedPicture } from '@gugu/session-core/session-record/picture-elider';
 import { appendRecordTurnNow, readUnfinishedRecordRowsNow, reviseRecordTurnNow, storedHeadNow, storedTurnsNewestFirstNow, withStoredTurns } from './session-turn-store';
 import { sessionEngine, sessionProcess } from './session-process';
 
@@ -21,8 +21,6 @@ const stamps = new KV<Record<string, Stamp>>('record-stamp');
 
 /** Store rows whose identities a fill reads up front: the widest window matched before resume-tail. */
 const STORE_WINDOW = 200;
-/** Pictures copied into the store by one fill (as before resume-tail); past it a picture keeps only its size. */
-const FILL_PICTURE_CHARS = 256 * 1024 * 1024;
 
 const digest = (text: string) => createHash('sha256').update(text).digest('base64url').slice(0, 16);
 
@@ -118,26 +116,24 @@ export async function syncStoredHistoryFromRecord(sessionId: string, options: { 
     try {
       if (parentRow && parentLocation?.supported) {
         // A fork proves its parent's prefix once, by a snapshot read of the parent; nothing of it is kept.
-        const parent = await readRecordFrom({ locator: parentLocation.locator, sessionId: parentRow.id, position: 0, snapshot: true, pictures: NO_PICTURES, onSettled: () => {} });
+        const parent = await readRecordFrom({ locator: parentLocation.locator, sessionId: parentRow.id, position: 0, snapshot: true, elidePictures: true, onSettled: () => {} });
         parentLineage = parent.lineage ?? undefined;
         if (!parentLineage?.length) return result('diverged');
       }
 
-      // First pass: turn identities and where each turn starts, no picture decoded; from the cursor, else the beginning.
+      // First pass: turn identities only, from the cursor, else from the beginning.
       const scan = async (position: number) => {
         const seen: Identity[] = [];
-        const starts: Array<number | null> = [];
         let unreceipted = false;
-        const take = (turn: TranscriptTurn, start: number | null) => {
+        const take = (turn: TranscriptTurn) => {
           if (hermes && turn.items.some(item => item.kind === 'message' && item.role === 'user' && originalHermesPrompt(item.text, hermes) === null)) unreceipted = true;
           seen.push(hashIdentity(identify(turn, hermes), digest));
-          starts.push(start);
         };
         const read = await readRecordFrom({ locator: location.locator, sessionId, position, ...(parentLineage ? { parentLineage } : {}),
-          pictures: NO_PICTURES, onSettled: (turns, _from, at) => turns.forEach((turn, index) => take(turn, at[index])) });
+          elidePictures: true, onSettled: turns => turns.forEach(take) });
         const prefix = committedOnly && read.tail.length > read.committed ? read.tail.slice(0, read.committed) : read.tail;
-        prefix.forEach((turn, index) => take(turn, read.tailStarts[index]));
-        return { seen, starts, unreceipted, from: read.from, complete: prefix.length === read.tail.length, lastSettled: !!prefix.at(-1)?.outcome };
+        prefix.forEach(take);
+        return { seen, unreceipted, from: read.from, complete: prefix.length === read.tail.length, lastSettled: !!prefix.at(-1)?.outcome };
       };
       let plan: Plan | null = null;
       const cursor = !parentLineage && saved?.cursor ? saved.cursor : null;
@@ -152,7 +148,7 @@ export async function syncStoredHistoryFromRecord(sessionId: string, options: { 
           && matchAfterStoreAt(scanned.seen.slice(0, 1), [first.identity], identity)?.anchor) {
           const found = matchPlan(scanned.seen, since, unfinished, identity, true);
           if (found === 'diverged') return result('diverged');
-          if (found) plan = { ...found, from: cursor.position, starts: scanned.starts, complete: scanned.complete, lastSettled: scanned.lastSettled };
+          if (found) plan = { ...found, from: cursor.position, complete: scanned.complete, lastSettled: scanned.lastSettled };
         }
         // A cursor the record no longer shows (replaced, rewritten) is dropped: match as if there were none.
       }
@@ -166,14 +162,12 @@ export async function syncStoredHistoryFromRecord(sessionId: string, options: { 
         if (found === null && window.rows.length >= STORE_WINDOW) found = matchPlan(scanned.seen, storeIdentities(Number.MAX_SAFE_INTEGER).rows, unfinished, identity, true);
         if (found === null) log.warn('[record-backfill] the record and the store diverged; nothing filled in', { sessionId });
         if (found === null || found === 'diverged') return result('diverged');
-        plan = { ...found, from: scanned.from, starts: scanned.starts, complete: scanned.complete, lastSettled: scanned.lastSettled };
+        plan = { ...found, from: scanned.from, complete: scanned.complete, lastSettled: scanned.lastSettled };
       }
 
-      // Second pass: the same start; turns after the anchor are written as they stream. Only their pictures are decoded,
-      // within the budget (as before); the others keep their size. The newest settled turn whose stored row is known
-      // becomes the next fill's cursor.
+      // Second pass: the same start; turns after the anchor are written as they stream, their long pictures as their place
+      // in the record (read back when opened). The newest settled turn whose stored row is known becomes the next cursor.
       let inserted = 0, index = 0;
-      const pictures = writtenPictures(plan, FILL_PICTURE_CHARS);
       let next: Cursor | null = null;
       const write = (turn: TranscriptTurn, start: number | null) => {
         const at = index++;
@@ -194,7 +188,7 @@ export async function syncStoredHistoryFromRecord(sessionId: string, options: { 
       };
       try {
         const read = await readRecordFrom({ locator: location.locator, sessionId, position: plan.from, ...(parentLineage ? { parentLineage } : {}),
-          pictures, onSettled: (turns, _from, starts) => turns.forEach((turn, at) => write(turn, starts[at])) });
+          elidePictures: true, onSettled: (turns, _from, starts) => turns.forEach((turn, at) => write(turn, starts[at])) });
         if (read.from !== plan.from) throw new Error('record-backfill: the second pass started elsewhere than the first');
         const held = committedOnly && read.tail.length > read.committed ? read.committed : read.tail.length;
         for (let at = 0; at < held; at += 1) write(read.tail[at], read.tailStarts[at]);
@@ -220,6 +214,16 @@ export async function syncStoredHistoryFromRecord(sessionId: string, options: { 
   });
 }
 
+/** A filled-in picture, from the session's record as it is now (`readFilledPicture` in session-core); null = not there. */
+export async function readFilledPicture(sessionId: string, place: { start: number; chars: number; head: string; tail: string }): Promise<string | null> {
+  const { readSessionRow, locateRow } = await import('@main/core/session-timeline/service');
+  const row = readSessionRow(sessionId, { includeArchived: true });
+  const location = row ? locateRow(row) : null;
+  if (!location?.supported) return null;
+  const { readFilledPicture: fromRecord } = await import('@gugu/session-core/session-record/fill-read');
+  return fromRecord(location.locator, place);
+}
+
 class FillStopped extends Error {
   constructor(readonly status: RecordBackfillResult['status']) { super(status); }
 }
@@ -231,8 +235,6 @@ type Plan = {
   /** Whether a record turn is appended: the matched ones, and any the record grew by between the passes. */
   append: (index: number) => boolean;
   appended: number;
-  /** Where each turn read (index from `from`) starts in the record; null where the source does not say. */
-  starts: Array<number | null>;
   /** The newest record turn recognized as a stored row, and that row's seq. */
   anchor: { seen: number; seq: number } | null;
   complete: boolean;
@@ -254,7 +256,7 @@ function matchPlan(
   unfinished: Array<{ seq: number; identity: Identity }>,
   identity: RecordIdentity,
   storeComplete: boolean,
-): Omit<Plan, 'from' | 'starts' | 'complete' | 'lastSettled'> | 'diverged' | null {
+): Omit<Plan, 'from' | 'complete' | 'lastSettled'> | 'diverged' | null {
   const revise = new Map<number, number>();
   for (let at = 0; at < seen.length; at += 1) {
     const hits = unfinished.filter(one => matchAfterStore([seen[at]], [one.identity], identity)?.length === 0);
@@ -282,41 +284,23 @@ function matchPlan(
   };
 }
 
-const NO_PICTURES: PictureFilter = { keep: () => false, kept: () => {} };
-
 /**
- * The second pass decodes a picture only when it lies in a turn the fill writes (by the turn starts the first pass
- * saw) and the budget still has room, as before resume-tail. Turns with no start keep theirs within the budget.
+ * A long picture the fill left in the record is stored as its size and its place there (`imageRefs`), not its bytes:
+ * the turn came from that record, and the picture is read back from it when opened (`getStoredToolImage`). A tool node
+ * keeps either `images` or `imageRefs`; next to an elided one, a short picture keeps its size only.
  */
-function writtenPictures(plan: Plan, budget: number): PictureFilter {
-  const known = plan.starts.flatMap((start, index) => start === null ? [] : [{ start, index }]);
-  const turnAt = (at: number) => {
-    let low = 0, high = known.length;
-    while (low < high) { const mid = (low + high) >> 1; if (known[mid].start <= at) low = mid + 1; else high = mid; }
-    return low === 0 ? null : known[low - 1].index;
-  };
-  let left = budget;
-  return {
-    keep(at) {
-      if (left <= 0) return false;
-      const index = turnAt(at);
-      return index === null || plan.revise.has(index) || plan.append(index);
-    },
-    kept(chars) { left -= chars; },
-  };
-}
-
-/** A picture the second pass left undecoded keeps only its size (`imageRefs`), as the transport projections show it. */
 function elidedAsRefs(turn: TranscriptTurn): TranscriptTurn {
   const visit = (items: TranscriptTurn['items']): TranscriptTurn['items'] => {
     let changed = false;
     const next = items.map((item) => {
       const node = item as unknown as { images?: Array<{ mimeType: string; data: string }>; children?: TranscriptTurn['items'] };
       let out = item;
-      if (node.images?.some(image => image.data.startsWith(ELIDED_PICTURE))) {
+      if (node.images?.some(image => readElidedPicture(image.data))) {
         const { images, ...rest } = node;
-        out = { ...rest, imageRefs: images.map(({ mimeType, data }) => ({ mimeType,
-          chars: data.startsWith(ELIDED_PICTURE) ? Number(data.slice(ELIDED_PICTURE.length)) : data.length })) } as unknown as typeof item;
+        out = { ...rest, imageRefs: images.map(({ mimeType, data }) => {
+          const place = readElidedPicture(data);
+          return place ? { mimeType, chars: place.chars, record: { start: place.start, head: place.head, tail: place.tail } } : { mimeType, chars: data.length };
+        }) } as unknown as typeof item;
       }
       const children = (out as typeof node).children;
       const kept = children ? visit(children) : children;

@@ -5,6 +5,7 @@ import type { TranscriptTurn } from '@gugu/session-core/acp';
 import { appendFile, mkdir, mkdtemp, readFile, rm, truncate, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { zstdCompressSync } from 'node:zlib';
 
 type Row = { id?: string; runtime: string; provider: string; providerSessionId: string; agentStatus: string | null;
   archivedAt: string | null; config: { forkedFrom: { sessionId: string } } | undefined };
@@ -34,7 +35,7 @@ vi.mock('./session-process', () => ({ sessionProcess: () => state.process,
 import { events } from '@main/lib/events';
 import { onActivitySignal } from '../activity/signals';
 import { syncStoredHistoryFromRecord } from './record-backfill';
-import { withStoredTurns } from './session-turn-store';
+import { getStoredToolImage, withStoredTurns } from './session-turn-store';
 import { nativeConversationUnread } from './session-conversation-read';
 import { nativeConversationActivity } from './session-conversation-activity';
 
@@ -304,7 +305,7 @@ it('stores only a proved Claude fork increment after canonical storage renumbers
   }
 });
 
-it('writes the turns it fills with their pictures, and reads on from the cursor past passed-over ones', async () => {
+it('stores filled-in pictures as their place in the record and reads them back, also once the record is archived', async () => {
   const picture = (n: number) => String(n).padStart(4, '0').repeat(20_000);
   const pictureTurn = (n: number) => [
     line('event_msg', { type: 'task_started' }),
@@ -314,15 +315,30 @@ it('writes the turns it fills with their pictures, and reads on from the cursor 
     line('response_item', { type: 'message', role: 'assistant', content: [{ type: 'output_text', text: `answer ${n}` }] }),
     line('event_msg', { type: 'task_complete' }),
   ];
-  const stored = () => rows().map(row => (JSON.parse(row.data) as TranscriptTurn).items
-    .flatMap(item => (item as { images?: Array<{ data: string }> }).images?.map(image => image.data.length) ?? []));
+  type Tool = { id: string; images?: unknown[]; imageRefs?: Array<{ chars: number; record?: { start: number } }> };
+  const tools = () => rows().map(row => ({ seq: row.seq, tool: (JSON.parse(row.data) as TranscriptTurn).items.find(item => item.kind !== 'message') as unknown as Tool }));
+  const opened = async () => {
+    const shown: string[] = [];
+    for (const { seq, tool } of tools()) {
+      const found = await getStoredToolImage({ sessionId: 'c1', seq, itemId: tool.id, index: 0 });
+      shown.push(found.ok ? found.image.data.slice(0, 8) + ':' + found.image.data.length : found.code);
+    }
+    return shown;
+  };
   await writeRecord([0, 1, 2].flatMap(pictureTurn));
   expect(await sync()).toEqual({ inserted: 3, status: 'complete' });
-  expect(stored()).toEqual([[80_000], [80_000], [80_000]]);
-  expect(rows().map(row => JSON.parse(row.data).items.find((item: { kind: string }) => item.kind !== 'message').images[0].data.slice(0, 8)))
-    .toEqual([picture(0), picture(1), picture(2)].map(data => data.slice(0, 8)));
+  expect(tools().map(({ tool }) => [tool.images, tool.imageRefs?.[0]?.chars, typeof tool.imageRefs?.[0]?.record?.start])).toEqual([
+    [undefined, 80_000, 'number'], [undefined, 80_000, 'number'], [undefined, 80_000, 'number']]);
+  expect(await opened()).toEqual([0, 1, 2].map(n => `${picture(n).slice(0, 8)}:80000`));
+  // The cursor reads on past pictures left in the record.
   await appendRecord([3, 4].flatMap(pictureTurn));
   expect(await sync()).toEqual({ inserted: 2, status: 'complete' });
-  expect(stored()).toEqual([[80_000], [80_000], [80_000], [80_000], [80_000]]);
   expect(texts().at(-1)).toBe('question 4 / answer 4');
+  // Codex archives an old rollout as `.zst`: the same decoded offsets, read back by streaming it.
+  await writeFile(`${record}.zst`, zstdCompressSync(await readFile(record)));
+  await rm(record);
+  expect(await opened()).toEqual([0, 1, 2, 3, 4].map(n => `${picture(n).slice(0, 8)}:80000`));
+  // A record that no longer has the picture: only its size, as before.
+  await writeFile(`${record}.zst`, zstdCompressSync(Buffer.from(line('session_meta', { id: THREAD }) + '\n')));
+  expect(await opened()).toEqual(Array(5).fill('no_such_image'));
 });

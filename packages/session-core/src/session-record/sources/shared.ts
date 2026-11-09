@@ -1,5 +1,4 @@
 import type { NormalizedEvent, NormalizedToolStatus } from '../../acp/reducer/normalized-event';
-import type { PictureFilter } from './picture-elider';
 import type { WindowCacheContext } from '../window-cache/types';
 import type { EntityContent } from '../../acp/models/entity-content';
 import type { ToolImage } from '../../acp/models/turns/tool-calls';
@@ -28,8 +27,8 @@ export type SessionRecordSourceOptions = {
   windowCache?: WindowCacheContext;
   /** A bounded historical read; compressed archives are never followed as live files. */
   readMode?: 'snapshot';
-  /** A store fill: which pictures' bytes are decoded at all (`picture-elider.ts`); positions are the root record's. */
-  pictures?: PictureFilter;
+  /** A store fill: long pictures' base64 is left in the record, replaced by its place there (`picture-elider.ts`). */
+  elidePictures?: boolean;
   /** The parent's primary-file UUID chain. A fork snapshot emits only after its proven common prefix. */
   parentLineage?: readonly RecordLineageNode[];
   /**

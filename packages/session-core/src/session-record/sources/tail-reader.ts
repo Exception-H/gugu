@@ -4,7 +4,7 @@ import { StringDecoder } from 'node:string_decoder';
 import { pipeline } from 'node:stream/promises';
 import { createZstdDecompress } from 'node:zlib';
 import { zstdFrames } from './zstd-frames';
-import { ELIDED_PICTURE, PictureElider, elidedBytes, type PictureFilter } from './picture-elider';
+import { ELIDED_PICTURE, PictureElider, elidedBytes } from './picture-elider';
 
 import type { RecordSourceWarn } from './shared';
 
@@ -73,9 +73,9 @@ export class TailReader {
     private readonly pollIntervalMs: number,
     private readonly events: TailReaderEvents,
     private readonly warn: RecordSourceWarn,
-    pictures?: PictureFilter
+    elidePictures = false
   ) {
-    this.elider = pictures ? new PictureElider(pictures) : null;
+    this.elider = elidePictures ? new PictureElider() : null;
   }
 
   /** A fill's reader passes most pictures' base64 over (`picture-elider.ts`); `elidedFor` = the read it follows. */

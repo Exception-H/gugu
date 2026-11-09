@@ -1,6 +1,6 @@
 import { renumberStoredTurn, rewriteTurnId } from './session-turn-identity';
 export { renumberStoredTurn } from './session-turn-identity';
-import { findToolImage, trimCursorPageForTransport, trimTurnsForTransport } from '@gugu/session-core/session-record';
+import { findToolImage, findToolItem, trimCursorPageForTransport, trimTurnsForTransport } from '@gugu/session-core/session-record';
 import { and, asc, desc, eq, gte, like, lt, notLike, sql } from 'drizzle-orm';
 import type { TranscriptTurn } from '@gugu/session-core/acp';
 import { db, sqlite } from '@main/db/client';
@@ -348,7 +348,15 @@ export async function getStoredToolImage(params: {
   const turn = row ? JSON.parse(row.data) as TranscriptTurn : null;
   const itemId = row && turn && !('seq' in params)
     ? rewriteTurnId(params.itemId, row.turnId, turn.id) : params.itemId;
-  return findToolImage(turn ? [turn] : [], itemId, params.index, Number.POSITIVE_INFINITY);
+  const found = findToolImage(turn ? [turn] : [], itemId, params.index, Number.POSITIVE_INFINITY);
+  if (found.ok || found.code !== 'no_such_image' || !turn) return found;
+  // A turn a fill copied from the record keeps its pictures there (resume-tail): read back by place, else only the size.
+  const node = findToolItem([turn], itemId)?.node;
+  const ref = node && node.kind !== 'tool-group' && !node.images ? node.imageRefs?.[params.index] : undefined;
+  if (!ref?.record) return found;
+  const { readFilledPicture } = await import('./record-backfill');
+  const data = await readFilledPicture(params.sessionId, { ...ref.record, chars: ref.chars });
+  return data === null ? found : { ok: true as const, image: { mimeType: ref.mimeType, data } };
 }
 
 /** Read one immutable live origin, even after its runtime record was removed. No provider is contacted. */
