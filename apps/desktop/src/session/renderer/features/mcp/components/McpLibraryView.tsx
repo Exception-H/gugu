@@ -16,7 +16,7 @@ import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@renderer/l
 import { TooltipProvider } from '@renderer/lib/ui/tooltip';
 import { useSessionMessages } from '@renderer/localization/use-session-messages';
 import { log } from '@renderer/utils/logger';
-import type { LibraryMcpServer } from '@shared/mcp-library';
+import type { LibraryMcpProvidedServer, LibraryMcpServer } from '@shared/mcp-library';
 import { McpLibraryRow } from './mcp-library-row';
 import { useHarnessMcpServers, useMcpLibrary } from './use-mcp-library';
 import type { AgentPayload } from '@shared/core/agents/agent-payload';
@@ -72,31 +72,26 @@ export const McpLibraryView: React.FC<{ onOpenIntegrations: () => void }> = ({ o
         <PageHeader
           sticky
           title={translate('mcpLibrary.title')}
-          description={translate('mcpLibrary.subtitle')}
-        >
-          <div className="flex w-full justify-end gap-2">
-            <Button onClick={() => void openAdd()} disabled={disabled} aria-label={translate('mcpLibrary.add')}>
-              <Plus className="size-4" />
-              <span className="[@container(max-width:520px)]:hidden">{translate('mcpLibrary.add')}</span>
-            </Button>
-          </div>
-        </PageHeader>
+        />
         {notice && <DeviceScopeNoticeLine notice={notice} onRetry={library.reload} />}
         {library.isLoading ? (
           <PageLoading />
         ) : notice && !library.hasData ? null : (
           <div className="flex flex-col gap-6 py-8">
             <section data-slot="mcp-library-gugu" className="flex flex-col gap-3">
-              <header className="flex flex-col gap-1">
-                <h3 className="text-base font-semibold text-foreground">{translate('mcpLibrary.ownGroup')}</h3>
-                <p className="text-xs text-foreground-muted">{translate('mcpLibrary.ownGroupNote')}</p>
-              </header>
+              <h3 className="text-base font-semibold text-foreground">{translate('mcpLibrary.ownGroup')}</h3>
               <FoldGroup slot="mcp-library-builtin" title={translate('mcpLibrary.builtInGroup')} fixed>
                 {library.provided?.builtIn.map((name) => (
-                  <ProvidedRow key={name} name={name} note={translate('mcpLibrary.builtInNote')} />
+                  <ProvidedRow key={name} name={name} />
                 ))}
               </FoldGroup>
-              <FoldGroup slot="mcp-library-own" title={translate('mcpLibrary.ownServers')} count={library.servers.length} defaultOpen>
+              <FoldGroup
+                slot="mcp-library-own"
+                title={translate('mcpLibrary.ownServers')}
+                count={library.servers.length}
+                defaultOpen
+                action={{ label: translate('mcpLibrary.add'), onClick: () => void openAdd(), icon: <Plus className="size-3" />, disabled }}
+              >
                 {library.servers.length === 0 ? (
                   <div data-slot="mcp-library-own-empty" className="flex flex-wrap items-center gap-2 px-3 py-2">
                     <span className="mr-auto text-sm text-foreground-muted">{translate('mcpLibrary.ownEmpty')}</span>
@@ -122,47 +117,26 @@ export const McpLibraryView: React.FC<{ onOpenIntegrations: () => void }> = ({ o
                   ))
                 )}
               </FoldGroup>
-              {(library.provided?.integrations.length ?? 0) > 0 && (
-                <FoldGroup
-                  slot="mcp-library-integrations"
-                  title={translate('mcpLibrary.integrationsGroup')}
-                  count={library.provided!.integrations.length}
-                  action={{ label: translate('mcpLibrary.manageIntegrations'), onClick: onOpenIntegrations }}
-                >
-                  {library.provided!.integrations.map((integration) => (
-                    // @@@raw integration name — 集成名是插件元数据,原样显示。
-                    <ProvidedRow key={integration.id} name={integration.name} note={translate('mcpLibrary.integrationNote')} />
-                  ))}
-                </FoldGroup>
-              )}
-              {(library.provided?.apps.length ?? 0) > 0 && (
-                <FoldGroup
-                  slot="mcp-library-apps"
-                  title={translate('mcpLibrary.appsGroup')}
-                  count={library.provided!.apps.length}
-                  {...(appsHere ? { action: { label: translate('mcpLibrary.manageApps'), onClick: () => appsHere!.openAppsPage() } } : {})}
-                >
-                  {library.provided!.apps.map((app) => (
-                    <ProvidedRow
-                      key={app.id}
-                      name={app.name}
-                      note={
-                        app.refusal
-                          ? translate('mcpLibrary.appOff')
-                          : translate(app.disclosure === 'full' ? 'mcpLibrary.appFull' : 'mcpLibrary.appProgressive')
-                      }
-                      {...(app.refusal ? { title: app.refusal } : {})}
-                    />
-                  ))}
-                </FoldGroup>
-              )}
+              <ProvidedGroup
+                slot="mcp-library-integrations"
+                title={translate('mcpLibrary.integrationsGroup')}
+                servers={library.provided?.servers.filter((server) => server.group === 'integrations') ?? []}
+                action={{ label: translate('mcpLibrary.manageIntegrations'), onClick: onOpenIntegrations }}
+                library={library}
+                onFail={fail}
+              />
+              <ProvidedGroup
+                slot="mcp-library-apps"
+                title={translate('mcpLibrary.appsGroup')}
+                servers={library.provided?.servers.filter((server) => server.group === 'apps') ?? []}
+                {...(appsHere ? { action: { label: translate('mcpLibrary.manageApps'), onClick: () => appsHere!.openAppsPage() } } : {})}
+                library={library}
+                onFail={fail}
+              />
             </section>
             {library.installed.length > 0 && (
               <section data-slot="mcp-library-harnesses" className="flex flex-col gap-3">
-                <header className="flex flex-col gap-1">
-                  <h3 className="text-sm font-medium text-foreground-muted">{translate('mcpLibrary.harnessesGroup')}</h3>
-                  <p className="text-xs text-foreground-muted">{translate('mcpLibrary.harnessesGroupNote')}</p>
-                </header>
+                <h3 className="text-sm font-medium text-foreground-muted">{translate('mcpLibrary.harnessesGroup')}</h3>
             {library.installed.map((agent) => (
               <HarnessGroup key={agent.id} agent={agent} library={library} disabled={disabled} onFail={fail} />
             ))}
@@ -259,7 +233,7 @@ function FoldGroup({
   icon?: React.ReactNode;
   title: string;
   count?: number;
-  action?: { label: string; onClick: () => void };
+  action?: { label: string; onClick: () => void; icon?: React.ReactNode; disabled?: boolean };
   defaultOpen?: boolean;
   /** 只有一两行、不值得折叠的组(内置):常开,没有箭头。 */
   fixed?: boolean;
@@ -287,9 +261,10 @@ function FoldGroup({
           </CollapsibleTrigger>
         )}
         {action && (
-          <Button variant="ghost" size="xs" className="ml-auto text-foreground-muted" onClick={action.onClick}>
+          <Button variant="ghost" size="xs" className="ml-auto text-foreground-muted" onClick={action.onClick} disabled={action.disabled}>
+            {action.icon}
             {action.label}
-            <ArrowRight className="size-3" />
+            {!action.icon && <ArrowRight className="size-3" />}
           </Button>
         )}
       </div>
@@ -300,12 +275,56 @@ function FoldGroup({
   );
 }
 
-/** 「咕咕提供」里只读的一行(内置 / 集成 / App):名字,加一句它怎么进任务。 */
-function ProvidedRow({ name, note, title }: { name: string; note: string; title?: string }) {
+/** 内置那一台:只有名字 —— 「内置」这个组名已经说了它每个任务都带。 */
+function ProvidedRow({ name }: { name: string }) {
   return (
     <div data-slot="mcp-library-provided" data-server-id={name} className="flex min-h-12 items-center gap-3 px-3 py-2">
       <span className="min-w-0 flex-1 truncate text-sm text-foreground" title={name}>{name}</span>
-      <span className="shrink-0 text-xs text-foreground-muted" {...(title ? { title } : {})}>{note}</span>
     </div>
+  );
+}
+
+/**
+ * 集成、App 递给 agent 的那几台(只读),和「我加的」同一种行。展开这一组时才去取各台的工具列表 —— 列 App 的工具会把程序起起来。
+ */
+function ProvidedGroup({
+  slot,
+  title,
+  servers,
+  action,
+  library,
+  onFail,
+}: {
+  slot: string;
+  title: string;
+  servers: readonly LibraryMcpProvidedServer[];
+  action?: { label: string; onClick: () => void };
+  library: ReturnType<typeof useMcpLibrary>;
+  onFail: (failure: unknown) => void;
+}) {
+  const { translate } = useSessionMessages();
+  if (servers.length === 0) return null;
+  const loadTools = (open: boolean) => {
+    if (!open) return;
+    for (const server of servers) {
+      if (!library.providedChecks[server.key] && !library.checking.has(server.key)) void library.checkProvided(server.key).catch(onFail);
+    }
+  };
+  return (
+    <FoldGroup slot={slot} title={title} count={servers.length} {...(action ? { action } : {})} onOpenChange={loadTools}>
+      {servers.map((server) => (
+        <McpLibraryRow
+          key={server.key}
+          // @@@raw provided server — 名字、命令是递送时的那份描述,来源是集成 / App 的名字,原样显示。
+          server={server}
+          check={library.providedChecks[server.key]}
+          checking={library.checking.has(server.key)}
+          disabled={false}
+          note={`${server.from.join('、')} · ${translate(`mcpLibrary.reach.${server.reach}`)}`}
+          {...(server.refusal ? { noteTitle: server.refusal } : {})}
+          onCheck={() => void library.checkProvided(server.key).catch(onFail)}
+        />
+      ))}
+    </FoldGroup>
   );
 }

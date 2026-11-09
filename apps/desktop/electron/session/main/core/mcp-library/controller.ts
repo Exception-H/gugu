@@ -1,6 +1,6 @@
 import { createRPCController } from '@shared/lib/ipc/rpc';
 import type { LibraryMcpCheck, LibraryMcpHarnessServer, LibraryMcpProvided, LibraryMcpServer } from '@shared/mcp-library';
-import { libraryMcpProvided } from './provided';
+import { libraryMcpProvided, libraryMcpProvidedTools } from './provided';
 import { mcpLibraryService } from './service';
 
 /** 资源库 → MCP 的读写。别的机器经 `rpcOn(机器).mcpLibrary.*` 问到它自己的这一个控制器。 */
@@ -13,6 +13,7 @@ export const mcpLibraryController = createRPCController({
     mcpLibraryService.setEnabledByDefault(name, enabledByDefault),
   check: (name: string): Promise<LibraryMcpCheck> => mcpLibraryService.check(name),
   provided: (): Promise<LibraryMcpProvided> => libraryMcpProvided(),
+  providedTools: (key: string): Promise<LibraryMcpCheck> => libraryMcpProvidedTools(key),
   harnessServers: (providerIds: string[]): Promise<LibraryMcpHarnessServer[]> =>
     mcpLibraryService.harnessServers(providerIds),
   checkHarnessServer: (providerId: string, name: string): Promise<LibraryMcpCheck> =>
