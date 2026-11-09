@@ -1,5 +1,5 @@
 import type { TranscriptTurn } from '../acp/models/turns/turn';
-import type { RecordLineageNode, SessionRecordLocator, SessionTimeline } from './contract';
+import type { RecordLineageNode, SessionRecordLocator, SessionTimeline, TurnStart } from './contract';
 import { createSessionRecordSource } from './index';
 import { readRecordPicture } from './sources/record-images';
 import { SessionRecordNotFoundError } from './sources/shared';
@@ -19,8 +19,8 @@ export type FillRead = {
   committed: number;
   /** Index of `tail[0]` among the turns this read produced. */
   tailFrom: number;
-  /** Where each of `tail` starts in the record (`startingAt` takes it); null where the source does not say. */
-  tailStarts: Array<number | null>;
+  /** Where each of `tail` starts in the record and the decoder state there (`startingAt` takes both); null = unknown. */
+  tailStarts: Array<TurnStart | null>;
   /** Where the read actually started: the source may refuse `position` (a changed continuation chain) and start at 0. */
   from: number;
   prunedDrops: number;
@@ -31,13 +31,15 @@ export async function readRecordFrom(input: {
   locator: SessionRecordLocator;
   sessionId: string;
   position: number;
+  /** The decoder state at `position` and the index of the turn starting there, as a read from the beginning has them. */
+  at?: { state?: unknown; timeline?: unknown; turn: number };
   /** A fork proves its parent's prefix, which only a snapshot read from the start does. */
   parentLineage?: readonly RecordLineageNode[];
   snapshot?: boolean;
-  /** Long pictures reach the turns as their place in the record (`ELIDED_PICTURE`), not their base64. */
-  elidePictures?: boolean;
+  /** A fill's read (`SessionRecordSourceOptions.fill`): pictures left in the record, decoder states on the entries. */
+  fill?: boolean;
   /** `starts[i]`: where `turns[i]` starts in the record, as `startingAt` takes it; null where the source does not say. */
-  onSettled: (turns: TranscriptTurn[], from: number, starts: Array<number | null>) => void;
+  onSettled: (turns: TranscriptTurn[], from: number, starts: Array<TurnStart | null>) => void;
 }): Promise<FillRead> {
   if (input.snapshot || input.parentLineage) return read(input, 'snapshot', 0);
   try {
@@ -53,9 +55,9 @@ async function read(input: Parameters<typeof readRecordFrom>[0], readMode: 'live
   const source = createSessionRecordSource(input.locator, {
     ...(readMode === 'snapshot' ? { readMode } : {}),
     ...(input.parentLineage ? { parentLineage: input.parentLineage } : {}),
-    ...(input.elidePictures ? { elidePictures: true } : {}),
+    ...(input.fill ? { fill: true } : {}),
   });
-  const resume = position > 0 ? await source.startingAt?.(position) ?? null : null;
+  const resume = position > 0 ? await source.startingAt?.(position, input.at?.state) ?? null : null;
   let next = 0;
   let resets = 0;
   let frozen = false;
@@ -82,7 +84,8 @@ async function read(input: Parameters<typeof readRecordFrom>[0], readMode: 'live
     input.onSettled(drained.turns, next, drained.starts);
     next += drained.turns.length;
   };
-  const timeline = await createSessionTimeline(source, { sessionId: input.sessionId, resume, onApplied: drain })
+  const timeline = await createSessionTimeline(source, { sessionId: input.sessionId, resume, onApplied: drain,
+    ...(resume && input.at ? { turnIndexBase: input.at.turn, carried: input.at.timeline } : {}) })
     .catch((error: unknown) => { throw stopped ? stopped.reason : error; });
   try {
     drain(timeline);

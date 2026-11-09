@@ -3,6 +3,7 @@ export { renumberStoredTurn } from './session-turn-identity';
 import { findToolImage, findToolItem, trimCursorPageForTransport, trimTurnsForTransport } from '@gugu/session-core/session-record';
 import { and, asc, desc, eq, gte, like, lt, notLike, sql } from 'drizzle-orm';
 import type { TranscriptTurn } from '@gugu/session-core/acp';
+import { hermesNativeDigest } from '@gugu/session-core/acp/hermes-prompt';
 import { db, sqlite } from '@main/db/client';
 import { sessionTurns } from '@main/db/schema';
 import { randomUUID } from 'node:crypto';
@@ -191,23 +192,31 @@ export async function readStoredTailNow(sessionId: string, limit: number): Promi
  * Store rows newest first, one row at a time: a row can hold megabytes of pictures, so a fill never reads a page of them.
  * `limit` caps the count. Only inside `withStoredTurns`.
  */
-export function* storedTurnsNewestFirstNow(sessionId: string, limit = Number.MAX_SAFE_INTEGER, atLeast = 0): Generator<{ seq: number; turn: TranscriptTurn; createdAt: string }> {
-  // Sequences a page at a time too: a reader that stops early (deliveries) never lists the whole session.
+export function* storedTurnsNewestFirstNow(sessionId: string, limit = Number.MAX_SAFE_INTEGER): Generator<{ seq: number; turn: TranscriptTurn }> {
+  // Sequences a page at a time too: a reader that stops early never lists the whole session.
   let before = Number.MAX_SAFE_INTEGER, left = limit;
   while (left > 0) {
-    const seqs = db.select({ seq: sessionTurns.seq, createdAt: sessionTurns.createdAt }).from(sessionTurns)
-      .where(and(eq(sessionTurns.sessionId, sessionId), gte(sessionTurns.seq, atLeast), lt(sessionTurns.seq, before)))
+    const seqs = db.select({ seq: sessionTurns.seq }).from(sessionTurns)
+      .where(and(eq(sessionTurns.sessionId, sessionId), lt(sessionTurns.seq, before)))
       .orderBy(desc(sessionTurns.seq)).limit(Math.min(left, STORED_SEQ_PAGE)).all();
-    for (const { seq, createdAt } of seqs) {
+    for (const { seq } of seqs) {
       const row = db.select({ data: sessionTurns.data }).from(sessionTurns)
         .where(and(eq(sessionTurns.sessionId, sessionId), eq(sessionTurns.seq, seq))).limit(1).get();
-      if (row) yield { seq, turn: JSON.parse(row.data) as TranscriptTurn, createdAt };
+      if (row) yield { seq, turn: JSON.parse(row.data) as TranscriptTurn };
     }
     if (seqs.length < Math.min(left, STORED_SEQ_PAGE)) return;
     before = seqs.at(-1)!.seq; left -= seqs.length;
   }
 }
 const STORED_SEQ_PAGE = 200;
+
+/** The messages of this session's rows that carry the Hermes receipt for `nativeText` (found by SQL, not read in turn). */
+export function storedMessagesWithPromptHash(sessionId: string, nativeText: string): TranscriptTurn['items'] {
+  const digest = hermesNativeDigest(nativeText);
+  return db.select({ data: sessionTurns.data }).from(sessionTurns)
+    .where(and(eq(sessionTurns.sessionId, sessionId), like(sessionTurns.data, `%${digest}%`))).all()
+    .flatMap(row => (JSON.parse(row.data) as TranscriptTurn).items.filter(item => item.kind === 'message'));
+}
 
 /** Record-backed rows without an outcome, with their sequence: a later read may complete them (see below). */
 export function readUnfinishedRecordRowsNow(sessionId: string): Array<{ seq: number; turn: TranscriptTurn }> {

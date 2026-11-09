@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import { open, type FileHandle } from 'node:fs/promises';
 import { Readable } from 'node:stream';
 import { createZstdDecompress } from 'node:zlib';
@@ -120,3 +121,23 @@ async function* compressed(handle: FileHandle, from: number, last: number): Asyn
     yield buffer.subarray(0, bytesRead);
   }
 }
+
+/** `SessionRecordSource.checkAt` for a plain JSONL record: its inode and the hash of the 4 KiB before `position`. */
+export async function jsonlCheckAt(path: string, position: number): Promise<string | null> {
+  if (path.endsWith('.zst') || !Number.isSafeInteger(position) || position < 0) return null;
+  let handle: FileHandle | null = null;
+  try {
+    handle = await open(path, 'r');
+    const info = await handle.stat();
+    if (info.size < position) return null;
+    const from = Math.max(0, position - CHECK_BYTES);
+    const buffer = Buffer.alloc(position - from);
+    const { bytesRead } = await handle.read(buffer, 0, buffer.length, from);
+    return `${info.ino}:${createHash('sha256').update(buffer.subarray(0, bytesRead)).digest('hex')}`;
+  } catch {
+    return null;
+  } finally {
+    await handle?.close().catch(() => {});
+  }
+}
+const CHECK_BYTES = 4096;

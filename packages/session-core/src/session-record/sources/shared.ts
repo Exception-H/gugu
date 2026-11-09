@@ -27,8 +27,11 @@ export type SessionRecordSourceOptions = {
   windowCache?: WindowCacheContext;
   /** A bounded historical read; compressed archives are never followed as live files. */
   readMode?: 'snapshot';
-  /** A store fill: long pictures' base64 is left in the record, replaced by its place there (`picture-elider.ts`). */
-  elidePictures?: boolean;
+  /**
+   * A store fill's read: long pictures' base64 is left in the record, replaced by its place there (`picture-elider.ts`),
+   * and each entry carries the decoder state before its line (`RecordEntry.state`), so a later fill can start there.
+   */
+  fill?: boolean;
   /** The parent's primary-file UUID chain. A fork snapshot emits only after its proven common prefix. */
   parentLineage?: readonly RecordLineageNode[];
   /**

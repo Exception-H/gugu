@@ -63,9 +63,9 @@ export function withSubagentSources(
     locator: root.locator,
     async start(events, resume) {
       sink = events;
-      const saved = resume?.data as { nativeChildren?: number; root?: SessionRecordResume; children?: Record<string, SessionRecordResume> } | undefined;
+      const saved = resume?.data as { nativeChildren?: number; root?: SessionRecordResume; children?: Record<string, SessionRecordResume>; known?: string[] } | undefined;
       childResumes = saved?.nativeChildren === 2 ? saved.children ?? {} : {};
-      for (const id of Object.keys(childResumes)) childIds.add(id);
+      for (const id of [...Object.keys(childResumes), ...(saved?.nativeChildren === 2 ? saved.known ?? [] : [])]) childIds.add(id);
       await root.start({ ...events,
         onReset(reason) {
           stopChildren();
@@ -93,9 +93,15 @@ export function withSubagentSources(
     ...(root.readImage ? { readImage: (ref: RecordImageRef) => root.readImage!(ref) } : {}),
     ...(root.getLineage ? { getLineage: () => root.getLineage!() } : {}),
     // resume-tail: the root record decides where a fill from the tail starts; children are read whole as they appear.
-    startingAt: root.startingAt ? (position) => root.startingAt!(position) : undefined,
+    // A read from a turn inside the record also reads, whole, the children its decoder state already knows, as a read
+    // from the beginning does (they were started by lines before it).
+    startingAt: root.startingAt ? async (position, at) => {
+      const from = await root.startingAt!(position, at);
+      return from && { data: { nativeChildren: 2, root: from, children: {}, known: at === undefined ? [] : root.childIdsAt?.(at) ?? [] }, fingerprint: from.fingerprint };
+    } : undefined,
     stamp: root.stamp ? () => root.stamp!() : undefined,
     recordPath: root.recordPath ? () => root.recordPath!() : undefined,
+    checkAt: root.checkAt ? (position) => root.checkAt!(position) : undefined,
     async resumePoint(budget) {
       if (replacement) return replacement.resumePoint!(budget);
       // The host starts archiving and immediately stops the source. Start every

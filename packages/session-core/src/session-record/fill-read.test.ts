@@ -5,7 +5,7 @@ import { fileURLToPath } from 'node:url';
 import Database from 'better-sqlite3';
 import { afterEach, describe, expect, it } from 'vitest';
 import type { TranscriptTurn } from '../acp/models/turns/turn';
-import type { SessionRecordLocator } from './contract';
+import type { SessionRecordLocator, TurnStart } from './contract';
 import { readRecordFrom } from './fill-read';
 import { readElidedPicture } from './sources/picture-elider';
 import { createSessionRecordSource, createSessionTimeline } from './index';
@@ -89,14 +89,24 @@ async function hermesRecord(): Promise<SessionRecordLocator> {
   return { harness: 'hermes', providerSessionId: fixture.session.id, roots: [path] };
 }
 
+/** Equal, or an error that shows where the two first differ. */
+function same(got: unknown, want: unknown): void {
+  const [g, w] = [JSON.stringify(got), JSON.stringify(want)];
+  if (g === w) return;
+  let at = 0;
+  while (at < g.length && g[at] === w[at]) at++;
+  throw new Error(`differs at ${at}:\n  got:  …${g.slice(Math.max(0, at - 200), at + 200)}\n  want: …${w.slice(Math.max(0, at - 200), at + 200)}`);
+}
+
 const said = (turns: readonly TranscriptTurn[]) => turns.map((turn) => turn.items.flatMap((item) =>
   item.kind === 'message' ? [`${item.role}: ${item.text}`] : []).join(' | '));
 
-async function readAll(locator: SessionRecordLocator, position: number, elidePictures = false) {
+async function readAll(locator: SessionRecordLocator, start: TurnStart | null, options: { turn?: number; fill?: boolean } = {}) {
   const turns: TranscriptTurn[] = [];
-  const starts: Array<number | null> = [];
+  const starts: Array<TurnStart | null> = [];
   let handedOut = 0;
-  const read = await readRecordFrom({ locator, sessionId: 'fill', position, elidePictures, onSettled: (batch, from, at) => {
+  const read = await readRecordFrom({ locator, sessionId: 'fill', position: start?.position ?? 0, fill: options.fill,
+    ...(start ? { at: { state: start.state, timeline: start.timeline, turn: options.turn ?? 0 } } : {}), onSettled: (batch, from, at) => {
     expect(from).toBe(turns.length);
     handedOut += batch.length;
     turns.push(...batch); starts.push(...at);
@@ -111,42 +121,43 @@ describe.each([['codex', codexRecord], ['claude', claudeRecord], ['hermes', herm
     const timeline = await createSessionTimeline(createSessionRecordSource(locator, { readMode: 'snapshot' }), { sessionId: 'fill' });
     const whole = timeline.getSnapshot({ limit: Number.MAX_SAFE_INTEGER }).turns;
     timeline.dispose();
-    const read = await readAll(locator, 0);
+    const read = await readAll(locator, null);
     expect(read.turns).toEqual(whole);
     expect(read.handedOut).toBeGreaterThan(TURNS / 2);
     expect(whole.length).toBeGreaterThanOrEqual(TURNS);
   });
 
-  it('starts exactly at a turn from the position it reported for it', async () => {
+  it('reads from a turn it reported, with the state and turn index there, exactly as a whole read goes on', async () => {
     const locator = await make();
-    const whole = await readAll(locator, 0);
+    const whole = await readAll(locator, null, { fill: true });
     expect(whole.starts.every((start) => start !== null)).toBe(true);
     for (const at of [1, 40, whole.turns.length - 3, whole.turns.length - 1]) {
-      const from = await readAll(locator, whole.starts[at]!);
-      expect(from.from).toBe(whole.starts[at]);
-      expect(said(from.turns)).toEqual(said(whole.turns.slice(at)));
+      const from = await readAll(locator, whole.starts[at], { turn: at, fill: true });
+      expect(from.from).toBe(whole.starts[at]!.position);
+      same(from.turns, whole.turns.slice(at));
+      same(from.starts, whole.starts.slice(at));
     }
   });
 });
 
 it('reads a grown Codex record from a position without the lines before it', async () => {
   const locator = await codexRecord();
-  const whole = await readAll(locator, 0);
+  const whole = await readAll(locator, null, { fill: true });
   const at = whole.turns.length - 2;
   const file = join(locator.roots[0], '2026', '06', '18', `rollout-2026-06-18T07-03-21-${locator.providerSessionId}.jsonl`);
   await appendFile(file, [
     JSON.stringify({ timestamp: '2026-06-18T07:03:21Z', type: 'event_msg', payload: { type: 'task_started' } }),
     JSON.stringify({ timestamp: '2026-06-18T07:03:21Z', type: 'response_item', payload: { type: 'message', role: 'user', content: [{ type: 'input_text', text: 'grown' }] } }),
   ].join('\n') + '\n');
-  const from = await readAll(locator, whole.starts[at]!);
+  const from = await readAll(locator, whole.starts[at], { turn: at, fill: true });
   expect(said(from.turns)).toEqual([...said(whole.turns.slice(at)), 'user: grown']);
 });
 
 it('passes pictures over without moving a turn start, keeping their place in the record', async () => {
   const locator = await codexRecord();
-  const whole = await readAll(locator, 0);
-  const passed = await readAll(locator, 0, true);
-  expect(passed.starts).toEqual(whole.starts);
+  const whole = await readAll(locator, null);
+  const passed = await readAll(locator, null, { fill: true });
+  expect(passed.starts.map((start) => start?.position)).toEqual(whole.starts.map((start) => start?.position));
   expect(said(passed.turns)).toEqual(said(whole.turns));
   const images = (turns: TranscriptTurn[]) => turns.flatMap((turn) => turn.items.flatMap((item) =>
     (item as { images?: Array<{ data: string }> }).images?.map((image) => image.data) ?? []));

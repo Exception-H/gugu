@@ -82,6 +82,15 @@ class HermesSqliteSource extends SqlitePollSource<SessionRecordLocator> {
     return position > 0 ? { data: { version: HERMES_RESUME_VERSION, afterId: position }, fingerprint: `hermes:${this.locator.providerSessionId}:${position}` } : null;
   }
 
+  /** `SessionRecordSource.checkAt`: how many of this session's rows are at or before `position`, and the last of them. */
+  async checkAt(position: number): Promise<string | null> {
+    return this.query((db) => {
+      const rows = db.prepare(`select max(id) as id, count(*) as n from messages where ${VISIBLE} and id <= ?`)
+        .get(this.locator.providerSessionId, position) as { id: number | null; n: number };
+      return `hermes:${rows.id ?? 0}:${rows.n}`;
+    });
+  }
+
   /** The database is shared by every Hermes session: this session's own newest row, row count and end. */
   async stamp(): Promise<string | null> {
     return this.query((db) => {

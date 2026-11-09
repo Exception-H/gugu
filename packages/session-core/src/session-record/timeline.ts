@@ -10,7 +10,7 @@ import { AcpTranscriptParser } from '../acp/reducer';
 import { upstreamSaid } from '../acp/upstream-said';
 import { redactSecrets } from '@gugu/session-shared/logger';
 import type { ParserState } from '../acp/reducer/reducer';
-import type {
+import type { TurnStart,
   PendingRequest,
   RecordBoundary,
   RecordCursor,
@@ -104,6 +104,10 @@ export type SessionTimelineDeps = {
   onApplied?: (timeline: SessionTimeline) => void;
   /** Where the source starts when no archive is restored (a fill from the tail, `SessionRecordSource.startingAt`). */
   resume?: SessionRecordResume | null;
+  /** With `resume`: the index of the turn it starts at among the whole record's, so turn ids are the whole read's. */
+  turnIndexBase?: number;
+  /** With `resume`: the timeline state a whole read had where it starts (`TurnStart.timeline`). */
+  carried?: unknown;
 };
 
 /**
@@ -179,6 +183,9 @@ type PublishedTurn = {
 type RecentActionEntry = { id: string; name: string; at: number };
 type QueuedPromptText = Pick<QueuedPrompt, 'id' | 'text' | 'queueEdit' | 'clientMessageId'>;
 
+/** What a fill's turn start carries of the timeline (`TurnStart.timeline`): all but the turns, as before that turn. */
+type CarriedState = { parser: ParserState; lastBoundaryMessageId: string | null; lastAt: number | null };
+
 class RecordTimeline implements SessionTimeline {
   private readonly now: () => number;
   private readonly newEpoch: () => string;
@@ -238,7 +245,7 @@ class RecordTimeline implements SessionTimeline {
   /** Turns handed out by `drainSettled`, and the ids of what they own. */
   private retainedFrom = 0;
   /** Record position of each held turn's first entry (committed, then active), for a fill's cursor. */
-  private turnStarts: Array<number | null> = [];
+  private turnStarts: Array<TurnStart | null> = [];
   private prunedOwners = new Set<string>();
   private prunedDrops = 0;
   private resets = 0;
@@ -259,6 +266,16 @@ class RecordTimeline implements SessionTimeline {
     // 而那几十步没有任何订阅者看得到 —— 首轮统一算一次。
     this.suspended = true;
     const restored = this.restoreArchive(this.deps.archive ?? null);
+    if (!restored && this.deps.resume && this.deps.turnIndexBase) {
+      this.retainedFrom = this.deps.turnIndexBase;
+      this.parser.setTurnIndexBase(this.retainedFrom);
+    }
+    if (!restored && this.deps.resume && this.deps.carried) {
+      const carried = this.deps.carried as CarriedState;
+      this.parser.restoreState(carried.parser);
+      this.lastBoundaryMessageId = carried.lastBoundaryMessageId;
+      this.lastAt = carried.lastAt;
+    }
     try {
       await this.source.start(
         {
@@ -701,10 +718,16 @@ class RecordTimeline implements SessionTimeline {
             if (origin) this.imageOrigins.set(image.data, origin);
           });
         }
+        const before = this.parser.snapshotState();
+        const boundaryBefore = this.lastBoundaryMessageId;
         this.parser.pushRecordEvent(entry.event, at, this.lastBoundaryMessageId);
         const held = this.parser.history.length + (this.parser.activeTurn ? 1 : 0) - this.turnStarts.length;
         if (held < 0) this.turnStarts.length += held;
-        for (let one = 0; one < held; one += 1) this.turnStarts.push(entry.position ?? null);
+        // A fill's turn start keeps what a read from there needs to go on as this one does (the parser state is immutable).
+        const start: TurnStart | null = entry.position === undefined || held <= 0 ? null
+          : { position: entry.position, ...(entry.state !== undefined ? { state: entry.state } : {}),
+            timeline: { parser: { ...before, transcript: { committed: [], active: null } }, lastBoundaryMessageId: boundaryBefore, lastAt: at } satisfies CarriedState };
+        for (let one = 0; one < held; one += 1) this.turnStarts.push(start);
         this.recordRecentActions(this.parser.activeTurn?.items ?? [], at);
         this.trackSettlement(entry.event, at);
       }
@@ -714,7 +737,7 @@ class RecordTimeline implements SessionTimeline {
     this.deps.onApplied?.(this);
   }
 
-  heldStarts(): ReadonlyArray<number | null> {
+  heldStarts(): ReadonlyArray<TurnStart | null> {
     return this.turnStarts;
   }
 
@@ -724,7 +747,7 @@ class RecordTimeline implements SessionTimeline {
    * line (a background subagent's own file) still completes, unless that holds back more than `DRAIN_HOLD_TURNS`.
    * Events that reach a turn already handed out are dropped by id (`prunedOwners`), as a settled stored row is never revised.
    */
-  drainSettled(): { turns: TranscriptTurn[]; starts: Array<number | null>; prunedDrops: number; resets: number } {
+  drainSettled(): { turns: TranscriptTurn[]; starts: Array<TurnStart | null>; prunedDrops: number; resets: number } {
     const state = this.parser.snapshotState();
     const { committed } = state.transcript;
     const last = committed.length - 1;

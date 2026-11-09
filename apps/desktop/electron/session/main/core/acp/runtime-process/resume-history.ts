@@ -17,9 +17,8 @@ type Deps = {
  *
  * 宿主读得懂这家的记录 ⇒ **不重放**:会话页的历史以 agent 自己的记录为准、由宿主直接读文件补齐,重放回来的
  * 东西本来就会被丢掉;重放本身在长会话上是几分钟的独占。重放顺带供给的两样事实改由宿主自己给:
- * - 补投去重要的「agent 收到过哪些投递」—— 只对运行时可能还排着的那几条作答:每一条投递都经宿主的持久队列
- *   (`session_pending`)进运行时,掉线重连时运行时接着投的那份也在其中、尚未结清。它们收没收到,看库里有没有
- *   带着它的回合;补库刚把记录里缺的轮写进库,库也就替记录作答(`recorded-deliveries.ts`,不读整份记录);
+ * - 补投去重要的「agent 收到过哪些投递」—— 记录里用户消息带的投递 id。补库读记录时顺手记下,与游标一起存着
+ *   (`recordedDeliveryIds`):从游标读时累加,从头读时重算,所以不用再读一遍整份记录;
  * - 回合序号从库里接着数,❌ 从 0 数撞上上一次运行留下的同名回合。
  *
  * 记录这次读不出来(没有、读失败)⇒ 照旧重放:那是 agent 自己那份历史唯一还拿得到的路。
@@ -42,7 +41,7 @@ export async function resumeHistoryFacts(input: AcpRuntimeStartInput, deps: Deps
     }
   }
   const readDeliveries = deps.recordedDeliveryIds
-    ?? (async (id: string) => (await import('@main/core/sessions/recorded-deliveries')).recordedDeliveryIds(id));
+    ?? (async (id: string) => (await import('@main/core/sessions/record-backfill')).recordedDeliveryIds(id));
   const fill = deps.fillFromRecord
     ?? (async (id: string) => (await import('@main/core/sessions/record-backfill')).syncStoredHistoryFromRecord(id));
   try {

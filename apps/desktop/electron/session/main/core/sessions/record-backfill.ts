@@ -1,13 +1,15 @@
 import type { TranscriptTurn } from '@gugu/session-core/acp';
 import { createHash } from 'node:crypto';
+import type { SessionRecordLocator, TurnStart } from '@gugu/session-core/session-record/contract';
 import { isAgentActive, parseAgentStatus } from '@gugu/core/shared/agentStatus';
 import { KV } from '@main/db/kv';
 import { log } from '@main/lib/logger';
 import { sessionRecordHarnessForProvider } from '@main/core/session-timeline/locate';
 import { indexHermesPrompts, originalHermesPrompt } from '@gugu/session-core/acp/hermes-prompt';
+import { readDeliveryEnvelope } from '@gugu/core/local/agent/deliveryEnvelope';
 import { hashIdentity, identify, matchAfterStore, matchAfterStoreAt, recordIdentityFor, type Identity, type RecordIdentity } from './record-backfill-match';
 import { readElidedPicture } from '@gugu/session-core/session-record/picture-elider';
-import { appendRecordTurnNow, readUnfinishedRecordRowsNow, reviseRecordTurnNow, storedHeadNow, storedTurnsNewestFirstNow, withStoredTurns } from './session-turn-store';
+import { appendRecordTurnNow, readUnfinishedRecordRowsNow, storedMessagesWithPromptHash, reviseRecordTurnNow, storedHeadNow, storedTurnsNewestFirstNow, withStoredTurns } from './session-turn-store';
 import { sessionEngine, sessionProcess } from './session-process';
 
 export type RecordBackfillResult = {
@@ -16,7 +18,22 @@ export type RecordBackfillResult = {
 };
 
 /** What the last fill saw: the record's stamp and the store's newest row, so an unchanged session is not read at all. */
-type Stamp = { record: string; storeHead: number; lastSettled: boolean; cursor?: Cursor };
+/**
+ * What the last fill saw: the record's stamp and the store's newest row (an unchanged session is not read at all), the
+ * cursor the next fill starts from, and the delivery ids in the record's user messages (null = some cannot be told).
+ */
+type Stamp = {
+  record: string; storeHead: number; lastSettled: boolean; cursor?: Cursor; before?: SavedIdentity[]; deliveries?: string[] | null;
+  /** The delivery ids of the turns before the cursor's: a read from the cursor adds what it reads to these. */
+  deliveriesBefore?: string[] | null;
+};
+
+/** A record turn's (hashed) identity as the stamp keeps it, for the turns up to the cursor's (`Stamp.before`). */
+type SavedIdentity = [keys: string[], fingerprint: string | null, prompt: string | null];
+const toSaved = (one: Identity): SavedIdentity => [[...one.keys], one.fingerprint, one.prompt];
+const fromSaved = ([keys, fingerprint, prompt]: SavedIdentity): Identity => ({ keys: new Set(keys), fingerprint, prompt });
+const sameIdentity = (a: Identity, b: Identity) => a.fingerprint === b.fingerprint && a.prompt === b.prompt
+  && a.keys.size === b.keys.size && [...a.keys].every(key => b.keys.has(key));
 const stamps = new KV<Record<string, Stamp>>('record-stamp');
 
 /** Store rows whose identities a fill reads up front: the widest window matched before resume-tail. */
@@ -35,10 +52,12 @@ const digest = (text: string) => createHash('sha256').update(text).digest('base6
  * 本次改动之前就漏在中间的那些轮(老会话里早年在终端跑过的)不补 —— 接在末尾会把次序打乱,比缺着更糟。
  *
  * resume-tail: the fill reads only the gap. An unchanged record (its stamp) is not read at all. Otherwise it is decoded
- * from the cursor the last fill left (where a turn starts in the record, and that turn's stored row), or from its
- * beginning when there is none or the record no longer shows it: both sides start at the same turn, so matching is the
- * same as over the whole record. One pass finds the anchor from turn identities alone, a second writes the turns after
- * it as they stream. Settled turns never accumulate: memory is the open turns and one turn, whatever the record's size.
+ * from the cursor the last fill left (where a settled turn starts, the decoder state and turn index there, and that
+ * turn's stored row), or from its beginning when there is none or the record no longer shows it. The stamp also keeps
+ * the identities of the turns before the cursor: matching runs on the whole record's sequence either way, so a fill
+ * from the cursor plans what a fill from the beginning plans (EQUIVALENCE.md). One pass finds the plan from turn
+ * identities alone, a second writes the turns after the anchor as they stream. Settled turns never accumulate: memory
+ * is the open turns, one turn and an identity per turn, whatever the record's size.
  */
 export async function syncStoredHistoryFromRecord(sessionId: string, options: { signal?: AbortSignal; runtime?: 'pty' } = {}): Promise<RecordBackfillResult> {
   const { readSessionRow, locateRow } = await import('@main/core/session-timeline/service');
@@ -99,10 +118,10 @@ export async function syncStoredHistoryFromRecord(sessionId: string, options: { 
 
     // Identities of the store's newest rows, one row at a time (a row can hold megabytes of pictures); Hermes prompts are
     // matched by the receipts in those rows' messages.
-    const storeIdentities = (limit: number, atLeast = 0) => {
+    const storeIdentities = (limit: number) => {
       const rows: Array<{ seq: number; identity: Identity }> = [];
       const messages: TranscriptTurn['items'] = [];
-      for (const one of storedTurnsNewestFirstNow(sessionId, limit, atLeast)) {
+      for (const one of storedTurnsNewestFirstNow(sessionId, limit)) {
         rows.push({ seq: one.seq, identity: hashIdentity(identify(one.turn), digest) });
         if (harness === 'hermes') messages.push(...one.turn.items.filter(item => item.kind === 'message'));
       }
@@ -116,63 +135,79 @@ export async function syncStoredHistoryFromRecord(sessionId: string, options: { 
     try {
       if (parentRow && parentLocation?.supported) {
         // A fork proves its parent's prefix once, by a snapshot read of the parent; nothing of it is kept.
-        const parent = await readRecordFrom({ locator: parentLocation.locator, sessionId: parentRow.id, position: 0, snapshot: true, elidePictures: true, onSettled: () => {} });
+        const parent = await readRecordFrom({ locator: parentLocation.locator, sessionId: parentRow.id, position: 0, snapshot: true, fill: true, onSettled: () => {} });
         parentLineage = parent.lineage ?? undefined;
         if (!parentLineage?.length) return result('diverged');
       }
 
-      // First pass: turn identities only, from the cursor, else from the beginning.
-      const scan = async (position: number) => {
+      // First pass: turn identities only, and the delivery ids of every turn read; from the cursor, else the beginning.
+      const scan = async (position: number, at?: { state?: unknown; turn: number }) => {
         const seen: Identity[] = [];
+        // Per turn read, in order: its delivery ids, null = cannot be told.
+        const deliveries: Array<string[] | null> = [];
         let unreceipted = false;
         const take = (turn: TranscriptTurn) => {
           if (hermes && turn.items.some(item => item.kind === 'message' && item.role === 'user' && originalHermesPrompt(item.text, hermes) === null)) unreceipted = true;
           seen.push(hashIdentity(identify(turn, hermes), digest));
         };
-        const read = await readRecordFrom({ locator: location.locator, sessionId, position, ...(parentLineage ? { parentLineage } : {}),
-          elidePictures: true, onSettled: turns => turns.forEach(take) });
+        const note = (turn: TranscriptTurn) => {
+          const ids = new Set<string>();
+          deliveries.push(noteDeliveries(turn, ids, sessionId, harness ?? '') ? [...ids] : null);
+        };
+        const read = await readRecordFrom({ locator: location.locator, sessionId, position, ...(at ? { at } : {}), ...(parentLineage ? { parentLineage } : {}),
+          fill: true, onSettled: turns => turns.forEach(turn => { take(turn); note(turn); }) });
         const prefix = committedOnly && read.tail.length > read.committed ? read.tail.slice(0, read.committed) : read.tail;
         prefix.forEach(take);
-        return { seen, unreceipted, from: read.from, complete: prefix.length === read.tail.length, lastSettled: !!prefix.at(-1)?.outcome };
+        read.tail.forEach(note);
+        return { seen, unreceipted, deliveries, from: read.from, complete: prefix.length === read.tail.length, lastSettled: !!prefix.at(-1)?.outcome };
       };
-      let plan: Plan | null = null;
-      const cursor = !parentLineage && saved?.cursor ? saved.cursor : null;
-      if (cursor) {
-        // From the cursor both sides start at the same turn: what follows it is matched against the rows from its seq on.
-        const scanned = await scan(cursor.position);
+      // A cursor read sees the turns from the cursor's on; the stamp keeps the identities and delivery ids of the record
+      // before them, so matching (and the delivery set) see the whole record as a read from the beginning does.
+      // The record must still hold, up to the cursor, what it held when the cursor was saved (`checkAt`): not rewound,
+      // rewritten or replaced there.
+      const kept = saved?.cursor?.check && saved.before?.length === saved.cursor.turn + 1 && saved.deliveriesBefore !== undefined
+        && await probe.checkAt?.(saved.cursor.position).catch(() => null) === saved.cursor.check ? saved : null;
+      const cursor = !parentLineage && kept ? kept.cursor! : null;
+      let scanned = cursor ? await scan(cursor.position, cursor) : null;
+      if (options.signal?.aborted) return result('cancelled');
+      // The cursor's turn must still be there as it was; else (rewound, rewritten, replaced) read from the beginning.
+      const resumed = !!cursor && !!scanned && scanned.from === cursor.position && scanned.seen.length > 0
+        && sameIdentity(scanned.seen[0], fromSaved(kept!.before!.at(-1)!));
+      if (!resumed) {
+        scanned = await scan(0);
         if (options.signal?.aborted) return result('cancelled');
-        if (scanned.unreceipted) return result('diverged');
-        const since = storeIdentities(Number.MAX_SAFE_INTEGER, cursor.seq).rows;
-        const first = since.at(-1);
-        if (scanned.from === cursor.position && first?.seq === cursor.seq && scanned.seen.length
-          && matchAfterStoreAt(scanned.seen.slice(0, 1), [first.identity], identity)?.anchor) {
-          const found = matchPlan(scanned.seen, since, unfinished, identity, true);
-          if (found === 'diverged') return result('diverged');
-          if (found) plan = { ...found, from: cursor.position, complete: scanned.complete, lastSettled: scanned.lastSettled };
-        }
-        // A cursor the record no longer shows (replaced, rewritten) is dropped: match as if there were none.
       }
-      if (!plan) {
-        const scanned = await scan(0);
-        if (options.signal?.aborted) return result('cancelled');
-        // A record turn whose Hermes prompt the store cannot vouch for: the two diverged (as before).
-        if (scanned.unreceipted) return result('diverged');
-        let found = matchPlan(scanned.seen, window.rows, unfinished, identity, window.rows.length < STORE_WINDOW);
-        // The store's newest rows are still ambiguous: compare against every stored row (as before).
-        if (found === null && window.rows.length >= STORE_WINDOW) found = matchPlan(scanned.seen, storeIdentities(Number.MAX_SAFE_INTEGER).rows, unfinished, identity, true);
-        if (found === null) log.warn('[record-backfill] the record and the store diverged; nothing filled in', { sessionId });
-        if (found === null || found === 'diverged') return result('diverged');
-        plan = { ...found, from: scanned.from, complete: scanned.complete, lastSettled: scanned.lastSettled };
-      }
+      const base = resumed ? cursor!.turn : 0;
+      const seen = [...(resumed ? kept!.before!.slice(0, -1).map(fromSaved) : []), ...scanned!.seen];
+      // The record's delivery ids: those before the cursor (saved) and those of every turn read from it.
+      const prior = resumed ? kept!.deliveriesBefore! : [];
+      const idsOf = (turns: Array<string[] | null>) => prior === null || turns.includes(null) ? null : [...new Set([...prior, ...turns.flat() as string[]])];
+      const deliveries = idsOf(scanned!.deliveries);
+      const diverged = async () => {
+        await stamps.setOrThrow(sessionId, { record: '', storeHead: head, lastSettled: true, deliveries });
+        return result('diverged');
+      };
+      // A record turn whose Hermes prompt the store cannot vouch for: the two diverged (as before).
+      if (scanned!.unreceipted) return diverged();
+      let found = matchPlan(seen, window.rows, unfinished, identity, window.rows.length < STORE_WINDOW);
+      // The store's newest rows are still ambiguous: compare against every stored row (as before).
+      if (found === null && window.rows.length >= STORE_WINDOW) found = matchPlan(seen, storeIdentities(Number.MAX_SAFE_INTEGER).rows, unfinished, identity, true);
+      if (found === null) log.warn('[record-backfill] the record and the store diverged; nothing filled in', { sessionId });
+      if (found === null || found === 'diverged') return diverged();
+      const plan: Plan = { ...found, from: scanned!.from, complete: scanned!.complete, lastSettled: scanned!.lastSettled };
 
       // Second pass: the same start; turns after the anchor are written as they stream, their long pictures as their place
       // in the record (read back when opened). The newest settled turn whose stored row is known becomes the next cursor.
-      let inserted = 0, index = 0;
+      // The plan may write a turn before the cursor's (an unfinished row that an earlier turn of the same identity now
+      // completes): the second pass then reads from the beginning, so every planned turn is read.
+      const early = resumed && Array.from({ length: base }, (_, at) => at).some(at => plan.revise.has(at) || plan.append(at));
+      const second = early ? { from: 0, base: 0 } : { from: plan.from, base };
+      let inserted = 0, index = second.base;
       let next: Cursor | null = null;
-      const write = (turn: TranscriptTurn, start: number | null) => {
+      const write = (turn: TranscriptTurn, start: TurnStart | null) => {
         const at = index++;
         // An open turn changes identity as it completes: it could not be recognized at the cursor.
-        const known = (seq: number) => { if (start !== null && turn.outcome) next = { position: start, seq }; };
+        const known = (seq: number) => { if (start && turn.outcome && at < seen.length) next = { ...start, turn: at, seq }; };
         const seq = plan!.revise.get(at);
         if (seq === undefined && !plan!.append(at)) {
           if (plan!.anchor?.seen === at) known(plan!.anchor.seq);
@@ -187,9 +222,9 @@ export async function syncStoredHistoryFromRecord(sessionId: string, options: { 
         else { known(appendRecordTurnNow(sessionId, kept)); inserted++; }
       };
       try {
-        const read = await readRecordFrom({ locator: location.locator, sessionId, position: plan.from, ...(parentLineage ? { parentLineage } : {}),
-          elidePictures: true, onSettled: (turns, _from, starts) => turns.forEach((turn, at) => write(turn, starts[at])) });
-        if (read.from !== plan.from) throw new Error('record-backfill: the second pass started elsewhere than the first');
+        const read = await readRecordFrom({ locator: location.locator, sessionId, position: second.from, ...(resumed && !early ? { at: cursor! } : {}),
+          ...(parentLineage ? { parentLineage } : {}), fill: true, onSettled: (turns, _from, starts) => turns.forEach((turn, at) => write(turn, starts[at])) });
+        if (read.from !== second.from) throw new Error('record-backfill: the second pass started elsewhere than planned');
         const held = committedOnly && read.tail.length > read.committed ? read.committed : read.tail.length;
         for (let at = 0; at < held; at += 1) write(read.tail[at], read.tailStarts[at]);
       } catch (error) {
@@ -199,14 +234,22 @@ export async function syncStoredHistoryFromRecord(sessionId: string, options: { 
       if (inserted < plan.appended) log.warn('[record-backfill] fewer turns than planned', { sessionId, planned: plan.appended, inserted });
       const done = await finish(inserted, plan.complete, plan.lastSettled);
       // The cursor holds whatever the status; the stamp lets the next fill skip the record only once this one completed.
-      const kept = next ?? (cursor && plan.from === cursor.position ? cursor : null);
+      const placed = next as Cursor | null;
+      const check = placed ? await probe.checkAt?.(placed.position).catch(() => null) ?? null : null;
+      const after: Cursor | null = placed && check ? { ...placed, check } : resumed ? cursor : null;
       await stamps.setOrThrow(sessionId, { record: done.status === 'complete' && stamp ? stamp : '', storeHead: storedHeadNow(sessionId),
-        lastSettled: plan.lastSettled, ...(kept ? { cursor: kept } : {}) });
+        lastSettled: plan.lastSettled, deliveries, ...(after ? { cursor: after, before: seen.slice(0, after.turn + 1).map(toSaved),
+          deliveriesBefore: idsOf(scanned!.deliveries.slice(0, after.turn - base)) } : {}) });
       return done;
     } catch (error) {
       log.warn('[record-backfill] record unreadable', { sessionId, error: (error as Error)?.message ?? String(error) });
       if ((error as Error)?.name === 'SessionRecordNotFoundError') return result('unavailable');
-      if ((error as Error)?.name === 'SessionRecordForkDivergedError') return result('diverged');
+      if ((error as Error)?.name === 'SessionRecordForkDivergedError') {
+        // The record no longer extends its parent: its deliveries are still the ones in its user messages (as before).
+        const deliveries = await recordDeliveryIdsOf(location.locator, sessionId, harness ?? '').catch(() => null);
+        await stamps.setOrThrow(sessionId, { record: '', storeHead: head, lastSettled: true, deliveries });
+        return result('diverged');
+      }
       return result('unavailable');
     } finally {
       probe.stop();
@@ -222,6 +265,52 @@ export async function readFilledPicture(sessionId: string, place: { start: numbe
   if (!location?.supported) return null;
   const { readFilledPicture: fromRecord } = await import('@gugu/session-core/session-record/fill-read');
   return fromRecord(location.locator, place);
+}
+
+/**
+ * #980 Which deliveries the session's record shows the agent received: the delivery ids in its user messages, as the
+ * last fill saw them (`Stamp.deliveries`). null = the record was never read here, or some prompt cannot be told.
+ */
+export async function recordedDeliveryIds(sessionId: string): Promise<string[] | null> {
+  return (await stamps.get(sessionId))?.deliveries ?? null;
+}
+
+/** Every delivery id in a record's user messages, by one streaming read from its beginning; null = some cannot be told. */
+async function recordDeliveryIdsOf(locator: SessionRecordLocator, sessionId: string, harness: string): Promise<string[] | null> {
+  const { readRecordFrom } = await import('@gugu/session-core/session-record/fill-read');
+  const ids = new Set<string>();
+  let unknown = false;
+  const note = (turn: TranscriptTurn) => { if (!noteDeliveries(turn, ids, sessionId, harness)) unknown = true; };
+  const read = await readRecordFrom({ locator, sessionId, position: 0, snapshot: true, fill: true, onSettled: turns => turns.forEach(note) });
+  read.tail.forEach(note);
+  return unknown ? null : [...ids];
+}
+
+/** Add a turn's delivery ids to `into`; false = some prompt of it cannot be told. */
+function noteDeliveries(turn: TranscriptTurn, into: Set<string>, sessionId: string, harness: string): boolean {
+  let known = true;
+  for (const item of turn.items) {
+    if (item.kind !== 'message' || item.role !== 'user') continue;
+    const found = turnDeliveryIds(item.text, harness === 'hermes' ? (text) => hermesOriginal(sessionId, text) : null);
+    if (found === null) known = false;
+    else for (const id of found) into.add(id);
+  }
+  return known;
+}
+
+/** The delivery ids of one recorded user prompt; null = cannot be told (a Hermes prompt without its host original). */
+function turnDeliveryIds(text: string, original: ((text: string) => string | null | undefined) | null): string[] | null {
+  const host = original ? original(text) : undefined;
+  if (host === null) return null;
+  const reading = readDeliveryEnvelope(host ?? text);
+  // An old merged Hermes row without a host boundary is unknown, never evidence of an empty inbox (as before).
+  if (original && !reading && host === undefined && /<gugu_deliver(?:y|ies)[\s>]/.test(text)) return null;
+  return reading?.segments.flatMap(segment => segment.facts?.messageId ? [segment.facts.messageId] : []) ?? [];
+}
+
+/** A Hermes prompt's host original, by the receipt a stored row of this session carries for it (`hermes-prompt.ts`). */
+function hermesOriginal(sessionId: string, text: string): string | null | undefined {
+  return originalHermesPrompt(text, indexHermesPrompts(storedMessagesWithPromptHash(sessionId, text)));
 }
 
 class FillStopped extends Error {
@@ -241,14 +330,15 @@ type Plan = {
   lastSettled: boolean;
 };
 
-/** Where the next fill starts: a record position and the stored row of the turn that starts there. */
-type Cursor = { position: number; seq: number };
+/**
+ * Where the next fill starts: a turn's place in the record, the decoder state and turn index a read from the beginning
+ * has there (so a read from it decodes and numbers as that read), and the stored row of that turn.
+ */
+type Cursor = { position: number; state?: unknown; timeline?: unknown; turn: number; seq: number; check?: string };
 
 /**
- * The store's rows (newest first) matched against the record turns read (`matchAfterStore`, the windows of before);
- * `null` = they do not anchor. Both sides start together: the record from its beginning, or from the cursor's turn and
- * the store from its row, never from inside the record (content identities could not tell new turns from stored ones
- * they repeat).
+ * The store's rows (newest first) matched against the whole record's turn identities (`matchAfterStore`, the windows of
+ * before); `null` = they do not anchor. Indexes are the record's turn indexes.
  */
 function matchPlan(
   seen: Identity[],
