@@ -315,9 +315,7 @@ export default {
       },
       "blocked": {
         "loading": "还在读取这台机器上的项目…",
-        "no_projects": "这台机器上还没有项目。先在电脑上打开一个项目，它就会出现在这里。",
         "no_usable_harness": "这台机器上没有能用的 harness。",
-        "pick_project": "先选一个项目。",
         "pick_harness": "先选一家能用的 harness。"
       },
       "creating": "正在那台机器上开会话",

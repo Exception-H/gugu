@@ -216,7 +216,22 @@ describe('sessionSections — 多台机器与个人助理那一组', () => {
   const mac = { deviceId: 'mac', projects: [project('p')] }
   const thinkpad = { deviceId: 'thinkpad', projects: [project('p')] }
 
-  it('两台机器上同名(同 id)的项目是各自的一格,页头带各自的机器,不并成一格', () => {
+  // 项目是账号上的(项目群 chatId):绑同一个群的各台机器上的本地项目是同一个项目,一格;机器只是行的属性。
+  it('一个项目在两台机器上都有文件夹(绑同一个项目群):一格,两台的会话按最近动静排在一起', () => {
+    const work = (id: string) => ({ ...project(id), name: 'work', chatId: 'chat-work' })
+    const sections = sectionsOf(
+      [{ deviceId: 'gpu', projects: [work('gpu-work')] }, { deviceId: 'juma', projects: [work('juma-work')] }],
+      [...rowsOn('gpu', [session('g1', 'gpu-work', 1), session('g2', 'gpu-work', 3)]), ...rowsOn('juma', [session('j1', 'juma-work', 2)])],
+      NO_ASSISTANT,
+      NO_FOLD,
+    )
+    expect(sections.map((s) => [s.key, s.deviceId, s.project?.name, s.projectIds, shape(s.roots)])).toEqual([
+      [projectSectionKey('gpu', 'gpu-work', 'chat-work'), null, 'work', ['gpu-work', 'juma-work'], 'g2,j1,g1'],
+    ])
+    expect(sections[0]!.roots.map((root) => root.item.deviceId)).toEqual(['gpu', 'juma', 'gpu'])
+  })
+
+  it('两台机器上同名(同 id)、没绑项目群的项目是各自的一格,页头带各自的机器,不并成一格', () => {
     const sections = sectionsOf(
       [mac, thinkpad],
       [...rowsOn('mac', [session('m1', 'p', 1)]), ...rowsOn('thinkpad', [session('t1', 'p', 2), session('t2', 'p', 3)])],

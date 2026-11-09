@@ -321,9 +321,7 @@ export default {
       },
       "blocked": {
         "loading": "Still reading the projects on this machine…",
-        "no_projects": "No projects on this machine yet. Open one on the computer and it will show up here.",
         "no_usable_harness": "No usable harness on this machine.",
-        "pick_project": "Pick a project first.",
         "pick_harness": "Pick a usable harness first."
       },
       "creating": "Starting the task on that machine",
