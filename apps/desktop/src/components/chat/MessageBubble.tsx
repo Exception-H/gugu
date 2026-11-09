@@ -18,7 +18,7 @@ import { parseVoiceAttachmentContent } from '@gugu/core/shared/ui/voiceAttachmen
 import { parseAttachmentContent } from '@gugu/core/shared/ui/attachmentModels'; import { reactionLabel } from '@gugu/core/shared/ui/reactionCatalog'; import { i18n } from '../../i18n/runtime'; import type { MessageItem, MessageSendState, ReactionGroup } from '@gugu/core/shared/types/chat'
 import { MemberProfileAvatarButton } from '../MemberProfileAvatarButton'
 import type { MemberProfileCardModel } from '../MemberProfileCard'
-import type { MemberProfileSide } from '../memberProfileModels'
+import type { MemberProfileOpener } from '../memberProfileModels'
 import { COLOR_MUTED, readReceiptLabel } from './chatPresentation'
 import { MessageSendStatus } from './MessageSendStatus'; import { safeFailureLine } from '@/session/renderer/features/sessions/gugu-reason'; import { keepAction } from './messageKeep'
 import { buildBubbleStyle } from './messageBubbleStyle'
@@ -54,11 +54,8 @@ interface BubbleProps {
   onDelete: (messageId: string) => void
   isAgent?: boolean; hideAvatar?: boolean; streaming?: boolean // Live IM text shares the settled bubble's layout.
   memberProfile?: MemberProfileCardModel | null
-  onOpenMemberProfile?: (
-    member: MemberProfileCardModel,
-    anchor: HTMLElement,
-    preferredSide: MemberProfileSide,
-  ) => void
+  /** 头像是这一栏资料卡的 Trigger(再点同一个头像就关);openedFrom 记卡是从主线还是话题分栏点开的。 */
+  memberProfileOpener?: MemberProfileOpener
   compactMobile?: boolean
   // @@@1484 是否群聊(group/channel)。仅群聊在 received 气泡上方显发送者名;DM/ai 1:1 头部已知对方,显名冗余。
   isGroup?: boolean
@@ -93,7 +90,7 @@ export const MessageBubble = memo(function MessageBubble({
   onDelete,
   isAgent = false, hideAvatar = false, streaming = false,
   memberProfile = null,
-  onOpenMemberProfile,
+  memberProfileOpener,
   compactMobile = false,
   isGroup = false,
   onOpenTopic, onOpenTopicAnchor,
@@ -213,7 +210,7 @@ export const MessageBubble = memo(function MessageBubble({
   // @@@1355 sender avatars are projected only from the canonical sender URL.
   // Display-only naming never changes the sender id or profile actions.
   const avatar = <MessageSenderAvatar senderUserId={msg.sender_user_id} name={avatarName} avatarUrl={avatarUrl} seed={msg.is_mine ? user?.id : (msg.sender_user_id ?? undefined)} size="sm" isAgent={avatarIsAgent} harnessBadge={!compactMobile} agentStatus={avatarIsAgent ? memberProfile?.agentStatus : undefined} still />
-  const canOpenProfile = !!memberProfile && !!onOpenMemberProfile
+  const canOpenProfile = !!memberProfile && !!memberProfileOpener
 
   if (msg.content_type === 'system') return <SystemMessageNotice message={msg} senderName={avatarName} onOpenTopic={onOpenTopicAnchor} />
   const showSender = isGroup && !msg.is_mine && !groupedWithPrev && !card && !!avatarName
@@ -251,9 +248,7 @@ export const MessageBubble = memo(function MessageBubble({
           avatarSize="sm"
           buttonSize={compactMobile ? 44 : 32}
           messageSenderId={msg.sender_user_id ?? undefined}
-          onOpen={(event) => {
-            onOpenMemberProfile!(memberProfile!, event.currentTarget, msg.is_mine ? 'left' : 'right')
-          }}
+          profile={{ handle: memberProfileOpener!.handle, payload: { member: memberProfile!, preferredSide: msg.is_mine ? 'left' : 'right', openedFrom: memberProfileOpener!.openedFrom } }}
         />
       ) : avatar}</GroupAvatarSlot>}
 

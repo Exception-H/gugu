@@ -13,7 +13,7 @@ import type { GroupRosterCandidate } from '@/lib/mention'
 import type { AgentStatusById } from './agentMentionStatusModels'
 import type { MemberProfileCardModel } from '../MemberProfileCard'
 import type { ParsedAttachment } from '@gugu/core/shared/ui/attachmentModels'
-import type { MemberProfileSide } from '../memberProfileModels'
+import type { MemberProfileOpener } from '../memberProfileModels'
 import { IconButton } from '../ui/IconButton'
 import { useBackLayer } from '../ui/sheetStack'
 import { ChatMessageComposer } from './ChatMessageComposer'
@@ -130,9 +130,9 @@ export type TopicSplitPaneProps = {
   /**
    * 点头像开成员卡片。不接 = 分栏里点头像**什么都不发生**,而主线点了会开卡片 ——
    * 同一个气泡组件在两栏里行为不一样,用户只会觉得「这边坏了」。
-   * 弹层本身由 ChatAreaPanel 那一份统一渲染(分栏就长在它的树里),所以这里只透传 handler。
+   * 弹层本身由 ChatAreaPanel 那一份统一渲染(分栏就长在它的树里),所以这里只透传它的 handle(openedFrom: 'aside')。
    */
-  onOpenMemberProfile?: (member: MemberProfileCardModel, anchor: HTMLElement, preferredSide: MemberProfileSide) => void
+  memberProfileOpener?: MemberProfileOpener
   /** 气泡里的文件卡点开 —— 与主线同一个处理器。不接 = 分栏里的文件卡点了什么都不发生(#6375)。 */
   onOpenAttachment?: (meta: ParsedAttachment, message?: MessageItem) => void
   onReaction?: (messageId: string, emoji: string) => void
@@ -212,7 +212,7 @@ export function TopicSplitPane({ viewportKey = 'topic', navigationTarget = false
   onClose,
   currentUserId,
   mobile = false,
-  onOpenMemberProfile,
+  memberProfileOpener,
   onOpenAttachment,
   onReaction,
   onForward, visible,
@@ -312,7 +312,7 @@ export function TopicSplitPane({ viewportKey = 'topic', navigationTarget = false
     // 话题是多人线 ⇒ 与群同口径,收到的气泡上方显发送者名。
     isGroupChat: true,
     memberProfiles,
-    onOpenMemberProfile,
+    memberProfileOpener,
     onOpenFile: onOpenAttachment,
     readReceiptHandle,
     onReaction: onReaction ?? noop,
@@ -334,7 +334,7 @@ export function TopicSplitPane({ viewportKey = 'topic', navigationTarget = false
     onToggleSelect: noop,
     onEnterSelectMode: undefined,
     flashMessageId,
-  }), [showMessage, rows, messages, mobile, memberReadSeqs, deliveryWaits, memberProfiles, onOpenMemberProfile, onOpenAttachment, readReceiptHandle, onReaction, onForward, onDelete, onQuote, flashMessageId, history, visible])
+  }), [showMessage, rows, messages, mobile, memberReadSeqs, deliveryWaits, memberProfiles, memberProfileOpener, onOpenAttachment, readReceiptHandle, onReaction, onForward, onDelete, onQuote, flashMessageId, history, visible])
 
   // 手机上话题是来源页的一枚页签:在前面时,返回先回到来源那一枚。
   useBackLayer(onClose, mobile && visible !== false)

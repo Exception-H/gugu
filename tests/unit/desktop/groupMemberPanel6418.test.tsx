@@ -513,8 +513,10 @@ describe('source-group listen-mode authority boundaries', () => {
     await renderWithAppProviders(harness, createNode(ControlledMemberListPanel, {
       chatId: 'chat-1', chatKind: kind, head, snapshot: SNAPSHOT, onReload: vi.fn(async () => {}),
     }), { auth: { id: 'member-2' }, chat: { identitiesById: Object.fromEntries(IDENTITIES.map((identity) => [identity.id, identity])) }, contacts: { contacts: [] } })
+    // Without authority the listen toggle is inert: its press is the row's, which opens the card (the row is its Trigger;
+    // pressing the row again would close it).
     await click(q('[data-member-row="claude"] [data-listen-mode-toggle]'))
-    await click(q('[data-member-row="claude"]'))
+    expect(setListenMode).not.toHaveBeenCalled()
     const active = [...document.querySelectorAll<HTMLElement>('.gg-pop-lmseg-btn')].find((element) => element.textContent === '主动')
     expect(active).toBeDefined()
     await click(active!)

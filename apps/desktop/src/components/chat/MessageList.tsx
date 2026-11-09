@@ -12,7 +12,7 @@ import { OPEN_AT_LATEST, useRowAboveViewport } from '@/lib/listLanding'
 import { useFlowList, type FlowListHandle, type ListLanding } from '@/lib/flowList'
 import { formatCalendarDay } from '@/i18n/format'
 import type { MemberProfileCardModel } from '../MemberProfileCard'
-import type { MemberProfileSide } from '../memberProfileModels'
+import type { MemberProfileOpener } from '../memberProfileModels'
 import { Button } from '../ui/Button'
 import { Chip } from '../ui/Chip'
 import { MessageRow } from './MessageRow'
@@ -103,11 +103,7 @@ export interface MessageListRowProps {
   onForward: (msg: MessageItem) => void
   onDelete: (messageId: string) => void
   onVisible: (msg: MessageItem) => void
-  onOpenMemberProfile: ((
-    member: MemberProfileCardModel,
-    anchor: HTMLElement,
-    preferredSide: MemberProfileSide,
-  ) => void) | undefined
+  memberProfileOpener: MemberProfileOpener | undefined
   // @@@5856 开话题(从本消息长出一条线)+ 本消息底下已有的话题锚点卡。锚点是溯源不是父容器:
   // 卡片只是双向连接的一端,话题本身在会话列表里缩进挂在来源那条线底下。
   onOpenTopic: ((messageId: string) => void) | undefined
@@ -174,7 +170,7 @@ const MessageListRow = memo(function MessageListRow({
   onForward,
   onDelete,
   onVisible,
-  onOpenMemberProfile,
+  memberProfileOpener,
   onOpenTopic, topicAnchors, onOpenTopicAnchor, agentFloodNoticeMessageId, onAgentFloodUndone,
   onOpenFile, onMentionMember,
   selectMode,
@@ -261,7 +257,7 @@ const MessageListRow = memo(function MessageListRow({
       isGroup={isGroupChat || threeParty}
       // 场所型会话里的 agent 消息保留发送者头像
       memberProfile={memberProfile}
-      onOpenMemberProfile={onOpenMemberProfile}
+      memberProfileOpener={memberProfileOpener}
       compactMobile={mobile}
       // 直接透传稳定 handler；话题里不传则不显示「开话题」菜单项(单层不嵌套)。
       onOpenTopic={onOpenTopic} onOpenTopicAnchor={msg.content_type === 'system' ? onOpenTopicAnchor : undefined} onOpenFile={onOpenFile}

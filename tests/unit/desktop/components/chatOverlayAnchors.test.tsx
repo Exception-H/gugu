@@ -2,7 +2,7 @@
 import { act, createElement, Fragment } from 'react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { MessageBubble } from '../../../../apps/desktop/src/components/chat/MessageBubble'
-import { MemberProfilePopover } from '../../../../apps/desktop/src/components/MemberProfilePopover'
+import { profileCardWithOpener } from '../../../support/memberProfileCard'
 import { ReadReceiptPopover } from '../../../../apps/desktop/src/components/ReadReceiptPopover'
 import { Menu, MenuItem } from '../../../../apps/desktop/src/components/ui/Menu'
 import { Popover } from '../../../../apps/desktop/src/components/ui/Popover'
@@ -144,18 +144,16 @@ describe('overlay anchors (2a)', () => {
 
   it.each(['member profile card', 'read receipt list'])('%s follows the element that opened it', async (kind) => {
     const { button, moveTo } = buttonAt({ x: 200, y: 300 })
-    // The read-receipt list opens from its ring (a Popover.Trigger carrying the message id); the card from its anchor.
+    // Both open from the element that is their Popover.Trigger (the read-receipt ring / the avatar).
     const receipts = Popover.createHandle<string>()
     const node = kind === 'member profile card'
-      ? createNode(MemberProfilePopover, {
-          profile: { member: { id: 'u-1', displayName: 'Ada', avatar: null, email: null, bio: null, type: 'human', role: 'member', profileScope: 'group' }, anchor: button, preferredSide: 'left' },
-          onClose: vi.fn(),
-        })
+      ? profileCardWithOpener({ member: { id: 'u-1', displayName: 'Ada', avatar: null, email: null, bio: null, type: 'human', role: 'member', profileScope: 'group' }, preferredSide: 'left' },
+          { onClose: vi.fn() }, createElement('button', { 'data-testid': 'ring' }))
       : createElement(Fragment, null,
           createElement(Popover.Trigger, { handle: receipts, payload: 'm-1', render: createElement('button', { 'data-testid': 'ring' }) }),
           createElement(ReadReceiptPopover, { handle: receipts, receiptOf: () => ({ readers: [], unreaders: [] }) }))
     await renderWithAppProviders(harness, node)
-    if (kind === 'read receipt list') {
+    {
       const ring = document.querySelector<HTMLElement>('[data-testid="ring"]')!
       ring.getBoundingClientRect = () => button.getBoundingClientRect()
       await act(async () => { ring.click() })

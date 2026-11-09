@@ -1585,16 +1585,17 @@ body.barcode-scanner-active #root {
 .gg-row[data-pinned] { background: var(--pinned); }
 @media (hover: hover) { .gg-row:hover { background: var(--hover); } }
 .gg-row:active { background: var(--press); }
-.gg-row[data-selected] { background: var(--selected); }
+.gg-row:is([data-selected], [data-popup-open]) { background: var(--selected); }
+/* data-popup-open:这一行是某张卡 / 菜单的 Trigger 且它正开着(Base UI 挂),和选中同一个底色。 */
 /* @@@state-ladder-mix 「当前态 + 一档」。选中/开态本身已经有底色,再写一条 background 只会
    把它**换掉** —— 指针经过时选中色反而消失。改用 background-image 铺一层纯色渐变:底色留着,
    上面叠一层 hover/press 叠色,正好等于「当前态再深一档」。不透明底与半透明底都成立。 */
-@media (hover: hover) { .gg-row[data-selected]:hover { background-image: linear-gradient(var(--hover), var(--hover)); } }
-.gg-row[data-selected]:active { background-image: linear-gradient(var(--press), var(--press)); }
+@media (hover: hover) { .gg-row:is([data-selected], [data-popup-open]):hover { background-image: linear-gradient(var(--hover), var(--hover)); } }
+.gg-row:is([data-selected], [data-popup-open]):active { background-image: linear-gradient(var(--press), var(--press)); }
 /* #3253 行内 hover 动作钮（删除）是行的 DOM 同级 —— 行本身是 <button>，按钮不能嵌按钮。
    指针一移到钮上，行自身的 :hover 就假掉、底色闪一下；由外层 host 接管补上。
    pinned/selected 用 :not() 显式让开，别靠特异度赛跑去猜谁赢。 */
-@media (hover: hover) { .gg-row-host:hover > .gg-row:not([data-selected]):not([data-pinned]) { background: var(--hover); } }
+@media (hover: hover) { .gg-row-host:hover > .gg-row:not([data-selected]):not([data-popup-open]):not([data-pinned]) { background: var(--hover); } }
 /* @@@contacts-offscreen-rows 通讯录分段里的行:屏幕外的跳过布局与绘制(content-visibility),页内查找照样搜得到。
    auto 记住画过的实际高度,没画过的按 60px(一行头像 + 两行字)占位。paint containment 会裁掉框外的东西:
    键盘焦点环画在框外 4px(outline 2 + offset 2),用 overflow-clip-margin 让出来,外观不变。 */

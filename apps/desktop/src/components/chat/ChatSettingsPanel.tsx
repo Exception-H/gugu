@@ -6,7 +6,8 @@ import type { AgentDisplayStatus, ChatItem, GroupCollabSnapshot, MessageItem, No
 import { AUTOMATION_TEST_IDS } from '../../lib/automationDom'
 import type { MemberProfileCardModel, MemberProfileChatTarget } from '../MemberProfileCard'
 import { MemberProfileAvatarButton } from '../MemberProfileAvatarButton'
-import { MemberProfilePopover } from '../MemberProfilePopover'
+import { MemberProfilePopover, MemberProfileRoot } from '../MemberProfilePopover'
+import { Popover } from '../ui/Popover'
 import type { ActiveMemberProfile } from '../memberProfileModels'
 import { groupRoleRevision, useGroupChatSettings, type GroupChatSettingsState } from './useGroupChatSettings'
 import { GroupMembersSection } from './GroupMembersSection'
@@ -74,12 +75,12 @@ interface ChatRightPanelBodyProps {
 // kind (group gets the rich role-switching list, DM keeps the simple peer card), then ChatManagementActions.
 function ChatRightPanelBody({ activeChat, initialPage, onClose, onClearMessages, onOpenSearch, onSetNotificationLevel, onTogglePinned, memberProfiles, currentUserId, onOpenUserChat, onWhisper, groupSettings, groupCollabSnapshot, groupCollabError, onReloadGroupCollab, onLeaveGroup, onDissolveGroup }: ChatRightPanelBodyProps) {
   const { t } = useTranslation('messaging')
-  const [activeProfile, setActiveProfile] = useState<ActiveMemberProfile | null>(null)
+  const [profileCard] = useState(() => Popover.createHandle<ActiveMemberProfile>())
   const isGroupChat = activeChat.kind === 'group'
 
   useEffect(() => {
-    setActiveProfile(null)
-  }, [activeChat.id])
+    profileCard.close()
+  }, [activeChat.id, profileCard])
 
   const drawerProfiles = memberProfiles
 
@@ -121,14 +122,7 @@ function ChatRightPanelBody({ activeChat, initialPage, onClose, onClearMessages,
                   testId={AUTOMATION_TEST_IDS.chatDrawerProfileButton}
                   avatarSize="sm"
                   buttonSize={38}
-                  active={activeProfile?.member.id === m.id}
-                  onOpen={(event) => {
-                    setActiveProfile({
-                      member: m,
-                      anchor: event.currentTarget,
-                      preferredSide: 'left',
-                    })
-                  }}
+                  profile={{ handle: profileCard, payload: { member: m, preferredSide: 'left' } }}
                 />
                 <span style={{ fontSize: '10px', color: COLOR_MUTED, maxWidth: '36px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                   {names[index]}
@@ -167,22 +161,24 @@ function ChatRightPanelBody({ activeChat, initialPage, onClose, onClearMessages,
           />
         </>
       )}
-      {activeProfile ? (
-        <MemberProfilePopover
-          profile={activeProfile}
-          onClose={() => setActiveProfile(null)}
-          onOpenChat={activeProfile.member.id !== currentUserId && onOpenUserChat ? (target) => {
-            setActiveProfile(null)
-            onOpenUserChat(target)
-          } : undefined}
-          onWhisper={onWhisper ? (target) => {
-            setActiveProfile(null)
-            onWhisper(target)
-          } : undefined}
-          searchChatId={activeChat.id}
-          testId={AUTOMATION_TEST_IDS.chatDrawerProfileMenu}
-        />
-      ) : null}
+      <MemberProfileRoot handle={profileCard}>
+        {(profile) => (
+          <MemberProfilePopover
+            profile={profile}
+            onClose={() => profileCard.close()}
+            onOpenChat={profile.member.id !== currentUserId && onOpenUserChat ? (target) => {
+              profileCard.close()
+              onOpenUserChat(target)
+            } : undefined}
+            onWhisper={onWhisper ? (target) => {
+              profileCard.close()
+              onWhisper(target)
+            } : undefined}
+            searchChatId={activeChat.id}
+            testId={AUTOMATION_TEST_IDS.chatDrawerProfileMenu}
+          />
+        )}
+      </MemberProfileRoot>
     </>
   )
 }
