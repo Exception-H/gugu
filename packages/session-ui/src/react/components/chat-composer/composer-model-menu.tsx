@@ -308,6 +308,7 @@ export function ComposerModelMenu({
   const [modelProviderFilter, setModelProviderFilter] = useState<ReadonlySet<string>>(new Set());
   const [modelPanelOpen, setModelPanelOpen] = useState(false);
   const onOpenRef = useRef(onOpen);
+  const modelTrigger = useRef<HTMLButtonElement>(null);
   onOpenRef.current = onOpen;
   const openModelPanel = useCallback(() => {
     onOpenRef.current?.();
@@ -516,6 +517,7 @@ export function ComposerModelMenu({
         autoHighlight
       >
         <Combobox.Trigger
+          ref={modelTrigger}
           className={styles.agentTrigger}
           disabled={disabled}
           title={settingNotice ?? triggerTitle}
@@ -647,7 +649,8 @@ export function ComposerModelMenu({
                     type="button"
                     className={styles.settingRowUnlock}
                     title={modelUnlock.title}
-                    onClick={event => { onModelUnlock?.(event.currentTarget); setModelPanelOpen(false); }}
+                    // 这颗钮跟着清单一起收走;登录菜单贴在常驻的模型触发器上,❌ 贴在一个马上离开页面的元素上。
+                    onClick={event => { onModelUnlock?.(modelTrigger.current ?? event.currentTarget); setModelPanelOpen(false); }}
                     data-testid="composer-model-unlock"
                   >
                     {modelUnlock.label}

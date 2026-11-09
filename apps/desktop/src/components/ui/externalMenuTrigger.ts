@@ -29,7 +29,9 @@ export function useExternalMenuTrigger<T>() {
     if (!openAnchor) return
     const closeIfDetached = () => { if (!openAnchor.isConnected) close() }
     closeIfDetached()
-    const observer = new MutationObserver(closeIfDetached)
+    const view = openAnchor.ownerDocument.defaultView
+    if (!view) throw new Error('external menu trigger: its button has no window')
+    const observer = new view.MutationObserver(closeIfDetached)
     observer.observe(openAnchor.ownerDocument.body, { childList: true, subtree: true })
     return () => observer.disconnect()
   }, [openAnchor, close])
