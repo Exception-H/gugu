@@ -188,7 +188,7 @@ export default {
     },
     "appEnable": {
       "devices": "Install on",
-      "devicesHint": "Every agent on a computer it is new to can use it; to change who, use the App page.",
+      "devicesHint": "On each computer it is new to, every agent can use it. You can change this in the App's settings.",
       "addsChat": "Installed here already for some agents only: this adds the group “{{name}}” and changes nothing else.",
       "decline": "Don't install",
       "machine": "This computer",
@@ -214,7 +214,6 @@ export default {
       "done": "Done",
       "noPlaces": "You have no agents and are in no groups yet",
       "noMatch": "Nothing found",
-      "used": "Given to: ",
       "hereAll": "All agents here",
       "hereAllOn": "All agents on {{machine}}",
       "more": "{{names}} and {{count}} in all",
@@ -252,6 +251,7 @@ export default {
       "showRaw": "Show the raw content",
       "hideRaw": "Hide the raw content",
       "install": "Install",
+      "goToApps": "Go to Apps",
       "unavailable": "This App cannot open here right now: it is not installed, or it is switched off.",
       "title": "Open “{{name}}” with"
     },

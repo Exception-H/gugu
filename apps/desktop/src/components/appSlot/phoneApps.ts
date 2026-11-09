@@ -175,6 +175,7 @@ function tell(): void {
     appIcons: Object.assign({ ...shippedAppIcons }, ...installed.flatMap((record) => (record.appIcon ? [{ [record.manifest.id]: record.appIcon }] : []))) as Record<string, string>,
     // The far-left rail and its dock are the desktop's: the phone has neither.
     dock: [],
+    hiddenTabs: {},
     disabled: index.disabled ?? [],
     autoUpdateOff: index.autoUpdateOff ?? [],
     // Quit from the rail (#7050): the phone has no rail, and no background to stop.
