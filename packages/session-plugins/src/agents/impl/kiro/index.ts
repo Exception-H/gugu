@@ -35,7 +35,7 @@ const { windows: _noWindowsPackage, ...installCommands } = managed.installComman
 export const plugin = definePlugin(
   {
     id: 'kiro',
-    name: 'Kiro (AWS)',
+    name: 'Kiro',
     description:
       'Kiro CLI by AWS, focused on interactive terminal-first development assistance and workflow automation.',
     websiteUrl: 'https://kiro.dev/docs/cli/',
