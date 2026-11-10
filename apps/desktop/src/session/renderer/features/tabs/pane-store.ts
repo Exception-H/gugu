@@ -83,8 +83,11 @@ class TabEntryImpl<S = unknown> implements TabEntry<S> {
  */
 export interface PaneSplitter {
   tabClosing?(entry: TabEntry): void;
-  /** A tab left this pane for good; `wasActive`: it was the one in front. */
-  tabRemoved?(tabId: string, wasActive: boolean): void;
+  /**
+   * A tab left this pane for good; `wasActive`: it was the one in front; `after`: the tab that stood left of it (null:
+   * it was first) — where it stood, told by the removal itself, since the pane's front has already moved on.
+   */
+  tabRemoved?(tabId: string, wasActive: boolean, after: string | null): void;
   /** A tab is being brought forward; true = the layout placed it (it replaced the side of the pair). */
   activating?(tabId: string): boolean;
   /** 这一枚能不能单独成窗,能的话怎么开(会话自己那枚 = 整个会话,App 那枚 = 这个 App,别的附页 = 这一枚)。 */
@@ -929,7 +932,7 @@ export class PaneStore<R extends TabRegistry = TabRegistry>
     for (const kind of new Set(pages.map((page) => page.kind))) {
       if (this.registry.has(kind)) this.registry.get(kind).closed?.(id, this._ctx, pages.filter((page) => page.kind === kind).map((page) => page.state) as never);
     }
-    this._layoutSplitter?.tabRemoved?.(id, wasActive);
+    this._layoutSplitter?.tabRemoved?.(id, wasActive, index > 0 ? this.tabOrder[index - 1] ?? null : null);
   }
 
   /** Call provider.dispose() for an entry if its resource exists. Does NOT remove from maps. */

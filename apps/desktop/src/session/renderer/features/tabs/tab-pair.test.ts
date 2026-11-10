@@ -832,3 +832,43 @@ describe('a kind whose every open is a new resource (a terminal)', () => {
     expect(saved.size).toBe(1);
   });
 });
+
+// The removal says where the closed page stood (the pane's front has already moved on to a neighbour by then).
+describe('the pinned page leaving: the side takes its place in the strip', () => {
+  const strip = (layout: Layout) => layout.stripTabIds.map((id) => pathOf(layout, id));
+  function pairedInMiddle() {
+    const { layout, conversation, open } = setup();
+    const a = open('A.md', conversation, 'newTab');
+    const p = open('P.md', a, 'newTab');
+    open('B.md', p, 'newTab');
+    activate(layout, p);
+    open('S.md', p, 'beside');
+    expect(strip(layout)).toEqual(['conversation', 'A.md', 'P.md', 'S.md', 'B.md']);
+    return { layout, conversation, p };
+  }
+
+  it('closed', () => {
+    const { layout, p } = pairedInMiddle();
+    close(layout, p);
+    expect(strip(layout)).toEqual(['conversation', 'A.md', 'S.md', 'B.md']);
+    expectOneStrip(layout);
+  });
+
+  it('closed while first in the strip', () => {
+    const { layout, conversation, open } = setup();
+    const p = open('P.md', conversation, 'newTab');
+    const main = layout.mainGroup.pane;
+    main.reorderTabs(main.tabOrder.indexOf(p), 0);
+    expect(main.tabOrder[0]).toBe(p);
+    activate(layout, p);
+    open('S.md', p, 'beside');
+    close(layout, p);
+    expect(strip(layout)[0]).toBe('S.md');
+  });
+
+  it('put in a window of its own', () => {
+    const { layout, p } = pairedInMiddle();
+    layout.detachToWindow(p);
+    expect(strip(layout)).toEqual(['conversation', 'A.md', 'S.md', 'B.md']);
+  });
+});
