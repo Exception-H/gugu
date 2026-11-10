@@ -149,8 +149,9 @@ export const pinBackdrop = style({
 
 /**
  * A user message's summary sticks in front of its own message (@@@pin-cover in ChatRoot): resting, it lies
- * exactly over the message's first two lines; stuck, the message slides on beneath it. It is drawn only
- * while stuck, with its opaque backdrop, so the pinned strip never shows anything behind it.
+ * exactly over the message's first two lines, and it sticks at the pin line as the message scrolls up. It is drawn
+ * while stuck (ChatRoot decides when: at once for a message that fits, only after it has gone for one that folds),
+ * with its opaque backdrop, so the pinned strip never shows anything behind it.
  */
 export const pinSummaryLayer = style({
   // Takes no room: the message row after it moves up by its height (pinMessageRow). A negative margin here

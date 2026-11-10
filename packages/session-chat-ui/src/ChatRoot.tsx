@@ -853,13 +853,16 @@ export function ChatRoot(props: ChatRootProps) {
   const placeRow = (el: HTMLElement, idx: number, top: number, laneH: number | null) => {
     // Native sticky positioning supplies the reversible push-out. Under reduced motion,
     // hide the complete row as soon as that push starts instead of sliding a partial row.
-    // `stuck` only decides whether a user lane's summary is drawn; where it is drawn is layout (@@@pin-cover),
-    // so a late flag shows the summary late or over its own message's first lines, never next to them.
+    // When a user lane's summary is drawn (owner 2026-11-10, msg:225dbdad): a message that fits unfolded sticks the
+    // moment its top reaches the pin line and is pushed off by the next one, like a physical card. A message the
+    // transcript folds is too tall to push along: its summary appears only once the whole message has scrolled out
+    // above the viewport. Where it is drawn is layout (@@@pin-cover), so a late flag shows it late, or over its
+    // message's top for that frame, never beside it.
     const summary = laneH !== null && pinAnchorSet().has(idx);
     // Where the sticking element's top sits in the lane: the summary's rest position, or the activity row's top.
     const lead = summary ? pinLead(idx) : units().at(idx)?.gapBefore ?? 0;
     const pinLine = laneH === null ? 0 : shadowScrollTop + userTopGap + activityPinOffset(idx) - lead;
-    const stuck = laneH !== null && pinLine > top + 0.5;
+    const stuck = laneH !== null && (summary && pinGeometry().get(idx)?.folds ? shadowScrollTop > top + virt.size(idx) - 0.5 : pinLine > top + 0.5);
     if (el.dataset.pinStuck !== String(stuck)) el.dataset.pinStuck = String(stuck);
     const leaving = laneH !== null && pinLine > top + laneH - (summary ? lead + pinHeight(idx) : virt.size(idx)) + 0.5;
     if (el.dataset.pinLeaving !== String(leaving)) el.dataset.pinLeaving = String(leaving);
@@ -1103,14 +1106,15 @@ export function ChatRoot(props: ChatRootProps) {
   const pinAnchorSet = createMemo(() => new Set(pinAnchors()));
   /**
    * Each anchor's stuck summary (PinnedUserSummary): its height, one or two lines whatever the message's length,
-   * and where it rests, over the message's bubble (the row's top gap plus any attachments above the bubble).
+   * where it rests, over the message's bubble (the row's top gap plus any attachments above the bubble), and whether
+   * the message folds (the transcript's own 展开全文 decision).
    */
   const pinGeometry = createMemo(() => {
     const ctx = estimateContext();
     return new Map(pinAnchors().map(index => {
       const unit = untrack(() => units().at(index)!);
       const s = pinSummary(unit.data as ChatMessage, ctx, UNIT_REGISTRY.message!.vars as MessageVars);
-      return [index, { height: s.height + PIN_SUMMARY_GAP, lead: (unit.gapBefore ?? 0) + s.bubbleTop }];
+      return [index, { height: s.height + PIN_SUMMARY_GAP, lead: (unit.gapBefore ?? 0) + s.bubbleTop, folds: s.folds }];
     }));
   });
   const pinHeight = (idx: number) => pinGeometry().get(idx)?.height ?? 0;
@@ -2386,7 +2390,8 @@ export function ChatRoot(props: ChatRootProps) {
                                   lines it repeats; stuck at the pin line, it still covers wherever those lines are while they are on
                                   screen, since they sit above the pin line then. So the message and its summary never show the same
                                   lines twice, whatever the scroll path or the main thread is doing; `data-pin-stuck` only decides
-                                  whether it is drawn. Opaque and above every row of the turn, the pinned strip shows nothing behind it. */}
+                                  whether it is drawn (see placeRow: at once for a message that fits, after it has gone for one that folds). Opaque and above every row of
+                                  the turn, the pinned strip shows nothing behind it. */}
                               <Show when={pinAnchorSet().has(unitIndex)}>
                                 <div class={`${pinSticky} ${pinSummaryLayer}`} style={{ top: `${userTopGap - pinLead(unitIndex)}px`, 'padding-top': `${pinLead(unitIndex)}px` }}>
                                   <div class={pinBackdrop} style={{ top: `${pinLead(unitIndex) - userTopGap}px` }} data-chat-pin-backdrop="" aria-hidden="true" />
