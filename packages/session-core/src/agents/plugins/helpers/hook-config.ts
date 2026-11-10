@@ -437,10 +437,13 @@ export function buildFlatTomlHookConfig(
     },
     async deleteHooks(fs: PluginFs): Promise<void> {
       const config = await readTomlConfig(fs, configPath);
-      await writeTomlConfig(fs, configPath, {
-        ...config,
-        hooks: filterUserHooks(getHookEntries(config), stringifyEntry),
-      });
+      // 没有 hooks 数组(含文件不在)= 没有我们的条目:❌ 往人的文件里写一个 `hooks = []`(同 JSON 那侧 #4621 ①)。
+      if (Array.isArray(config.hooks)) {
+        await writeTomlConfig(fs, configPath, {
+          ...config,
+          hooks: filterUserHooks(getHookEntries(config), stringifyEntry),
+        });
+      }
       await options.afterDelete?.(fs);
     },
     async getHooksInstalled(fs: PluginFs): Promise<boolean> {
