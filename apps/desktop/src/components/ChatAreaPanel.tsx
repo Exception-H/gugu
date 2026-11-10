@@ -377,7 +377,7 @@ function ChatAreaSurface({ viewportKey = 'chats', imPage = false, navigationTarg
   useChatHistoryPagination({ resetKey: chatResetKey, messages, enabled: !unreadNavigationPending, scroller: scrollerEl, atBottom: viewportAtBottom, loadOlder: loadOlderMessages, loadNewer: loadNewerMessages, window: messageWindow, onError: onHistoryError })
 
   // #1708 来源消息(群右栏工作区 App 的 gugu.showMessage):不在加载段里的先按锚点载进来,再定位 + 闪烁;载不到 → fail-loud toast。
-  const showMessage = useSourceMessageReveal({ activeChatId, viewportKey, navigationTarget, enabled: surfaceVisible, ready: tabs.chatUp, onNavigate: () => { if (activeChatId && tabs.page) setPanelFull(activeChatId, tabs.page.tabId, false); else if (activeChatId && mobile) showChatOnly(activeChatId) }, rows: chatListRows, listRef, isAtBottomRef, setFollowingTail, setFlashMessageId, flashTimerRef, revealMessage, onMissing: () => toast(t('chatArea.source.notVisible'), 'error') })
+  const showMessage = useSourceMessageReveal({ activeChatId, viewportKey, navigationTarget, enabled: surfaceVisible, ready: tabs.chatUp, onNavigate: () => { if (activeChatId && tabs.page) setPanelFull(activeChatId, tabs.page.tabId, false); else if (activeChatId && mobile) showChatOnly(activeChatId) }, setFlashMessageId, flashTimerRef, revealMessage, onMissing: () => toast(t('chatArea.source.notVisible'), 'error') })
 
   const { pinToBottom, onTotalListHeightChanged } = useTailPinning({ resetKey: chatResetKey, messages: listedMessages,
     enabled: !unreadNavigationPending, messageWindow, scrollerEl, scrollerRef, listRef, isAtBottomRef,
