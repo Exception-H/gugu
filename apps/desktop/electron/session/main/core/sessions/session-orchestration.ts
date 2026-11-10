@@ -14,7 +14,8 @@ import { parseConversationLink } from '@gugu/core/shared/ui/guguLink';
 import { readCurrentActivitySource } from './session-activity-source';
 import { receiveAssistantWorkReport, workReportSchema, type WorkReport } from '../../../../sessionpage/assistant-work';
 import { isProjectAgentAction, runProjectAgentAction, type ProjectAgentAction } from '../projects/project-agent-actions';
-import { listProjectGroupBindings, localProjectOfGroup } from '../projects/operations/project-groups';
+import { localProjectOfGroup } from '../projects/operations/project-groups';
+import { machineLocalProjectOf, machineLocalProjectsOf, machineOutwardProjectIds } from '../projects/project-public-id';
 import { getProjectById } from '../projects/operations/getProjects';
 import { isLibraryAgentAction, runLibraryAgentAction, type LibraryAgentAction } from '../app/user-library';
 import { randomUUID } from 'node:crypto';
@@ -162,11 +163,11 @@ export type SessionAction =
       prompt: string;
       source_link?: string;
       title?: string;
-      /** The `project` parameter, decoded at the host boundary: a project id, or a folder on this machine. */
+      /** The `project` parameter, decoded at the host boundary: a project id (its project group chat id), or a folder on this machine. */
       project_id?: string;
       /**
-       * Across machines a project is named by its project group (a local project id means nothing on another machine):
-       * the target runs in its own local project bound to this group. Set by outboundSessionAction, never by an agent.
+       * The named project as it travels to another machine (outboundSessionAction; older hosts read this field): the
+       * target runs in its own local project bound to this group. Never set by an agent.
        */
       project_group?: string;
       project_path?: string;
@@ -238,7 +239,8 @@ export type SessionSnapshot = {
   parent_session_id: string | null;
   /** 父级的远端祖先暂时够不着,与 session_set_parent 同一条回执。 */
   not_reached?: string[];
-  project_id: string;
+  /** The project's id (its project group chat id); null for a session in no project group. */
+  project_id: string | null;
   /** 跨机省略 project 时,说明实际落点及推导或回落原因。 */
   project_note?: string;
   title: string;
@@ -435,6 +437,8 @@ function snapshot(
   row: SessionRow,
   summaries: Record<string, SessionSummary>,
   model: SessionModel,
+  /** Outward project ids (project-public-id.ts): a session in no project group has project_id null. */
+  outward: (localProjectId: string) => string | null,
 ): SessionSnapshot {
   const transport = transportOf(row);
   const runtime = transport === 'acp' ? (summaries[row.id] ?? null) : null;
@@ -446,7 +450,7 @@ function snapshot(
     spawned_by_session_id: sessionSpawnerId(row),
     ...(!row.spawnedBySessionId && remoteSpawner ? { spawned_by_device_id: remoteSpawner.deviceId } : {}),
     parent_session_id: sessionParentId(row),
-    project_id: row.projectId,
+    project_id: outward(row.projectId),
     title: taskName(row),
     provider_id: row.provider ?? 'unknown',
     model,
@@ -854,11 +858,11 @@ async function spawnSession(
 
   // #5665 child 是一条独立会话,这里选的只是它的工作目录:缺省和调用者共用同一份工作副本;点名了项目就落那个
   // 项目的根工作区(与会话页新建会话同一步)。
-  const named = namedPlacement(action);
+  const named = await namedPlacement(action);
   let projectId = context.projectId;
   let workspaceId = caller.workspaceId;
   if (named) {
-    ({ projectId, workspaceId } = await projectRootPlacement(named, `project ${named.project_path ?? named.project_id}`));
+    ({ projectId, workspaceId } = await projectRootPlacement(named, `project ${action.project_path ?? action.project_id}`));
   }
   signal?.throwIfAborted();
 
@@ -937,7 +941,7 @@ async function spawnSession(
     signal,
   });
   return {
-    ...snapshot(row, {}, await sessionModel(row)),
+    ...snapshot(row, {}, await sessionModel(row), await machineOutwardProjectIds()),
     ...(not_reached.length ? { not_reached } : {}),
     ...(action.assistant_work ? {assistant_work_target:{session_id:row.id,device_id:(await assistantWorkLedgerContext()).deviceId}} : {}),
     // child 是本项目里生出来的，因此和 caller 同属这个群（[[agent-provisioning]] 的入群是它 session
@@ -958,9 +962,10 @@ async function spawnSession(
   };
 }
 
-function namedPlacement(action: { project_id?: string; project_path?: string }) {
-  if (!action.project_id && !action.project_path) return null;
-  return { project_id: action.project_id, project_path: action.project_path };
+/** The `project` an agent named: a project id (its group; this machine's folder for it, project-public-id.ts) or a folder here. */
+async function namedPlacement(action: { project_id?: string; project_path?: string }) {
+  if (action.project_id) return { project_id: await machineLocalProjectOf(action.project_id) };
+  return action.project_path ? { project_path: action.project_path } : null;
 }
 
 /**
@@ -2104,9 +2109,10 @@ function childrenOf(rows: SessionRow[], parentSessionId: string): SessionRow[] {
 
 async function listChildren(rows: SessionRow[], parentSessionId: string, signal?: AbortSignal): Promise<SessionSnapshot[]> {
   const summaries = await readAcpSessionSummaries();
+  const outward = await machineOutwardProjectIds();
   signal?.throwIfAborted();
   const children = await Promise.all(
-    childrenOf(rows, parentSessionId).map(async (row) => snapshot(row, summaries, await sessionModel(row))),
+    childrenOf(rows, parentSessionId).map(async (row) => snapshot(row, summaries, await sessionModel(row), outward)),
   );
   return children.sort(byLastActiveDesc);
 }
@@ -2143,7 +2149,7 @@ async function runTargetAction(
   if (action.action === 'get') {
     const summaries = await readAcpSessionSummaries();
     signal?.throwIfAborted();
-    return { ...snapshot(target, summaries, await sessionModel(target)), preview: await sessionPreview(target.id) };
+    return { ...snapshot(target, summaries, await sessionModel(target), await machineOutwardProjectIds()), preview: await sessionPreview(target.id) };
   }
 
   if (action.action === 'stop') {
@@ -2165,7 +2171,7 @@ async function runTargetAction(
     const refreshed = fresh.find((row) => row.id === target.id);
     signal?.throwIfAborted();
     if (!refreshed) throw new Error('session disappeared after stop');
-    return snapshot(refreshed, summaries, await sessionModel(refreshed));
+    return snapshot(refreshed, summaries, await sessionModel(refreshed), await machineOutwardProjectIds());
   }
 
   if (action.action === 'archive') {
@@ -2193,20 +2199,15 @@ async function runTargetAction(
 }
 
 /**
- * 一个要交给别的机器执行的 session 动作:项目的跨机器身份是项目群,本机的本地项目 id 到了那台机器上不指任何东西。
- * spawn 点名的是本机的本地项目 ⇒ 换成它绑的项目群(那台机器按群找自己的本地项目);点名的不是本机的项目 = 那台机器自己的 id,原样交过去。
- * 本机项目还没有项目群:说清楚,❌ 原样交过去让那台机器报一个看不懂的「找不到项目」。
+ * A session action leaving this machine (or fanning out from it). Project ids are already account-level (the project
+ * group, project-public-id.ts), so nothing is translated; a local project id of this machine is refused here, where
+ * its right id is known. spawn carries the project as `project_group`, the field every host version reads.
  */
-export async function outboundSessionAction<A extends { action: string; project_id?: unknown }>(action: A): Promise<A> {
+export async function outboundSessionAction<A extends { action: string; project_id?: unknown; source_project_id?: unknown }>(action: A): Promise<A> {
+  for (const id of [action.project_id, action.source_project_id]) if (typeof id === 'string') await machineLocalProjectsOf(id);
   if (action.action !== 'spawn' || typeof action.project_id !== 'string') return action;
-  const local = await getProjectById(action.project_id);
-  if (!local) return action;
-  const bindings = await listProjectGroupBindings();
-  if (!bindings.success) throw new Error(bindings.error.message);
-  const chatId = bindings.data.find((binding) => binding.projectId === local.id)?.chatId;
-  if (!chatId) throw new Error(`Project "${local.name}" has no project group yet, so another device cannot find it; open it once in 咕咕 or spawn without project`);
-  const { project_id: _local, ...rest } = action;
-  return { ...rest, project_group: chatId } as unknown as A;
+  const { project_id, ...rest } = action;
+  return { ...rest, project_group: project_id } as unknown as A;
 }
 
 /** 本机发起方在跨机器请求里的自述;机器与 Agent ID 由宿主补。 */
@@ -2303,16 +2304,10 @@ async function spawnForRemoteCaller(
   const prompt = action.prompt.trim();
   if (!prompt) throw new Error('prompt is required');
   // 与本机同一条默认(spawnedBy):挂在发起会话下面(它在别的机器上,记在 config 里),点没点名项目都一样。
-  const named = namedPlacement(action);
+  const named = await namedPlacement(action);
 
-  // 点名了项目(发起方那台换成了项目群):这台机器上绑在这个群上的本地项目,落在根工作区;这台没有它的文件夹就说清。
-  let groupNamed: { project_id: string } | null = null;
-  if (!named && action.project_group) {
-    const bound = await localProjectOfGroup(action.project_group);
-    if (!bound.success) throw new Error(bound.error.message);
-    if (!bound.data) throw new Error('This device has no folder for that project. Link one with project_add_device, then spawn again');
-    groupNamed = { project_id: bound.data };
-  }
+  // 点名了项目(发起方原样带来它的项目群):这台机器上绑在这个群上的本地项目,落在根工作区;这台没有它的文件夹就说清。
+  const groupNamed = !named && action.project_group ? { project_id: await machineLocalProjectOf(action.project_group) } : null;
   // 跨机默认与人在项目里选设备一样,按同一项目群找本机项目,落在根工作区。
   // 没有关联仍走原任务工作区,但回执要说清原因与关联入口。
   let matchedProjectId: string | undefined;
@@ -2323,7 +2318,7 @@ async function spawnForRemoteCaller(
   }
   const { projectId, workspaceId } = await projectRootPlacement(
     named ?? groupNamed ?? (matchedProjectId ? { project_id: matchedProjectId } : {}),
-    named ? `project ${named.project_path ?? named.project_id} on this machine` : groupNamed ? 'the named project on this machine' : 'default project on this machine',
+    named ? `project ${action.project_path ?? action.project_id} on this machine` : groupNamed ? 'the named project on this machine' : 'default project on this machine',
   );
   let projectNote: string | undefined;
   if (!named) {
@@ -2401,7 +2396,7 @@ async function spawnForRemoteCaller(
     signal,
   });
   return {
-    ...snapshot(row, {}, await sessionModel(row)),
+    ...snapshot(row, {}, await sessionModel(row), await machineOutwardProjectIds()),
     ...(projectNote ? { project_note: projectNote } : {}),
     ...(not_reached.length ? { not_reached } : {}),
     ...(action.assistant_work ? {assistant_work_target:{session_id:row.id,device_id:(await assistantWorkLedgerContext()).deviceId}} : {}),
