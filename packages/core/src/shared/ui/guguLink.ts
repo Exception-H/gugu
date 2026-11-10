@@ -140,8 +140,8 @@ export function classifyFileLink(href: string): FileLinkClassification {
   const placed = at && Object.keys(at).length > 0 ? { at } : {}
   let path = raw
   try {
-    // decodeURI keeps `%23` as it is: the one escape a name's own `#` needs, read back here.
-    path = decodeURI(raw).replace(/%23/gi, '#')
+    // 先还原原文里的 %23，再解码一次，保留 %25 解码后产生的字面 %23。
+    path = decodeURI(raw.replace(/%23/gi, '#'))
   } catch {
     // A literal '%' is valid in a filesystem name; preserve malformed URI text as a path.
   }

@@ -117,4 +117,20 @@ describe('a working-copy link’s place: `path#k=v&k=v` or a line, read in this 
     expect(classifyFileLink('https://example.com/a#page=2')).toEqual({ kind: 'external' })
     expect(classifyFileLink('#page=2')).toEqual({ kind: 'external' })
   })
+
+  it('decodes filename escapes once, including a literal percent-encoded hash', () => {
+    for (const [href, path] of [
+      ['notes/literal%2523.md', 'notes/literal%23.md'],
+      ['notes/literal%2523.md#L10', 'notes/literal%23.md'],
+      ['notes/hash%23.md', 'notes/hash#.md'],
+      ['notes/literal%252523.md', 'notes/literal%2523.md'],
+      ['C:/notes/literal%2523.md', 'C:/notes/literal%23.md'],
+      ['notes/literal%25%23.md', 'notes/literal%#.md'],
+    ]) {
+      expect(classifyFileLink(href)).toMatchObject({ kind: 'workspace-file', path })
+    }
+    expect(classifyFileLink('notes/literal%2523.md#L10')).toEqual({
+      kind: 'workspace-file', path: 'notes/literal%23.md', at: { L10: '' },
+    })
+  })
 })
