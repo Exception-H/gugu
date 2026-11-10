@@ -72,7 +72,7 @@ import {
 import { createRendererLogForwarder } from './local-renderer-diagnostics'
 import { registerErrorSummaryReporting } from './error-summary-reporting-host'
 import { registerErrorSummaryConsent } from './error-summary-consent-host'
-import type { GuguPermissionMode } from '@gugu/session-core/acp'
+import { resolveSessionPermissionMode, type GuguPermissionMode } from '@gugu/session-core/acp'
 import { classifyFatal, recordFatalSync } from './lib/fatal-triage'
 import { pathToFileURL } from 'node:url'
 import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from 'fs'
@@ -5474,7 +5474,7 @@ app.whenReady().then(async () => {
             ...(info.sourceSessionId ? { libraryFrom: info.sourceSessionId } : {}),
             // 运行时分叉(侧边聊天)沿用启动输入解析出的同一权限档；ACP adapter 的进程参数
             // 与普通 app-server 由同一 session bundle 物化，不能在桥里另猜一档。
-            autonomy: info.permissionMode ? { permissionMode: info.permissionMode } : null,
+            autonomy: { permissionMode: resolveSessionPermissionMode(info) },
             model: sessionBundleModelFor(info.providerId, 'acp', forkPlatform),
           // spec `mcp-session-toggle`:用户为这条会话关掉的那几台。
           // ⚠️ 原样递,`[]` 也递 —— 归一成 undefined 会让「决定过但一台没关」
@@ -5573,7 +5573,7 @@ app.whenReady().then(async () => {
           extensionApps: [],
           extensionServerOrigins: [],
           model: null,
-          autonomy: info.permissionMode ? { permissionMode: info.permissionMode } : null,
+          autonomy: { permissionMode: resolveSessionPermissionMode(info) },
           // ❌ 运行时分叉(侧边聊天)**不得**在这里多加一格。owner 2026-08-21 定调:分叉会话的
           // harness 自己就带系统提示,分叉又继承了来源会话那一份,再追加一块就是第三份。
           // promptBlocks 走系统提示通道(见 @@@system-prompt-channel),而系统提示在前缀最前面:
@@ -5742,7 +5742,7 @@ app.whenReady().then(async () => {
           // 它那段注释逐字写着这一格不递就会「变成一条永远不被喂的死代码」—— 这里补上那根线。
           // ⚠️ 解析式与运行时 `applyConfiguredPermissionMode` 同源(都从 permissionMode 来),
           //    ❌ 别在这里另写一套映射:两条路对同一个用户选择解释出不同档 = 界面与实际不一致。
-          autonomy: info.permissionMode ? { permissionMode: info.permissionMode } : null,
+          autonomy: { permissionMode: resolveSessionPermissionMode(info) },
           promptBlocks: { platform: `${GUGU_PLATFORM_BLOCK}${projectContextBlock}`, identity: identityBlock },
           ...(processConfigPlatform
             ? {

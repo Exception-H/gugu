@@ -1193,13 +1193,13 @@ describe('pluginRegistry', () => {
 
   it('delivers the own-model pick on the pi terminal leg (#6246)', () => {
     const args = pluginRegistry.get('pi')!.behavior.prompt!.buildCommand({
-      cli: '/bin/pi', initialPrompt: 'hi', cliSessionId: 's', isResuming: false,
+      cli: '/bin/pi', permissionMode: 'edit', initialPrompt: 'hi', cliSessionId: 's', isResuming: false,
       model: 'mine/own-a', effort: '',
     }).args;
     expect(args.slice(args.indexOf('--model'), args.indexOf('--model') + 2)).toEqual(['--model', 'mine/own-a']);
     // [control] no pick ⇒ no flag: pi keeps its own default (the bytes snapshot below pins this).
     expect(pluginRegistry.get('pi')!.behavior.prompt!.buildCommand({
-      cli: '/bin/pi', initialPrompt: 'hi', cliSessionId: 's', isResuming: false,
+      cli: '/bin/pi', permissionMode: 'edit', initialPrompt: 'hi', cliSessionId: 's', isResuming: false,
       model: '', effort: '',
     }).args).not.toContain('--model');
   });
@@ -2005,6 +2005,7 @@ describe('pluginRegistry', () => {
 
     const resumed = pi.behavior.prompt!.buildCommand({
       cli: 'pi',
+      permissionMode: 'edit',
       cliSessionId: 'conv-1',
       providerSessionId: '/Users/test/.pi/agent/sessions/project/session.jsonl',
       isResuming: true,
