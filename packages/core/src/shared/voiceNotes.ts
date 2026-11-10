@@ -376,7 +376,7 @@ export function transcriptionPrompt(previousTail: string): string {
 export function summaryTitle(markdown: string): string {
   const first = markdown.replace(/\r\n/g, '\n').split('\n').find((line) => line.trim()) ?? ''
   const m = /^#\s+(.+)$/.exec(first.trim())
-  return m ? m[1].trim().slice(0, 200) : ''
+  return m ? Array.from(m[1].trim()).slice(0, 200).join('') : ''
 }
 
 /** 正文里开头那个和标题一样的 `# 标题` 去掉(页头已经写着了)。 */

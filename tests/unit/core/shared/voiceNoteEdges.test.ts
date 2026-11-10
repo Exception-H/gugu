@@ -2,6 +2,10 @@ import { describe, expect, it } from 'vitest'
 import { exportFileName, groupVoiceNotesByWeek, parseTranscript, renderTranscript, summaryTitle, transcriptTail } from '@gugu/core/shared/voiceNotes'
 
 describe('voice-note text boundaries', () => {
+  it('does not cut a summary title inside a Unicode code point', () => {
+    const title = 'a'.repeat(199) + '🍵'
+    expect(summaryTitle('# ' + title)).toBe(title)
+  })
   it('sorts same-week notes by instant when timestamp offsets differ', () => {
     const older = '2026-11-10T10:00:00+08:00', newer = '2026-11-10T03:00:00Z'
     expect(groupVoiceNotesByWeek([older, newer], (value) => value, new Date('2026-11-11T00:00:00Z'))[0].items).toEqual([newer, older])
