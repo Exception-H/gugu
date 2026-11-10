@@ -1375,7 +1375,7 @@ function tellHostPresentationChanged(): void {
 }
 // App 页的 `operator.guguNumber`:登录账号自己的咕咕号,按信封同一张身份表查,一个账号查一次。
 const selfGuguNumber = createSelfGuguNumber({
-  userId: () => SERVER_MODE ? serverAuth?.signedInUserId() ?? null : humanAuthUserId(),
+  userId: () => signedInAccountId(),
   lookup: async (userId) => {
     const auth = await (authProvider ?? desktopAuthProvider()).getAuth()
     if (auth?.userId !== userId) throw new Error('the account changed while its 咕咕号 was looked up')
@@ -2596,12 +2596,17 @@ function humanAuthUserId(): string | null {
   return typeof pushedHumanAuth === 'object' ? pushedHumanAuth?.userId ?? null : null
 }
 
+/** 这个进程此刻登着的账号:server 的登录态由主进程自己持有(server-auth),桌面是渲染层推来的那份。属主一律问它。 */
+function signedInAccountId(): string | null {
+  return SERVER_MODE ? serverAuth?.signedInUserId() ?? null : humanAuthUserId()
+}
+
 function onHumanAuthSessionChanged(): void {
   projectionDeviceRuntime.invalidate()
-  void emdashBridgeModule?.setTaskNameOwner(humanAuthUserId())
+  void emdashBridgeModule?.setTaskNameOwner(signedInAccountId())
     .then(() => adoptCloudTaskNames?.())
     .catch(error => createLogger('sessionpage/names').error({ error: String(error) }, 'Task name owner change failed'))
-  void nativeFiles.ownerChanged(humanAuthUserId()).catch(error => createLogger('files').warn({ error: String(error) }, 'File handle cleanup failed'))
+  void nativeFiles.ownerChanged(signedInAccountId()).catch(error => createLogger('files').warn({ error: String(error) }, 'File handle cleanup failed'))
   void refreshElectronSupabaseAuth().catch((error: unknown) => {
     createLogger('device-runtime/auth').warn({ error: String(error) }, 'Realtime account auth update failed')
   })
@@ -2657,25 +2662,22 @@ function bootedSessionLife() {
   if (!bridge) throw new Error('session-life: the session page module is not loaded')
   return bridge.sessionLife()
 }
-function pushedUserId(): string | null {
-  return typeof pushedHumanAuth === 'object' ? pushedHumanAuth?.userId ?? null : null
-}
 async function sessionLifeLeaveIfChanging(nextUserId: string | null): Promise<void> {
-  const current = pushedUserId()
+  const current = humanAuthUserId()
   if (sessionLifeBooted && current && current !== nextUserId) await bootedSessionLife().signOut()
 }
 async function sessionLifeEnter(): Promise<void> {
-  const userId = pushedUserId()
+  const userId = humanAuthUserId()
   if (sessionLifeBooted && userId) await bootedSessionLife().signIn(userId)
 }
 // 「帮助改进咕咕」开关在所有桌面版上都记;真正发送仍只在配好接收地址的已发布 Beta 上(下一段)。
 const errorSummaryConsent = registerErrorSummaryConsent({
   eligible: !SERVER_MODE,
-  owner: () => pushedHumanAuth === undefined ? undefined : pushedUserId(),
+  owner: () => pushedHumanAuth === undefined ? undefined : humanAuthUserId(),
 })
 registerErrorSummaryReporting({
   eligible: !SERVER_MODE && __GUGU_TIER__ === 'beta' && __GUGU_BUILD_DISTRIBUTION__ === 'published',
-  owner: () => pushedHumanAuth === undefined ? undefined : pushedUserId(),
+  owner: () => pushedHumanAuth === undefined ? undefined : humanAuthUserId(),
 })
 const humanAuthSessionIpc = createHumanAuthSessionIpc({
   toAuth: runtimeAuthFromSupabaseTokens,
@@ -5111,7 +5113,7 @@ app.whenReady().then(async () => {
         sendUiEvent(MAIN_UI_EVENTS.ownedAgentRenamed, { agentUserId, displayName: name })
       },
     })
-    await emdash.setTaskNameOwner(humanAuthUserId())
+    await emdash.setTaskNameOwner(signedInAccountId())
     // A name renamed offline is published once the backend answers this process again (no timer).
     let publishing: Promise<void> | null = null
     const publishPendingTaskNames = () => {
