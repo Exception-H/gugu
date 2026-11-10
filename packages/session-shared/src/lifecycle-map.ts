@@ -58,14 +58,14 @@ export class LifecycleMap<T, PE, TE> {
     if (this._active.has(id)) return { status: 'ready' };
     if (this._provisioning.has(id)) return { status: 'bootstrapping' };
     const error = this._errors.get(id);
-    if (error) return { status: 'error', error };
+    if (this._errors.has(id)) return { status: 'error', error: error as PE };
     return { status: 'not-started' };
   }
 
   teardownStatus(id: string): LifecycleStatus<TE> {
     if (this._tearingDown.has(id)) return { status: 'bootstrapping' };
     const error = this._teardownErrors.get(id);
-    if (error) return { status: 'error', error };
+    if (this._teardownErrors.has(id)) return { status: 'error', error: error as TE };
     return { status: 'not-started' };
   }
 
