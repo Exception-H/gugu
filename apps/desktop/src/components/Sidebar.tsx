@@ -33,6 +33,7 @@ import '../components/productTour/catalog'
 import { readAssistantShellBridge } from '../lib/assistantShellBridge'
 import { cn } from '@/lib/cn'
 import { DropdownMenu, Menu, MenuItem as DropdownMenuItem, MenuSeparator } from './ui/Menu'
+import { OpenableAppRows } from './chat/OpenAppMenuItems'
 import { useRowContextMenu } from '../hooks/useRowContextMenu'
 import { followLink } from '../lib/guguLinks'
 import { Hint } from './ui/Tooltip'
@@ -285,17 +286,7 @@ const AppsOnRail = observer(function AppsOnRail({ sessionsShown, showSessions }:
       />
       {menuPos && openable.length > 0 && (
         <Menu x={menuPos.x} y={menuPos.y} minWidth={180} onClose={closeMenu} ariaLabel={t('shell.apps')}>
-          {openable.map((app) => (
-            <DropdownMenuItem
-              key={app.extensionId}
-              className="gg-sidebar-launch-item"
-              icon={<RailAppIcon app={app} className="gg-sidebar-launch-icon" />}
-              onClick={() => { open(app.extensionId); closeMenu() }}
-            >
-              {app.name}
-              {appIsRunning(app.extensionId) && <i className="gg-sidebar-launch-running" aria-hidden="true" />}
-            </DropdownMenuItem>
-          ))}
+          <OpenableAppRows apps={openable} onOpen={(appId) => { open(appId); closeMenu() }} />
         </Menu>
       )}
       {apps.length > 0 && <i className="gg-sidebar-rail-sep" aria-hidden="true" />}
@@ -500,3 +491,4 @@ export const Sidebar = observer(function Sidebar({ activeTab, onTabChange, setti
     </aside>
   )
 })
+
