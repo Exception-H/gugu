@@ -2,7 +2,8 @@ import z from 'zod';
 
 /**
  * 咕咕内置那台 MCP(`gugu`)的工具按组开关(owner 11-10 msg:6fcbcd7c「built in mcp 配置也可以做成用户可以配置的」)。
- * 一组 = 一个能力域;关掉的组在宿主组装那台 server 时就不注册,原生清单和 catalog 里都没有它。
+ * 一组 = 一个能力域;关掉的组照常注册、标成不可用(acp-engine-utils `switchGuguTools`):原生清单和 catalog 都不列,按名调被拒;
+ * 开关一变,已连上的会话收到 tools/list_changed。
  *
  * 锁住的组不可关:投递信封让 agent 用 message_send / session_message 回话,平台提示词让它经 catalog_* / guide_* 找工具和说明 ——
  * 关掉它们,agent 收得到消息却回不了、找不到工具。
