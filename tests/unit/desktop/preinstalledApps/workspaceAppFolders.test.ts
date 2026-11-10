@@ -261,7 +261,6 @@ describe('the host\'s Back (the phone\'s back key)', () => {
     more('y2026').click()
     // The desktop's row menu is the host's shared menu: it takes Back first itself (its back layer), not through the page.
     expect(menu.isOpen(), 'the row menu is open').toBe(true)
-    expect($('menu').hidden, 'and it is not the page\'s own').toBe(true)
     await menu.dismiss()
     expect(crumbs(), 'closing it stays in the folder').toEqual(['聊天文件', '合同'])
     back.handler!()

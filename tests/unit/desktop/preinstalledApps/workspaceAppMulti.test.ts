@@ -134,7 +134,7 @@ describe('picking', () => {
       expect(picked()).toEqual(['b'])
       expect($('select-files').getAttribute('aria-pressed')).toBe('true')
       expect(gugu.files.openWith).not.toHaveBeenCalled()
-    } finally { vi.useRealTimers() }
+    } finally { vi.useRealTimers(); await menu.dismiss() }
 
   })
 
@@ -147,22 +147,24 @@ describe('picking', () => {
 
   test.each([450, 550])('a native touch contextmenu at %ims opens once, before or after the hold timer', async (nativeAt) => {
     touch = true
+    const before = menu.showContextMenu.mock.calls.length
     vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] })
     try {
       const target = row('b').querySelector('.file-open')!
       target.dispatchEvent(Object.assign(new MouseEvent('pointerdown', { bubbles: true }), { pointerType: 'touch' }))
       await vi.advanceTimersByTimeAsync(nativeAt)
+      const opened = () => menu.showContextMenu.mock.calls.length - before
       target.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true }))
-      expect(menu.showContextMenu).toHaveBeenCalledTimes(1)
+      expect(opened()).toBe(1)
       await vi.advanceTimersByTimeAsync(500)
-      expect(menu.showContextMenu).toHaveBeenCalledTimes(1)
+      expect(opened()).toBe(1)
       target.dispatchEvent(Object.assign(new MouseEvent('pointerup', { bubbles: true }), { pointerType: 'touch' }))
       open('b')
       expect(menu.isOpen()).toBe(true)
-      expect(menu.showContextMenu).toHaveBeenCalledTimes(1)
+      expect(opened()).toBe(1)
       expect(picked()).toEqual([])
       expect(gugu.files.openWith).not.toHaveBeenCalled()
-    } finally { vi.useRealTimers() }
+    } finally { vi.useRealTimers(); await menu.dismiss() }
   })
 
   test('deselecting the last desktop menu selection restores single-click opening', async () => {
