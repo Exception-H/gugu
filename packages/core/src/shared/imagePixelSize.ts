@@ -48,12 +48,17 @@ function exifOrientation(b: Uint8Array, at: number, end: number): number | null 
   const t = at + 6, le = b[t] === 0x49 && b[t + 1] === 0x49
   const u16 = (i: number) => (i + 2 > end ? -1 : le ? b[i]! | (b[i + 1]! << 8) : (b[i]! << 8) | b[i + 1]!)
   const u32 = (i: number) => (le ? (b[i]! | (b[i + 1]! << 8) | (b[i + 2]! << 16) | (b[i + 3]! << 24)) >>> 0 : ((b[i]! << 24) | (b[i + 1]! << 16) | (b[i + 2]! << 8) | b[i + 3]!) >>> 0)
+  if ((!le && !(b[t] === 0x4d && b[t + 1] === 0x4d)) || u16(t + 2) !== 42) return null
   const offset = u32(t + 4), ifd = t + offset
   if (offset < 8 || ifd + 2 > end) return null
   for (let k = 0, n = u16(ifd); k < n; k++) {
     const entry = ifd + 2 + 12 * k
     if (entry + 12 > end) return null
-    if (u16(entry) === 0x0112) return u16(entry + 8)
+    if (u16(entry) === 0x0112) {
+      if (u16(entry + 2) !== 3 || u32(entry + 4) !== 1) return null
+      const orientation = u16(entry + 8)
+      return orientation >= 1 && orientation <= 8 ? orientation : null
+    }
   }
   return 1
 }

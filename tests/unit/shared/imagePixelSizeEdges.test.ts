@@ -20,6 +20,14 @@ const exifJpeg = (payload: Buffer) => {
 }
 
 describe('image header boundaries', () => {
+  it('requires EXIF SHORT orientation with one value and a valid TIFF header', () => {
+    for (const [offset, value] of [[18, 4], [20, 2], [6, 0], [8, 0]]) {
+      const payload = exifPayload(); payload[offset] = value
+      expect(imagePixelSize(exifJpeg(payload))).toEqual({ width: 37, height: 11 })
+    }
+    const payload = exifPayload(); payload.writeUInt16LE(9, 24)
+    expect(imagePixelSize(exifJpeg(payload))).toEqual({ width: 37, height: 11 })
+  })
   it('ignores an EXIF directory entry cut by its APP1 segment boundary', () => {
     expect(imagePixelSize(exifJpeg(exifPayload().subarray(0, 26)))).toEqual({ width: 37, height: 11 })
     expect(imagePixelSize(exifJpeg(exifPayload()))).toEqual({ width: 11, height: 37 })
