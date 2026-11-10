@@ -2,6 +2,9 @@ import { describe, expect, it } from 'vitest'
 import { memoryIndexHints, parseMemoryNote, readFrontmatter, removeIndexEntry } from '@gugu/core/shared/assistantMemory'
 
 describe('memory text parsing boundaries', () => {
+  it('reads index hints for the uppercase Markdown extension accepted by note filenames', () => {
+    expect(memoryIndexHints('# 项目\n- [Note](./note.MD)\n').get('note.MD')).toEqual({ title: 'Note', kind: 'project' })
+  })
   it('removes the relative index spelling that the hints reader accepts', () => {
     const index = '- [Note](./note.md)\n- [Other](other.md)\n'
     expect(memoryIndexHints(index).has('note.md')).toBe(true)
