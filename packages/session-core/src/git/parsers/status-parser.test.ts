@@ -2,6 +2,11 @@ import { describe, expect, it } from 'vitest';
 import { MAX_STATUS_FILES, StatusParser } from './status-parser';
 
 describe('StatusParser', () => {
+  it('skips optional branch header records before file entries', () => {
+    const parser = new StatusParser();
+    parser.update('# branch.oid abc\0# branch.head main\0? note.md\0');
+    expect(parser.status).toEqual([{ x: '?', y: '?', path: 'note.md' }]);
+  });
   const headOid = '1111111111111111111111111111111111111111';
   const indexOid = '2222222222222222222222222222222222222222';
 

@@ -64,6 +64,7 @@ export class StatusParser {
       case 'u':
         return this.parseUnmerged(raw, index);
       case '!':
+      case '#':
         return this.skipSimple(raw, index);
       default:
         return undefined;
