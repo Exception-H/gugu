@@ -146,5 +146,5 @@ function base64UrlToHex(text: string): string {
 }
 
 function isPositiveInteger(value: unknown): value is number {
-  return typeof value === 'number' && Number.isInteger(value) && value > 0
+  return typeof value === 'number' && Number.isSafeInteger(value) && value > 0
 }
