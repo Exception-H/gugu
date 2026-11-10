@@ -5,7 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { GroupChatSettings } from '../../../../packages/core/src/shared/types/chat'
 import { act } from 'react'
 import { AUTOMATION_TEST_IDS } from '../../../../apps/desktop/src/lib/automationDom'
-import { createNode, createReactHarness, renderWithAppProviders } from '../../../support/testHarness'
+import { createNode, createReactHarness, renderWithAppProviders, waitForCondition } from '../../../support/testHarness'
 
 const projectGroups = new Set<string>()
 vi.mock('../../../../apps/desktop/src/session/renderer/features/projects/stores/project-groups-store', () => ({
@@ -72,5 +72,8 @@ describe('a project group offers no way to bring people in', () => {
     }))
     expect(document.querySelector('[data-testid="group-invite-copy-link"]')).not.toBeNull()
     expect(document.querySelector('[data-testid="group-invite-qr"]')).not.toBeNull()
+    // Nobody to pick here (no contacts loaded): the picker folds away and the share is the sheet's body.
+    await waitForCondition(() => document.querySelector('[data-picker-empty]') !== null, 'the empty picker never folded away')
+    expect(document.querySelector('[data-testid="group-invite-link"]')?.getAttribute('data-layout')).toBe('main')
   })
 })

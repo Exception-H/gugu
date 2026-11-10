@@ -7,6 +7,7 @@ import { groupJoinError } from '../../lib/groupAgentJoinService'
 import { MEMBER_PICKER_SHEET, MemberPicker } from '../member-picker/MemberPicker'
 import { Sheet } from '../ui/Sheet'
 import { GroupInviteShare } from './GroupInviteShare'
+import { groupInviteLinkFor } from '../../lib/groupInviteShareUrl'
 
 const reasonOf = (error: unknown) => String((error as Error)?.message ?? error)
 
@@ -15,7 +16,7 @@ const reasonOf = (error: unknown) => String((error as Error)?.message ?? error)
 export function AddGroupMembers({ chatId, snapshot, settings, canInviteHumans, humanDeniedHint, initialSelectedIds, onClose, onReload }: {
   chatId: string
   snapshot: GroupCollabSnapshot
-  /** 有了才画群的邀请链接 / 二维码(GroupInviteShare)。 */
+  /** 有了才画群的邀请链接 / 二维码(groupInviteLinkFor 判定)。 */
   settings: GroupChatSettings | null
   canInviteHumans: boolean
   /** 不能邀请人类时那一页说的话;不给 = 权限不够那一句(项目群有自己的原因)。 */
@@ -30,6 +31,7 @@ export function AddGroupMembers({ chatId, snapshot, settings, canInviteHumans, h
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [notice, setNotice] = useState<string | null>(null)
+  const inviteLink = useMemo(() => groupInviteLinkFor(chatId, settings), [chatId, settings])
   const reloadRequests = useCallback(async () => { setRequests(await chatService.listMyAgentJoinRequests(chatId)) }, [chatId])
   useEffect(() => { reloadRequests().catch((err: unknown) => setError(reasonOf(err))) }, [reloadRequests])
 
@@ -79,7 +81,7 @@ export function AddGroupMembers({ chatId, snapshot, settings, canInviteHumans, h
         initialSelectedIds={initialSelectedIds}
         peopleDenied={canInviteHumans ? undefined : humanDeniedHint ?? t('group.picker.humanPermissionHint')}
         agentNote={agentNote}
-        share={<GroupInviteShare chatId={chatId} settings={settings} snapshot={snapshot} />}
+        share={inviteLink ? (layout) => <GroupInviteShare inviteLink={inviteLink} groupName={settings?.name} snapshot={snapshot} main={layout === 'main'} /> : undefined}
         footer={error || notice ? (
           <p role={error ? 'alert' : 'status'} className={error ? '!m-0 !px-5 !py-2 text-[length:var(--font-caption)] text-[var(--danger-fg)]' : '!m-0 !px-5 !py-2 text-[length:var(--font-caption)] text-[var(--text-secondary)]'}>{error ?? notice}</p>
         ) : null}

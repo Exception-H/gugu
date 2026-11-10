@@ -53,8 +53,8 @@ export interface MemberPickerProps {
   busyLabel?: string
   /** 提交后的说明 / 错误,画在确认按钮上方。 */
   footer?: ReactNode
-  /** 选人以外的邀请方式(群的链接 / 二维码):桌面在确认按钮左边,手机在标题下。 */
-  share?: ReactNode
+  /** 选人以外的邀请方式(群的链接 / 二维码):桌面在确认按钮左边,手机在标题下;没有可选的人时('main')它就是整张单。 */
+  share?: (layout: 'bar' | 'main') => ReactNode
 }
 
 export function MemberPicker({ title, confirmLabel, onConfirm, onClose, initialSelectedIds = [], lockedIds, peopleDenied, agentNote, busy = false, busyLabel, footer, share }: MemberPickerProps) {
@@ -218,14 +218,30 @@ export function MemberPicker({ title, confirmLabel, onConfirm, onClose, initialS
   const failed = contacts.length === 0 && !refreshing && !loadingContacts && contactsStatus === 'error'
   const emptyText = contacts.length === 0 ? t('createGroup.emptyContacts') : t('createGroup.noResults')
 
+  const closeButton = <IconButton aria-label={t('common.close')} onClick={onClose}><X size={18} /></IconButton>
+  // @@@share-main 没有一个可选的人(通讯录已读到、没在搜):选人区整块收起,分享就是这张单的主体。
+  if (share && !refreshing && !loadingContacts && contactsStatus === 'ready' && !query && selected.length === 0 && sources.every((s) => s.entries.length === 0)) {
+    return (
+      <div className="flex min-h-0 flex-1 flex-col" data-testid="member-picker" data-picker-empty="">
+        <div className={cn('flex items-center gap-2', mobile ? '!px-3 !pt-3 !pb-2' : '!px-5 !pt-4 !pb-3')}>
+          {mobile ? closeButton : null}
+          <h3 className={cn('m-0 min-w-0 flex-1 truncate text-[length:var(--font-heading)] font-semibold text-[var(--text-primary)]', mobile && 'text-center')}>{title}</h3>
+          {mobile ? <span aria-hidden className="w-[var(--control-h-touch)]" /> : closeButton}
+        </div>
+        <div className="flex min-h-0 flex-1 items-center justify-center !p-6">{share('main')}</div>
+        {footer}
+      </div>
+    )
+  }
+
   return (
     <div className="flex min-h-0 flex-1 flex-col" data-testid="member-picker">
       <div className={cn('flex items-center gap-2', mobile ? '!px-3 !pt-3 !pb-2' : '!px-5 !pt-4 !pb-3')}>
-        {mobile ? <IconButton aria-label={t('common.close')} onClick={onClose}><X size={18} /></IconButton> : null}
+        {mobile ? closeButton : null}
         <h3 className={cn('m-0 min-w-0 flex-1 truncate text-[length:var(--font-heading)] font-semibold text-[var(--text-primary)]', mobile && 'text-center')}>{title}</h3>
-        {mobile ? confirmButton : <IconButton aria-label={t('common.close')} onClick={onClose}><X size={18} /></IconButton>}
+        {mobile ? confirmButton : closeButton}
       </div>
-      {mobile && share ? <div className="flex shrink-0 !px-3 !pb-2 empty:hidden">{share}</div> : null}
+      {mobile && share ? <div className="flex shrink-0 !px-3 !pb-2">{share('bar')}</div> : null}
       <div className={mobile ? '!px-3 !pb-2' : '!px-5 !pb-2'}>
         <SearchField value={query} onChange={(event) => changeQuery(event.target.value)} onKeyDown={onSearchKeyDown} placeholder={t('createGroup.searchPlaceholder')}
           clearLabel={t('friendSearch.clearSearch')} onClear={() => changeQuery('')} autoFocus={!mobile}
@@ -266,7 +282,7 @@ export function MemberPicker({ title, confirmLabel, onConfirm, onClose, initialS
       </div>
       {!refreshing && contactsStatus === 'ready' && unavailableSelection ? <p role="alert" className="!m-0 !px-5 !py-2 text-[length:var(--font-caption)] text-[var(--danger-fg)]">{t('memberPicker.selectionUnavailable')}</p> : null}
       {footer}
-      {!mobile ? <div className="flex shrink-0 items-center justify-end gap-2 border-t border-[var(--border-subtle)] !px-5 !py-3">{share ? <div className="me-auto min-w-0 empty:hidden">{share}</div> : null}{confirmButton}</div> : null}
+      {!mobile ? <div className="flex shrink-0 items-center justify-end gap-2 border-t border-[var(--border-subtle)] !px-5 !py-3">{share ? <div className="me-auto min-w-0">{share('bar')}</div> : null}{confirmButton}</div> : null}
     </div>
   )
 }

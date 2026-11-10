@@ -30,8 +30,7 @@ describe('copy actions preserve the refusal', () => {
   })
   it('shows the cause when copying the group invite link', async () => {
     const toast = vi.fn()
-    const settings = { name: 'Group', public_id: 123, join_token: '5f0c6a523a1e4f6e9a572d1b0c8e4f11', invite_link_enabled: true } as never
-    await renderWithAppProviders(harness, createNode(GroupInviteShare, { chatId: 'group', settings, snapshot: { humans: [], agents: [] } as never }), { toast })
+    await renderWithAppProviders(harness, createNode(GroupInviteShare, { inviteLink: 'https://gugu.test/j/?123.abc', groupName: 'Group', snapshot: { humans: [], agents: [] } as never }), { toast })
     await clickElement(harness.container.querySelector('[data-testid="group-invite-copy-link"]')!)
     expect(toast).toHaveBeenCalledWith('复制失败', 'error', reason)
   })
