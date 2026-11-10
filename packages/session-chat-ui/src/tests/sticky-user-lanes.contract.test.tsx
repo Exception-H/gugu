@@ -17,6 +17,7 @@ import type { ChatItem, TranscriptTurn } from '@session-chat/model';
 import { createChatState } from '@session-chat/state/chat-state';
 import { afterEach, describe, expect, it } from 'vitest';
 import { until, untilStable } from '../../../../tests/support/awaitCondition';
+import { pinnedSummaryShown } from '../../../../tests/support/pinnedSummaryShown';
 
 /** Where a stuck summary's top sits, below the scroller's top edge. */
 const PIN_LINE = UNIT_REGISTRY.message!.margin!.top!;
@@ -83,26 +84,43 @@ async function mount(
   };
   await until('transcript mounted', () => card('a-user') != null);
   await scrollTo(0);
-  return { host, scrollEl, card, cardTop, pinTop, pinBottom, mounted, scrollTo, view };
+  return { host, scrollEl, card, cardTop, summary, pinTop, pinBottom, mounted, scrollTo, view };
 }
 
 describe('sticky user lanes', () => {
-  it('shows the summary, on an opaque backdrop, in the same frame the message row goes above the pin line', async () => {
+  it('never shows the lines its summary repeats, in the same frame as any scroll write', async () => {
     const t = await mount();
     const lane = t.card('a-user')!.closest<HTMLElement>('[data-index]')!;
-    const backdrop = () => lane.querySelector<HTMLElement>('[data-chat-pin-backdrop]')!;
-    const rowBottom = () => lane.firstElementChild!.getBoundingClientRect().bottom - t.scrollEl.getBoundingClientRect().top;
-    expect(t.pinTop('a-user')!, 'the message is on screen: its summary waits below it').toBeGreaterThan(PIN_LINE + 1);
-    expect(getComputedStyle(backdrop().parentElement!).opacity).toBe('0');
-    // One copy at a time, pixel by pixel across the hand-over, both ways.
-    const handOver = Math.round(rowBottom() - PIN_LINE);
-    for (const st of [-3, -2, -1, 0, 1, 2, 3, 2, 1, 0, -1, -2].map(d => handOver + d)) {
-      await t.scrollTo(st);
-      expect(getComputedStyle(backdrop().parentElement!).opacity, `scrollTop=${st}, row bottom ${rowBottom()}`).toBe(rowBottom() < PIN_LINE ? '1' : '0');
+    const edge = () => t.scrollEl.getBoundingClientRect().top;
+    const shown = () => pinnedSummaryShown(t.summary('a-user')!);
+    const cover = () => lane.querySelector<HTMLElement>('[data-chat-pin-backdrop]')!.getBoundingClientRect();
+    expect(shown(), 'the message is on screen').toBe(false);
+    const handOver = Math.round(t.scrollEl.scrollTop + t.cardTop('a-user')!);
+    await t.scrollTo(handOver + 150);
+    expect(shown(), 'stuck before the sweep').toBe(true);
+    const repeats = t.summary('a-user')!.getBoundingClientRect().height;
+    // Sweep back over the hand-over and forth, reading right after each write: no frame runs in between, so the
+    // drawn-or-not flag is a frame late, as it is under load. Wherever the message's first lines are on screen
+    // while the summary is drawn, the summary's opaque layer is over them.
+    const down = Array.from({ length: 91 }, (_, i) => handOver - 120 + 3 * i);
+    let covered = 0;
+    for (const st of [...[...down].reverse(), ...down]) {
+      t.scrollEl.scrollTop = st;
+      if (!shown()) continue;
+      const card = t.card('a-user')!.getBoundingClientRect();
+      const top = Math.max(card.top, edge()), bottom = card.top + repeats;
+      if (bottom <= top) continue;
+      covered++;
+      expect(cover().top, `scrollTop=${st}`).toBeLessThanOrEqual(top + 0.5);
+      expect(cover().bottom, `scrollTop=${st}`).toBeGreaterThanOrEqual(bottom - 0.5);
     }
+    expect(covered, 'the sweep met frames with both on screen').toBeGreaterThan(0);
+    await t.scrollTo(handOver - 60);
+    expect(shown(), 'resting, the summary is not drawn').toBe(false);
     await t.scrollTo(900);
-    expect(getComputedStyle(backdrop().parentElement!).opacity).toBe('1');
-    expect(getComputedStyle(backdrop()).opacity).toBe('1');
+    expect(shown()).toBe(true);
+    expect(getComputedStyle(lane.querySelector('[data-chat-pin-backdrop]')!).opacity).toBe('1');
+    expect(cover().top, 'the strip is opaque from the scroller edge').toBeLessThanOrEqual(edge() + 0.5);
     expect(t.pinTop('a-user')).toBeCloseTo(PIN_LINE, 0);
     expect(t.cardTop('a-user')!, 'the message itself scrolled away').toBeLessThan(0);
   });
@@ -243,6 +261,6 @@ describe('sticky user lanes', () => {
     expect(t.pinTop('a-user')).toBeCloseTo(PIN_LINE, 0);
     t.host.querySelector<HTMLElement>('[data-pin-summary="a-user"]')!.click();
     await until('the message is back on screen', () => t.cardTop('a-user'), top => top !== null && top >= 0 && top < 120);
-    expect(t.pinTop('a-user')!, 'with the message on screen its summary is not stuck').toBeGreaterThan(PIN_LINE + 1);
+    await until('its summary is put away', () => pinnedSummaryShown(t.summary('a-user')!), shown => !shown);
   });
 });

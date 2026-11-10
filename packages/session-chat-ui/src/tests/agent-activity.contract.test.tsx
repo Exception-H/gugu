@@ -9,6 +9,7 @@ import { createChatState } from '../state/chat-state';
 import { createChatView } from '../chat-view';
 import type { ChatMessage, TranscriptTurn } from '../model';
 import { until, untilStable } from '../../../../tests/support/awaitCondition';
+import { pinnedSummaryShown } from '../../../../tests/support/pinnedSummaryShown';
 
 const peer = 'user:11111111-1111-4111-8111-111111111111';
 const me = '22222222-2222-4222-8222-222222222222';
@@ -412,7 +413,11 @@ describe('approved A2A activity', () => {
     }
     t.scroll().scrollTop = 0;
     await untilStable('opaque lanes return to ordinary bubbles', () => t.head()?.getBoundingClientRect().top);
-    for (const mask of masks()) expect(getComputedStyle(mask).opacity).toBe('0');
+    const headMask = masks()[1];
+    // Both masks turn transparent; the owner pin rests hidden over its own message.
+    expect(getComputedStyle(headMask).opacity).toBe('0');
+    expect(getComputedStyle(masks()[0]).opacity).toBe('0');
+    expect(pinnedSummaryShown(own() as HTMLElement), 'the owner pin is put away').toBe(false);
   });
   it.each([
     ...[
@@ -467,7 +472,7 @@ describe('approved A2A activity', () => {
     const style = getComputedStyle(backdrop);
     expect(style.opacity).toBe('1');
     expect(style.backgroundColor).toBe(background === '#ffffff' ? 'rgb(255, 255, 255)' : 'rgb(33, 33, 33)');
-    const own = t.host.querySelector('[data-pin-summary]')!.closest<HTMLElement>('[data-index] > div:last-child')!.getBoundingClientRect();
+    const own = t.host.querySelector('[data-pin-summary]')!.closest('[data-index]')!.querySelector<HTMLElement>('[data-chat-pin-backdrop]')!.parentElement!.getBoundingClientRect();
     const ownPaint = t.host.querySelector('[data-pin-summary]')!.closest('[data-index]')!.querySelector<HTMLElement>('[data-chat-pin-backdrop]')!.getBoundingClientRect();
     expect(ownPaint.top, 'the reserved top gap above the owner pin must not expose an older body line').toBeLessThanOrEqual(viewport.top);
     expect(Math.abs(paint.top - own.bottom), 'the two page-colored pins meet without exposing half a body line in their seam').toBeLessThan(1);

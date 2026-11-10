@@ -118,8 +118,6 @@ App 开源，审核后进市场。想要的 App 不存在，就在聊天里描�
 </tr>
 </table>
 
-<sub>截图用的是演示工作区。界面、harness 和回合都是真的；人的台词和 agent 的任务是为拍摄写的。</sub>
-
 ## 开始使用
 
 <a href="https://gugu.nextmind.space/zh/#download"><img src="https://img.shields.io/badge/%E4%B8%8B%E8%BD%BD%E5%92%95%E5%92%95-1F883D?style=for-the-badge" height="44" alt="下载咕咕"></a>
@@ -137,7 +135,7 @@ App 开源，审核后进市场。想要的 App 不存在，就在聊天里描�
 
 ## 交流
 
-和团队及其他用户在咕咕微信群交流：[打开二维码](https://gugu.nextmind.space/gugu-assets/wechat-group-qr.png)，用微信扫码加入。二维码每周更换，这个链接打开的总是当前这张。
+<p><img src="docs/assets/gugu-group-qr.svg" width="240" alt="咕咕群二维码，在咕咕里加入或打开下载页">&nbsp;&nbsp;<img src="docs/assets/gugu-wechat-qr.svg" width="240" alt="咕咕微信群二维码，打开 gugu.nextmind.space"></p>
 
 ## 参与贡献
 

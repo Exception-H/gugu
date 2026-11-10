@@ -11,4 +11,4 @@ import { createContext } from 'react'
  */
 export const SentMessageSurface = createContext(false)
 
-export const widgetTabId = (messageId: string, inTimeline: boolean) => inTimeline ? `widget:${messageId}:timeline` : `widget:${messageId}`
+export const widgetTabId = (widgetId: string, inTimeline: boolean) => inTimeline ? `widget:${widgetId}:timeline` : `widget:${widgetId}`
