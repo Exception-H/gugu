@@ -335,7 +335,7 @@ export function parseGuguLink(raw: string, options: { supabaseUrl?: string } = {
     try { path = rest.map(decodeURIComponent).join('/') } catch { return null }
     const chat = url.searchParams.get(PLACE_KEYS.chat)
     const session = url.searchParams.get(PLACE_KEYS.session)
-    const query: Record<string, string> = {}
+    const query: Record<string, string> = Object.create(null) as Record<string, string>
     for (const [key, value] of url.searchParams) if (!key.startsWith('gugu.')) query[key] = value
     return { kind: 'app', extensionId, tab, path, query, place: session ? { session } : chat ? { chat } : null }
   }
