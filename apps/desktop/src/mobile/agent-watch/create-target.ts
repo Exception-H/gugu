@@ -2,29 +2,37 @@ import type { Device } from '@gugu/core/shared/types/chat'
 import { isPhoneDevice } from '@gugu/core/cloud/devices'
 import { deviceAcceptsWork } from '@gugu/core/cloud/cloudComputer'
 import type { RunMachineCandidate } from '@renderer/features/projects/components/main-panel/project-device-scope'
-import { phoneProjectRows } from '../assistant/phoneProjectRows'
-import { taskFoldersOfChat } from '../chat/phoneTaskFolders'
+import type { AccountProject } from '@gugu/core/cloud/deviceProjects'
+import { isAssistantHome } from '@/lib/assistantHome'
 
 /**
  * 手机「+」新建页的「项目 · 机器」两行(DESIGN 点击路径 4a):项目是账号上的,机器只是这一次跑在哪。
  *
- * `key` = 项目的跨设备身份(项目群 chatId;还没绑群的本地项目 = 它自己那一行的 id),「上次在这个项目里用的机器」按它记。
- * `homes` = 有这个项目文件夹的机器 → 那台上的本地项目 id(建会话时带给那台机器)。
+ * `key` = 项目群 chatId,「上次在这个项目里用的机器」按它记。
+ * `homes` = 这个项目绑在哪几台机器上 → 那台上的本地项目 id(建会话时带给那台机器)。
  */
 export type CreateProject = { key: string; name: string; homes: ReadonlyMap<string, string>; groupId: string | undefined }
 
-/** 账号下的项目:与「伙伴」项目列表同一种按项目群的归并(phoneProjectRows),数据是各台机器发布的 device_projects。 */
-export function accountProjects(devices: readonly Device[], cloudDeviceId: string | null): CreateProject[] {
-  const records = Object.fromEntries(devices.map((device) => [device.device_id, device.projects ?? []]))
-  return phoneProjectRows(records, devices, cloudDeviceId).map((row) => {
-    // 绑了群:各台机器上的文件夹与项群卡同一份(taskFoldersOfChat);没绑:只在它自己那台上。
-    const folders = row.chatId ? taskFoldersOfChat(devices, row.chatId)?.folders ?? [] : row.folders.length > 0 ? [{ deviceId: row.deviceId, projectId: row.localProjectId }] : []
-    return {
-      key: row.chatId ?? row.id,
-      groupId: row.chatId ?? undefined,
-      name: row.label,
-      homes: new Map(folders.flatMap((folder) => (folder.deviceId ? [[folder.deviceId, folder.projectId] as const] : []))),
-    }
+/**
+ * 账号下的项目 = accountProjectsStore(桌面项目选择器同一份,归档的不列);各台机器上的本地项目就是它的绑定。
+ * #1629 只绑在个人助理云端宿主上的项目是助理的家,不列;那台宿主也不算项目的机器。
+ */
+export function accountProjects(projects: readonly AccountProject[], devices: readonly Device[], cloudDeviceId: string | null): CreateProject[] {
+  const byDevice = new Map(devices.map((device) => [device.device_id, device]))
+  const assistantHost = (deviceId: string) => {
+    const device = byDevice.get(deviceId)
+    return device ? isAssistantHome(device, cloudDeviceId) : deviceId === cloudDeviceId
+  }
+  return projects.flatMap((project) => {
+    if (project.archived) return []
+    if (project.bindings.length > 0 && project.bindings.every((binding) => assistantHost(binding.deviceId))) return []
+    const homes = project.bindings.filter((binding) => byDevice.has(binding.deviceId) && !assistantHost(binding.deviceId))
+    return [{
+      key: project.chatId,
+      groupId: project.chatId,
+      name: project.name,
+      homes: new Map(homes.map((binding) => [binding.deviceId, binding.localProjectId] as const)),
+    }]
   })
 }
 

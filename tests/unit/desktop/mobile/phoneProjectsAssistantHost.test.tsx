@@ -23,6 +23,8 @@ vi.mock('../../../../apps/desktop/src/lib/deviceProjects', () => ({
 }))
 
 import { PhoneProjects } from '../../../../apps/desktop/src/mobile/assistant/PhoneProjects'
+import { accountProjectsStore } from '../../../../apps/desktop/src/session/renderer/features/projects/stores/account-projects-store'
+import { runInAction } from 'mobx'
 
 const device = (id: string, extra: Partial<Device> = {}) => ({ device_id: id, label: id, is_online: true, is_current_device: false, cloud_computer: null, capabilities: {}, ...extra })
 const project = (localProjectId: string, name: string): DeviceProject => ({
@@ -34,9 +36,15 @@ const rowIds = (root: HTMLElement) => [...root.querySelectorAll('[data-testid^="
 
 let harness: ReturnType<typeof createReactHarness>
 beforeEach(() => { harness = createReactHarness(); state.reads = 0 })
-afterEach(() => { harness.cleanup() })
+afterEach(() => { harness.cleanup(); accountProjectsStore.clear() })
 
 const renderPage = async () => {
+  // The list is the account project list (accountProjectsStore): one account project per published record here.
+  runInAction(() => {
+    accountProjectsStore.list = Object.entries(state.records as Record<string, DeviceProject[]>).flatMap(([deviceId, list]) => list.map(record => ({
+      chatId: `${deviceId}/${record.localProjectId}`, name: record.name, archived: false, bindings: [{ deviceId, localProjectId: record.localProjectId }],
+    })))
+  })
   await renderWithAppProviders(harness, createElement(PhoneProjects, { detail: true }), { auth: { id: 'owner' } })
   await act(async () => { await new Promise(resolve => setTimeout(resolve, 0)) })
 }

@@ -37,10 +37,10 @@ const mocks = vi.hoisted(() => ({
   openLink: vi.fn(async () => true),
 }));
 // #6956 推到渲染层的事件:按机器分(与真 onMachineEvent 同一个判据,null = 本机),用例自己当主进程往里发。
-// 离线机器的心跳摘要(remoteHostsStore.sessionsOf)、侧栏项目行(rowProjectIdOf)与本地项目表:用例自己摆。
+// 离线机器的心跳摘要(remoteHostsStore.sessionsOf)、账号上的项目(accountProjectsStore,`bound` = 各台上绑着 webapp 的本地项目)与本地项目表:用例自己摆。
 const world = vi.hoisted(() => ({
   digests: {} as Record<string, unknown[]>,
-  rowOf: {} as Record<string, string>,
+  bound: [] as Array<{ deviceId: string; localProjectId: string }>,
   projects: new Map<string, { id: string; name: string; data: { path: string } }>(),
   projectMachine: {} as Record<string, string>,
 }));
@@ -125,7 +125,7 @@ vi.mock('@renderer/features/projects/stores/project-selectors', () => ({
   projectDisplayName: (store: { name: string } | undefined) => store?.name,
 }));
 vi.mock('@renderer/lib/stores/app-state', () => ({
-  sidebarStore: { rowProjectIdOf: (id: string) => world.rowOf[id] ?? id },
+  sidebarStore: {},
 }));
 vi.mock('@renderer/lib/machine-routing', () => ({
   machineRegistry: { machineOf: (id: string) => world.projectMachine[id] ?? null },
@@ -139,6 +139,17 @@ import { setLocalePreference } from '@/i18n';
 import { setPortalContainer } from '@renderer/lib/portal-container';
 import { SessionLocalizationProvider } from '@renderer/localization/localization-provider';
 import { SessionHistoryMainPanel } from '@renderer/features/session-history/session-history-view';
+import { accountProjectsStore } from '@renderer/features/projects/stores/account-projects-store';
+import { runInAction } from 'mobx';
+
+/** 账号上的项目:webapp(这台电脑上的 p1,加上用例绑在别的机器上的)。 */
+function seedAccounts(): void {
+  runInAction(() => {
+    accountProjectsStore.list = [{ chatId: 'chat-webapp', name: 'webapp', archived: false, bindings: [{ deviceId: 'this-computer', localProjectId: 'p1' }, ...world.bound] }];
+    accountProjectsStore.localDeviceId = 'this-computer';
+    accountProjectsStore.status = 'ready';
+  });
+}
 
 const NOW = Date.now();
 const WEBAPP = '/Users/me/work/webapp';
@@ -330,7 +341,8 @@ describe('会话历史(按目录分节)核心合同', () => {
     // 别的机器默认什么都没有(它们一直和本机一起被问);要它们有行的用例自己摆。
     mocks.remoteListDirectories.mockResolvedValue(directoryPageOf([], { directories: [] }));
     world.digests = {};
-    world.rowOf = {};
+    world.bound = [];
+    seedAccounts();
     world.projects = new Map();
     world.projectMachine = {};
     mocks.remoteImport.mockImplementation((_machine: string, _params: { providerSessionId: string }) =>
@@ -372,7 +384,7 @@ describe('会话历史(按目录分节)核心合同', () => {
     await vi.waitFor(() => expect(list.getByTestId('session-history-section').all()).toHaveLength(2));
     const sections = list.getByTestId('session-history-section').all();
     // 咕咕行的一节 = 它的项目(侧栏那一行);对不上项目的原件按「机器 · 目录」一节。
-    expect(sections.map((s) => s.element().getAttribute('data-section-key'))).toEqual(['project:p1', `dir:local:${BILLING}`]);
+    expect(sections.map((s) => s.element().getAttribute('data-section-key'))).toEqual(['project:chat-webapp', `dir:local:${BILLING}`]);
     await expect.element(list.getByText('webapp', { exact: true })).toBeVisible();
     // 目录一节的名字 = 目录末级名(参照页就是一个词);完整路径在 title 上。项目一节不挂路径(几台机器上路径各不同)。
     await expect.element(list.getByText('billing-service', { exact: true })).toBeVisible();
@@ -676,7 +688,8 @@ describe('会话历史(按目录分节)核心合同', () => {
 
   it('全部机器一起读:同一个项目在本机与 d22 上的任务进同一节,行上标机器;离线那台不去问', async () => {
     // d22 上的 webapp 是另一台上的本地项目 rp1,与本机 p1 绑在同一个项目群上 ⇒ 侧栏并成 p1 那一行。
-    world.rowOf = { rp1: 'p1' };
+    world.bound = [{ deviceId: 'dev-d22', localProjectId: 'rp1' }];
+    seedAccounts();
     world.projects = new Map([['p1', { id: 'p1', name: 'webapp', data: { path: WEBAPP } }]]);
     const remoteRow = gugu({ key: 'gugu:remote-w', title: 'd22 上的 webapp 任务', directory: '/home/alice/webapp', updatedAt: NOW - 5 * 60 * 60 * 1000, gugu: { projectId: 'rp1', sessionId: 'remote-w', runtime: 'acp' } });
     mocks.remoteListDirectories.mockImplementation((machine: string) =>
@@ -690,7 +703,7 @@ describe('会话历史(按目录分节)核心合同', () => {
     const list = screen.getByTestId('session-history-list');
     await vi.waitFor(() => expect(rowKeys()).toContain('dev-d22/gugu:remote-w'));
     const sections = list.getByTestId('session-history-section').all();
-    expect(sections.map((s) => s.element().getAttribute('data-section-key'))).toEqual(['project:p1', `dir:local:${BILLING}`]);
+    expect(sections.map((s) => s.element().getAttribute('data-section-key'))).toEqual(['project:chat-webapp', `dir:local:${BILLING}`]);
     // 一节三条:按更新时间跨机器归并(zebra 3h 前 → d22 那条 5h 前 → alpha 10h 前)。
     expect(sections[0].getByTestId('session-history-row').all().map((row) => row.element().getAttribute('data-row-key'))).toEqual([
       'gugu:zebra', 'dev-d22/gugu:remote-w', 'gugu:alpha',
@@ -721,7 +734,8 @@ describe('会话历史(按目录分节)核心合同', () => {
   });
 
   it('离线的机器:心跳摘要里的任务按项目归节、行标离线,节尾写哪台离线;点得开的照侧栏的判据打开', async () => {
-    world.rowOf = { offp: 'p1' };
+    world.bound = [{ deviceId: 'dev-off', localProjectId: 'offp' }];
+    seedAccounts();
     const summary = (conversationId: string, title: string, at: string, supported: boolean) => ({
       conversationId, projectId: 'offp', title, harness: 'codex', runtime: 'acp', agentStatus: null,
       lastInteractedAt: at, supported,
@@ -733,12 +747,14 @@ describe('会话历史(按目录分节)核心合同', () => {
       ],
     };
     render();
-    await vi.waitFor(() => expect(rowKeys()).toContain('dev-off/gugu:off-1'));
+    // 离线那台的行当场就有(心跳摘要),本机的行要等主进程回来:等整节到齐再比次序。
     const webapp = screen.getByTestId('session-history-section').first();
-    expect(webapp.element().getAttribute('data-section-key')).toBe('project:p1');
-    expect(webapp.getByTestId('session-history-row').all().map((row) => row.element().getAttribute('data-row-key'))).toEqual([
-      'dev-off/gugu:off-1', 'gugu:zebra', 'gugu:alpha', 'dev-off/gugu:off-2',
-    ]);
+    await vi.waitFor(() =>
+      expect(webapp.getByTestId('session-history-row').all().map((row) => row.element().getAttribute('data-row-key'))).toEqual([
+        'dev-off/gugu:off-1', 'gugu:zebra', 'gugu:alpha', 'dev-off/gugu:off-2',
+      ])
+    );
+    expect(webapp.element().getAttribute('data-section-key')).toBe('project:chat-webapp');
     expect(webapp.getByTestId('session-history-row-offline').all()).toHaveLength(2);
     await expect.element(webapp.getByTestId('session-history-section-offline')).toHaveTextContent('off 离线');
     // 别的节里没有离线的行:没有这一句。

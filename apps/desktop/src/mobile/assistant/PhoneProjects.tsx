@@ -9,8 +9,10 @@ import { AssistantEmpty, AssistantRow, AssistantSection, PageHead } from '@/sess
 import { ReadView } from './PhoneMachineView'
 import { phoneProjectRows, type PhoneProjectEntry } from './phoneProjectRows'
 import { usePhoneRead } from './usePhoneRead'
+import { observer } from 'mobx-react-lite'
+import { accountProjectsStore } from '@/session/renderer/features/projects/stores/account-projects-store'
 
-export function PhoneProjects({ detail = false,onOpen }: { detail?: boolean; onOpen?: () => void; machine?: unknown }) {
+export const PhoneProjects = observer(function PhoneProjects({ detail = false,onOpen }: { detail?: boolean; onOpen?: () => void; machine?: unknown }) {
   const { t } = useTranslation('assistant')
   const owner = useAuth().user?.id ?? null
   const { devices,cloudComputer } = useDevicesStore()
@@ -18,7 +20,9 @@ export function PhoneProjects({ detail = false,onOpen }: { detail?: boolean; onO
   // an assistant living on the person's own computer must not hide that computer's projects).
   const cloudDeviceId = cloudComputer?.snapshot?.deviceId ?? devices.find(device => device.cloud_computer)?.device_id ?? null
   const read = usePhoneRead(owner ? `account-projects|${owner}` : null,listMyDeviceProjects,'read account project directory',() => 30_000)
-  const projects = useMemo(() => phoneProjectRows(read.state === 'ok' ? read.data : {},devices,cloudDeviceId),[read,devices,cloudDeviceId])
+  // 有哪些项目只读 accountProjectsStore;文件夹路径照账号上各台机器发布的那份。
+  const accountList = accountProjectsStore.projects
+  const projects = useMemo(() => phoneProjectRows(accountList,read.state === 'ok' ? read.data : {},devices,cloudDeviceId),[accountList,read,devices,cloudDeviceId])
   const [selected, setSelected] = useState<string | null>(null)
   const current = selected ? projects.find(project => project.id === selected) : null
   if (!detail) return <AssistantRow leading={<Folder />} title={t('library.workspace')} testId="assistant-library-workspace" onClick={onOpen}
@@ -28,10 +32,10 @@ export function PhoneProjects({ detail = false,onOpen }: { detail?: boolean; onO
     <PageHead title={t('library.workspace')} />
     <ReadView read={read} failedTitle={t('library.failed')}>{() => projects.length
       ? <AssistantSection>{projects.map(project => <AssistantRow key={project.id} leading={<Folder />} title={project.label}
-        detail={project.rootPath} testId={`assistant-project-${project.id}`} onClick={() => setSelected(project.id)} />)}</AssistantSection>
+        detail={project.rootPath ?? undefined} testId={`assistant-project-${project.id}`} onClick={() => setSelected(project.id)} />)}</AssistantSection>
       : <AssistantEmpty>{t('library.noGuguProjects')}</AssistantEmpty>}</ReadView>
   </div>
-}
+})
 
 /** Folder identity is part of device_projects; opening a project performs no device request. */
 function PhoneProjectIndex({ project,onBack }: { project: PhoneProjectEntry; onBack: () => void }) {

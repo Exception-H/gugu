@@ -174,6 +174,7 @@ export const enUSProjectMessages = {
     'Reading this folder timed out. On macOS, allow access to this location in Privacy settings, then retry.',
   'projects.accessBlocked.openSettings': 'Open Privacy Settings',
   'projects.error.retry': 'Retry',
+  'projects.error.accountList': "Couldn't load your projects.",
 
   // ── projects: pending creation ─────────────────────────────────────────
   'projects.pending.creatingRepo': 'Creating repository',
@@ -410,6 +411,7 @@ export const zhCNProjectMessages: Record<ProjectMessageKey, string> = {
     '读取目录超时。在 macOS 上，请在隐私设置中允许访问该位置后重试。',
   'projects.accessBlocked.openSettings': '打开隐私设置',
   'projects.error.retry': '重试',
+  'projects.error.accountList': '项目列表读取失败。',
 
   // ── projects: pending creation ─────────────────────────────────────────
   'projects.pending.creatingRepo': '正在创建仓库',

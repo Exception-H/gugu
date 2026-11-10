@@ -1,3 +1,4 @@
+import type { AccountProject } from '@gugu/core/cloud/deviceProjects';
 import type { SessionpageSessionSummary } from '@gugu/session-core/session-record/contract';
 import { rowOpens } from '@/session/shared/remote-sessions/session-directory';
 import { LOCAL_IMPORT_DEVICE } from '@renderer/features/session-import/import-source';
@@ -12,7 +13,7 @@ import type {
 // 任务历史跨机器合并(项目与机器解耦 §5):项目是账号级的,机器只是每一行的属性。
 // 每台问得到的机器各自给一份排好序的目录页(主进程已按项目归节、排好、截好);离线的机器只有心跳摘要里那 ≤50 条。
 // 这里按同一个排序键把各台的有序列表归并(❌ 重排:单台时顺序与主进程给的逐条相同),再按「节」聚到一起 ——
-// 同一个项目在几台机器上的目录落进同一节。哪一行 / 哪个目录归哪一节由调用方给(它认得侧栏的项目行)。
+// 同一个项目在几台机器上的目录落进同一节。哪一行 / 哪个目录归哪一节由调用方给(它认账号上的项目,accountProjectsStore)。
 
 /** 一行 + 它在哪台机器上。离线机器的行来自心跳摘要:`opens` 照侧栏 / 手机同一条 rowOpens。 */
 export type HistoryEntry = SessionHistoryRow & { machine: string; offline: boolean; opens: boolean };
@@ -32,6 +33,11 @@ export type HistorySection = SectionRef & {
   offline: HistoryEntry[];
   offlineMachines: string[];
 };
+
+/** 一个账号项目的那一节:键 = 项目群,名字 = 项目名(各台机器上的本地项目都归这一节)。 */
+export function historyProjectSection(project: Pick<AccountProject, 'chatId' | 'name'>): SectionRef {
+  return { key: `project:${project.chatId}`, label: project.name, path: null, machine: null };
+}
 
 type Sortable = { updatedAt: number; lastPromptAt: number | null; addedAt: number | null };
 

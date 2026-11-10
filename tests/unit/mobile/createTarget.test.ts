@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import type { Device } from '@gugu/core/shared/types/chat'
 import type { DeviceProject } from '@gugu/core/shared/types/deviceProject'
+import type { AccountProject } from '@gugu/core/cloud/deviceProjects'
 import { accountProjects, createMachines, runCandidates } from '@/mobile/agent-watch/create-target'
 import { defaultRunMachine } from '@renderer/features/projects/components/main-panel/project-device-scope'
 
@@ -23,10 +24,16 @@ describe('手机新建页的「项目 · 机器」(DESIGN 点击路径 4a)', () 
   const mac = machine('mac', true)
   const phone = machine('phone', true, [], true)
   const machines = [mac, wen, juma, gpu, phone]
-  const [work] = accountProjects(machines, null)
+  // 项目只来自 accountProjectsStore(桌面同一份);文件夹路径照各台机器发布的 device_projects。
+  const store: AccountProject[] = [
+    { chatId: 'chat-work', name: 'work', archived: false, bindings: [
+      { deviceId: 'gpu', localProjectId: 'gpu-work' }, { deviceId: 'juma', localProjectId: 'juma-work' }, { deviceId: 'wen', localProjectId: 'wen-work' },
+    ] },
+  ]
+  const [work] = accountProjects(store, machines, null)
 
   it('一个项目在几台机器上有文件夹 = 账号上一个项目,带着各台上的本地项目', () => {
-    expect(accountProjects(machines, null)).toHaveLength(1)
+    expect(accountProjects(store, machines, null)).toHaveLength(1)
     expect(work).toMatchObject({ key: 'chat-work', name: 'work' })
     expect([...work!.homes]).toEqual(expect.arrayContaining([['gpu', 'gpu-work'], ['juma', 'juma-work'], ['wen', 'wen-work']]))
   })
@@ -60,10 +67,17 @@ describe('手机新建页的「项目 · 机器」(DESIGN 点击路径 4a)', () 
     expect(defaultOf(null, machines, 'wen'), 'offline is never the default').toBe('mac')
   })
 
-  it('还没绑项目群的本地项目只在它自己那台上', () => {
-    const solo = machine('solo', true, [record('solo-p', null)])
-    const [project] = accountProjects([solo, gpu], null).filter((one) => one.key !== 'chat-work')
-    expect([...project!.homes]).toEqual([['solo', 'solo-p']])
-    expect(createMachines(project!, [solo, gpu]).map((row) => [row.device.device_id, row.available])).toEqual([['solo', true], ['gpu', false]])
+  it('列出的正好是账号上的项目:哪台上都没有文件夹的也在(没有机器点得动);归档的、只住在助理宿主上的不列', () => {
+    const cloud = machine('cloud', true)
+    const list = accountProjects([
+      ...store,
+      { chatId: 'chat-empty', name: 'paper', archived: false, bindings: [] },
+      { chatId: 'chat-old', name: 'old', archived: true, bindings: [] },
+      { chatId: 'chat-home', name: '助理', archived: false, bindings: [{ deviceId: 'cloud', localProjectId: 'home' }] },
+    ], [...machines, cloud], 'cloud')
+    expect(list.map((one) => one.key)).toEqual(['chat-work', 'chat-empty'])
+    const empty = list[1]!
+    expect([...empty.homes]).toEqual([])
+    expect(createMachines(empty, machines).every((row) => !row.available)).toBe(true)
   })
 })

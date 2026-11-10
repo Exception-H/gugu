@@ -6,7 +6,7 @@ import { ChevronDown, Folder, ListFilter, Monitor } from '@/lib/icons';
 import type { ViewDefinition } from '@renderer/app/view-registry';
 import { restoreArchivedSession } from '@renderer/features/sessions/restore-session-flow';
 import { isImplicitSessionHomeProject, isWorkspaceProject } from '@renderer/features/sessions/session-home-project-constants';
-import { getProjectManagerStore, projectDisplayName } from '@renderer/features/projects/stores/project-selectors';
+import { getProjectManagerStore } from '@renderer/features/projects/stores/project-selectors';
 import { remoteHostsStore } from '@renderer/features/remote-hosts/remote-hosts-store';
 import { useWakeCloudOnce } from '@renderer/features/remote-hosts/use-wake-cloud-once';
 import {
@@ -24,7 +24,7 @@ import { ShellTitlebar } from '@renderer/lib/components/titlebar/shell-titlebar'
 import { toast } from '@renderer/lib/hooks/use-toast';
 import { onMachineEvent, rpcOn } from '@renderer/lib/ipc';
 import { machineRegistry } from '@renderer/lib/machine-routing';
-import { sidebarStore } from '@renderer/lib/stores/app-state';
+import { accountProjectsStore } from '@renderer/features/projects/stores/account-projects-store';
 import { useDebounce } from '@renderer/lib/hooks/useDebounce';
 import { openLink } from '@/lib/guguLinks';
 import { Button } from '@renderer/lib/ui/button';
@@ -59,6 +59,7 @@ import {
   digestEntry,
   digestMatches,
   entryOf,
+  historyProjectSection,
   mergeSorted,
   type HistoryEntry,
   type HistorySection,
@@ -210,30 +211,31 @@ export const SessionHistoryMainPanel = observer(function SessionHistoryMainPanel
     reachable
   );
 
-  // 一节 = 一个侧栏项目行(同一个项目群在几台机器上的本地项目并成一行,rowProjectIdOf);任务工作区一节;
-  // 对不上项目的未导入原件按「机器 · 目录」各一节。
+  // 一节 = 账号上的一个项目(accountProjectsStore.projectOfLocal:各台机器上的本地项目归同一节);任务工作区一节;
+  // 对不上项目的按「机器 · 目录」各一节。
   const projects = getProjectManagerStore().projects;
   const homeRef: SectionRef = { key: SESSION_HOME_SECTION_KEY, label: translate('sessionHistory.taskHomeSection'), path: null, machine: null };
-  const projectRef = (projectId: string, fallbackName: string | null, path: string | null): SectionRef => {
-    const store = projects.get(projectId);
-    if (isImplicitSessionHomeProject({ id: projectId }) || (store && isWorkspaceProject(store))) return homeRef;
-    const rowId = sidebarStore.rowProjectIdOf(projectId);
-    const label = projectDisplayName(projects.get(rowId)) ?? fallbackName ?? (path ? baseName(path) : translate('sessionHistory.noDirectory'));
-    return { key: `project:${rowId}`, label, path: null, machine: null };
-  };
+  const hostOf = (machine: string) => (machine === LOCAL_IMPORT_DEVICE ? null : machine);
   const directoryRef = (machine: string, directory: string | null): SectionRef => {
     if (directory === SESSION_HOME_SECTION_KEY) return homeRef;
     // 未导入的原件落在那台机器上某个项目的文件夹里:进那个项目的一节。
-    const project = directory
+    const local = directory
       ? [...projects.values()].find((p) => p.data?.path === directory && (machineRegistry.machineOf(p.id) ?? LOCAL_IMPORT_DEVICE) === machine)
       : undefined;
-    if (project) return projectRef(project.id, project.name, directory);
+    const account = local ? accountProjectsStore.projectOfLocal(local.id, hostOf(machine)) : undefined;
+    if (account) return historyProjectSection(account);
     return {
       key: `dir:${machine}:${directory ?? ''}`,
       label: directory ? baseName(directory) : translate('sessionHistory.noDirectory'),
       path: directory,
       machine,
     };
+  };
+  const projectRef = (machine: string, projectId: string, directory: string | null): SectionRef => {
+    const store = projects.get(projectId);
+    if (isImplicitSessionHomeProject({ id: projectId }) || (store && isWorkspaceProject(store))) return homeRef;
+    const account = accountProjectsStore.projectOfLocal(projectId, hostOf(machine));
+    return account ? historyProjectSection(account) : directoryRef(machine, directory);
   };
   const offlineEntries = unreachable
     .flatMap((machine) => remoteHostsStore.sessionsOf(machine).sessions.map((session) => digestEntry(machine, session)))
@@ -248,11 +250,11 @@ export const SessionHistoryMainPanel = observer(function SessionHistoryMainPanel
     sectionOfDirectory: (machine, row) => {
       const gugu = row.sessions.find((session) => session.gugu)?.gugu;
       return gugu && row.directory !== SESSION_HOME_SECTION_KEY
-        ? projectRef(gugu.projectId, row.projectName, row.directory)
+        ? projectRef(machine, gugu.projectId, row.directory)
         : directoryRef(machine, row.directory);
     },
     sectionOfEntry: (entry) =>
-      entry.gugu ? projectRef(entry.gugu.projectId, null, entry.directory) : directoryRef(entry.machine, entry.directory),
+      entry.gugu ? projectRef(entry.machine, entry.gugu.projectId, entry.directory) : directoryRef(entry.machine, entry.directory),
   });
   // 只有一台机器的行时不标机器(与侧栏「跟上面那一行比」同一个道理:全是一台就不用说)。
   const spansMachines =

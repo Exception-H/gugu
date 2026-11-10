@@ -11,6 +11,7 @@ import { ComposerBirthGroupChip, ComposerProjectPicker, accountProjects } from '
 import { ComposerFolderPicker } from '@renderer/features/projects/components/main-panel/composer-folder-picker';
 import { useProjectFolderStage } from '@renderer/features/projects/components/main-panel/project-folder-stage';
 import { sidebarStore } from '@renderer/lib/stores/app-state';
+import { accountProjectsStore } from '@renderer/features/projects/stores/account-projects-store';
 import { composerDrafts } from './composer-drafts';
 import { ComposerTray } from './composer-tray';
 import { ensureImplicitSessionHomeProjectId } from './implicit-session-home-project';
@@ -197,7 +198,7 @@ function useChatProjectMemory(chatId: string, deviceId: string | null): string |
       (id) => {
         // 记着的若是并进某一行的(别的机器上同一个项目),按那一行选(与侧栏、项目块同一个身份)。
         const row = id ? sidebarStore.rowProjectIdOf(id) : null;
-        if (live && row && accountProjects().some((project) => project.id === row)) setProjectId(row);
+        if (live && row && accountProjects().some((project) => accountProjectsStore.representativeOf(project.chatId) === row)) setProjectId(row);
       },
       (error: unknown) => log.warn('read the project remembered for a chat failed', { chatId, error: error instanceof Error ? error.message : String(error) }),
     );

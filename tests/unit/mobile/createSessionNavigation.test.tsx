@@ -8,6 +8,8 @@ import { CreateSessionPage } from '../../../apps/desktop/src/mobile/agent-watch/
 import { composerDrafts } from '../../../apps/desktop/src/session/renderer/features/sessions/composer-drafts'
 import { mobileCreationDraftKey } from '../../../apps/desktop/src/mobile/agent-watch/create-session-draft'
 import { createNode, createReactHarness, deferred } from '../../support/testHarness'
+import { accountProjectsStore } from '../../../apps/desktop/src/session/renderer/features/projects/stores/account-projects-store'
+import { runInAction } from 'mobx'
 
 type ComposerClient = ReturnType<typeof useAui>['composer']
 const state = vi.hoisted(() => ({ owner: 'creation-navigation', composer: null as ComposerClient | null }))
@@ -70,7 +72,7 @@ beforeEach(() => {
   rpc.models.mockReset().mockResolvedValue({ harness: 'codex', models: [], efforts: [], selected: null, selectedEffort: null })
   rpc.create.mockReset()
 })
-afterEach(() => harness.cleanup())
+afterEach(() => { harness.cleanup(); accountProjectsStore.clear() })
 
 async function sendFirst() {
   await act(async () => { state.composer!.setText('原来的任务'); state.composer!.send() })
@@ -116,6 +118,8 @@ describe('creation keeps its navigation and draft ownership', () => {
     rpc.create.mockResolvedValue(result)
     const onCreated = vi.fn()
     store.devices = [mac, gpu]
+    // The project list is the account project list (accountProjectsStore); its folder path is gpu's published record.
+    runInAction(() => { accountProjectsStore.list = [{ chatId: 'chat-work', name: 'work', archived: false, bindings: [{ deviceId: 'gpu', localProjectId: 'gpu-work' }] }] })
     await harness.render(createNode(CreateSessionPage, { onBack: vi.fn(), onCreated }))
     const row = (dimension: string) => harness.container.querySelector<HTMLButtonElement>(`[data-testid="agent-watch-create-target-row"][data-dimension="${dimension}"]`)!
     expect(row('project').textContent).toContain('不选项目')

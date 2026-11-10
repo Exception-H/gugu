@@ -16,12 +16,12 @@ import { ProjectCreationMenuItems } from '@renderer/features/projects/components
 import { RemoteProjectMenuItems } from '@renderer/features/sidebar/remote-project-menu-items';
 import { FolderlessProjectItem } from '@renderer/features/projects/components/folderless-project-item';
 import { accountProjectsStore } from '@renderer/features/projects/stores/account-projects-store';
-import { projectGroupsStore } from '@renderer/features/projects/stores/project-groups-store';
+import { AccountProjectsError } from '@renderer/features/projects/components/account-projects-error';
 import {
   getProjectStore,
   projectDisplayName
 } from '@renderer/features/projects/stores/project-selectors';
-import { sidebarStore } from '@renderer/lib/stores/app-state';
+import type { AccountProject } from '@gugu/core/cloud/deviceProjects';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -35,12 +35,11 @@ import { sessionComposerTrayTriggerClassName } from './session-composer-styles';
 import { useSessionMessages } from '@renderer/localization/use-session-messages';
 
 /**
- * 账号下的项目(项目与机器解耦):侧栏上的每一行项目就是一个项目 —— 各台机器上绑在同一个项目群上的本地项目已经并成一行,
- * 只在别的机器上有文件夹的项目也在(那台离线时照账号上记着的那份)。❌ 按「这台电脑上挂没挂上」「在哪台机器上」过滤:
+ * 账号下的项目(项目与机器解耦,accountProjectsStore,归档的不列)。❌ 按「这台电脑上挂没挂上」「在哪台机器上」过滤:
  * 在哪台跑是选了项目之后的事(项目块的机器选择器)。
  */
-export function accountProjects() {
-  return sidebarStore.orderedProjects;
+export function accountProjects(): AccountProject[] {
+  return accountProjectsStore.projects.filter((project) => !project.archived);
 }
 
 /** 菜单顶上的搜索框 —— 本机与别的机器的项目选择器同一个。 */
@@ -101,19 +100,14 @@ export const ComposerProjectPicker = observer(function ComposerProjectPicker({
   const { translate } = useSessionMessages();
   const projects = accountProjects();
   const [projectQuery, setProjectQuery] = useState('');
-  // 搜索按显示名过滤。
-  const visibleProjects = projectQuery.trim()
-    ? projects.filter((p) =>
-        (projectDisplayName(p) ?? p.id).toLowerCase().includes(projectQuery.trim().toLowerCase())
-      )
-    : projects;
-  const displayName = selectedId ? (projectDisplayName(getProjectStore(selectedId)) ?? translate('task.projectFallbackName')) : null;
-  const twins = nameTwinIds(projects.map((p) => ({ id: p.id, name: projectDisplayName(p) })));
-  // 账号上一个文件夹都没有的项目(侧栏上没有它那一行):列在后面,› 里选一台机器给它挂第一个文件夹。
-  const rowGroups = new Set(projects.map((p) => projectGroupsStore.chatIdOf(p.id)).filter(Boolean));
+  // 搜索按项目名过滤。
   const query = projectQuery.trim().toLowerCase();
-  const folderless = accountProjectsStore.withoutFolders
-    .filter((project) => !rowGroups.has(project.chatId) && (!query || project.name.toLowerCase().includes(query)));
+  const visibleProjects = query ? projects.filter((p) => p.name.toLowerCase().includes(query)) : projects;
+  const selectedName = selectedId
+    ? accountProjectsStore.projectOfLocal(selectedId)?.name || projectDisplayName(getProjectStore(selectedId))
+    : null;
+  const displayName = selectedId ? (selectedName || translate('task.projectFallbackName')) : null;
+  const twins = nameTwinIds(projects.map((p) => ({ id: p.chatId, name: p.name })));
 
   return (
     <DropdownMenu onOpenChange={(open) => { if (open) void accountProjectsStore.refresh(); }}>
@@ -146,33 +140,51 @@ export const ComposerProjectPicker = observer(function ComposerProjectPicker({
                   <span>{translate('task.projectSkip')}</span>
                 </DropdownMenuItem>
               ) : null}
-              {visibleProjects.length === 0 && folderless.length === 0 ? (
-                projects.length > 0 ? (
-                  <div className="px-3 py-2 text-xs text-foreground-muted">
-                    {translate('task.projectNoMatch')}
-                  </div>
-                ) : null
+              {accountProjectsStore.status === 'error' ? (
+                <AccountProjectsError className="px-3 py-2 text-xs" />
               ) : (
-                visibleProjects.map((p) => (
-                  <DropdownMenuItem key={p.id} onClick={() => onSelect(p.id)} title={twins.has(p.id) ? p.data?.path : undefined}>
-                    <Folder className="size-3.5" />
-                    <span className="truncate">{projectDisplayName(p) ?? p.id}</span>
-                    {/* 同名的两个项目带上路径区分,与侧栏同一个判据;不同名不带。 */}
-                    {twins.has(p.id) ? (
-                      <small className="ml-auto min-w-0 max-w-[55%] shrink truncate pl-3 text-foreground-passive">{p.data?.path}</small>
-                    ) : null}
-                  </DropdownMenuItem>
-                ))
+                <>
+                  {visibleProjects.length === 0 && projects.length > 0 ? (
+                    <div className="px-3 py-2 text-xs text-foreground-muted">
+                      {translate('task.projectNoMatch')}
+                    </div>
+                  ) : null}
+                  {visibleProjects.map((p) => (
+                    <AccountProjectItem key={p.chatId} project={p} twin={twins.has(p.chatId)} onSelect={onSelect} />
+                  ))}
+                </>
               )}
-              {folderless.map((project) => (
-                <FolderlessProjectItem key={project.chatId} project={project} onProjectReady={onSelect} />
-              ))}
             </div>
             <NewProjectSubmenu onProjectReady={onSelect} />
           </>
         )}
       </DropdownMenuContent>
     </DropdownMenu>
+  );
+});
+
+/**
+ * 选择器里的一个项目:这一端项目表里有它的本地项目 = 选它的代表(去项目块);一个都没有 = › 里给它挂第一个文件夹。
+ */
+const AccountProjectItem = observer(function AccountProjectItem({
+  project,
+  twin,
+  onSelect,
+}: {
+  project: AccountProject;
+  twin: boolean;
+  onSelect: (projectId: string) => void;
+}) {
+  const representative = accountProjectsStore.representativeOf(project.chatId);
+  if (!representative) return <FolderlessProjectItem project={project} onProjectReady={onSelect} />;
+  // 同名的两个项目带上代表那一个的路径区分,与侧栏同一个判据;不同名不带。
+  const path = twin ? getProjectStore(representative)?.data?.path : undefined;
+  return (
+    <DropdownMenuItem onClick={() => onSelect(representative)} title={path} data-chat-id={project.chatId}>
+      <Folder className="size-3.5" />
+      <span className="truncate">{project.name || projectDisplayName(getProjectStore(representative)) || representative}</span>
+      {path ? <small className="ml-auto min-w-0 max-w-[55%] shrink truncate pl-3 text-foreground-passive">{path}</small> : null}
+    </DropdownMenuItem>
   );
 });
 

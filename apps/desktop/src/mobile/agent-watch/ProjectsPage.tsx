@@ -18,8 +18,9 @@ import { AgentWatchNote, AgentWatchScreen } from './AgentWatchChrome'
 import { ConnectionStatus } from '@/components/connection/ConnectionStatus'
 import { DropdownMenu } from '@/components/ui/Menu'
 import { type SessionMenuTarget, SessionActions, SessionRow } from './SessionsPage'
-import { assistantGroupIds, locateSession, projectSectionKey, sessionSections, type SessionNode, type SessionSection } from './session-sections'
+import { assistantGroupIds, locateSession, projectSectionKey, sectionProjects, sessionSections, type SessionNode, type SessionSection } from './session-sections'
 import { useMachineLabel } from './useMachineLabel'
+import { accountProjectsStore } from '@/session/renderer/features/projects/stores/account-projects-store'
 import { directoryMachines, visibleMachines } from './machine-list'
 import { DeviceDirectoryRetry } from './DeviceDirectoryRetry'
 import { PhoneHostSetupEntry } from './PhoneHostSetupEntry'
@@ -120,16 +121,15 @@ export const ProjectsPage = observer(function ProjectsPage({
   const rows = useMemo(() => directoryRows(devices, live), [devices, live])
   const assistantId = assistant?.id ?? null
   const groupIds = useMemo(() => assistantGroupIds(rows, assistantId, homeIds), [rows, assistantId, homeIds])
-  // 项目群来自账号上记着的那份(device_projects):绑同一个群的各台机器上的项目并成一格。
+  // 一个本地项目属于账号上哪个项目,只读 accountProjectsStore(桌面侧栏同一份):同一个项目的各台机器并成一格,格名 = 项目名。
+  const accountList = accountProjectsStore.projects
   const sectionMachines = useMemo(
     () => machines.map((device) => ({
       deviceId: device.device_id,
-      projects: deviceSessionsOf(device, live).projects.map((project) => ({
-        ...project,
-        chatId: device.projects?.find((record) => record.localProjectId === project.id)?.chatId ?? null,
-      })),
+      projects: sectionProjects(device.device_id, deviceSessionsOf(device, live).projects, accountProjectsStore),
     })),
-    [machines, live],
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- projectOfLocal reads accountList (the store's list)
+    [machines, live, accountList],
   )
   const online = useCallback((deviceId: string) => {
     const device = deviceOf.get(deviceId)

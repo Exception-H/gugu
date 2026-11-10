@@ -6,6 +6,7 @@ import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { setLocalePreference } from '@/i18n';
 import type { SessionFailure } from '@renderer/features/sessions/stores/session-failure';
+import type { AccountProject } from '@gugu/core/cloud/deviceProjects';
 import { IMPLICIT_SESSION_HOME_PROJECT_ID } from './session-home-project-constants';
 import { homeView } from '@renderer/app/home-view';
 import { SessionLocalizationProvider } from '@renderer/localization/localization-provider';
@@ -195,6 +196,38 @@ vi.mock('@renderer/lib/stores/app-state', () => ({
     }
   }
 }));
+
+// 项目选择器只列账号上的项目(accountProjectsStore):每个 mocks.orderedProjects 是一个项目(名字 = id),
+// 绑在它所在的机器上;`extra` 是另给的(没有文件夹的等)。
+vi.mock('@renderer/features/projects/stores/account-projects-store', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@renderer/features/projects/stores/account-projects-store')>();
+  const { machineRegistry } = await import('@renderer/lib/machine-routing');
+  const { runInAction } = await import('mobx');
+  class TestAccounts extends actual.AccountProjectsStore {
+    extra: AccountProject[] = [];
+    override get projects(): readonly AccountProject[] {
+      return [
+        ...mocks.orderedProjects.map((project) => ({
+          chatId: `chat-${project.id}`, name: project.id, archived: false,
+          bindings: [{ deviceId: machineRegistry.machineOf(project.id) ?? 'this-computer', localProjectId: project.id }],
+        })),
+        ...this.extra,
+      ];
+    }
+  }
+  const accountProjectsStore = new TestAccounts();
+  accountProjectsStore.attach({
+    projects: { get: (id: string) => (mocks.orderedProjects.some((project) => project.id === id) ? { createdAt: null } : undefined) } as never,
+    machineOf: (id) => machineRegistry.machineOf(id),
+    connected: () => true,
+  });
+  runInAction(() => {
+    accountProjectsStore.localDeviceId = 'this-computer';
+    accountProjectsStore.status = 'ready';
+  });
+  accountProjectsStore.refresh = async () => {};
+  return { ...actual, accountProjectsStore };
+});
 
 const runMachineCloud = vi.hoisted(() => ({ remember: vi.fn(async () => ({})) }));
 vi.mock('@/lib/agentCreateDefaults', () => ({
@@ -697,7 +730,7 @@ describe('NewSessionPage', () => {
   // 项目与机器解耦:账号上一个文件夹都没有的项目也列出来(identity.list_my_projects),› 里是给它挂第一个文件夹的机器。
   it('lists an account project that has no folder on any machine, with machines to give it one', async () => {
     const { accountProjectsStore } = await import('@renderer/features/projects/stores/account-projects-store');
-    accountProjectsStore.projects.replace([
+    (accountProjectsStore as unknown as { extra: AccountProject[] }).extra = ([
       { chatId: 'chat-empty', name: 'paper', archived: false, bindings: [] },
       { chatId: 'chat-old', name: 'retired', archived: true, bindings: [] },
       { chatId: 'chat-bound', name: 'bound', archived: false, bindings: [{ deviceId: 'd', localProjectId: 'p' }] },
@@ -706,10 +739,11 @@ describe('NewSessionPage', () => {
       mocks.orderedProjects = [{ id: 'project-1', state: 'mounted' }];
       await renderPage();
       const folderless = Array.from(container.querySelectorAll('[data-testid="folderless-project"]'));
-      expect(folderless.map((item) => item.textContent?.trim())).toEqual(['paper']);
+      // No folder anywhere, or a folder only on a machine that is not loaded here: both bind a first folder (›); archived ones are not listed.
+      expect(folderless.map((item) => item.textContent?.trim())).toEqual(['paper', 'bound']);
       expect(folderless[0]?.getAttribute('data-chat-id')).toBe('chat-empty');
     } finally {
-      accountProjectsStore.projects.clear();
+      (accountProjectsStore as unknown as { extra: AccountProject[] }).extra = [];
     }
   });
 
@@ -800,6 +834,50 @@ describe('NewSessionPage', () => {
       (container.querySelector('[data-testid="project-create-blank"]') as HTMLButtonElement).click()
     );
     expect(mocks.showAddProjectModal).toHaveBeenCalledWith(expect.objectContaining({ machine: null }));
+  });
+
+  // 项目与机器解耦:选择器只列 accountProjectsStore 里的项目 —— 本机有文件夹的、哪台上都没有文件夹的、文件夹只在一台离线机器上的。
+  it('lists exactly the account projects: a folder here, no folder anywhere, a folder only on an offline machine', async () => {
+    const { accountProjectsStore } = await import('@renderer/features/projects/stores/account-projects-store');
+    const onSelect = vi.fn();
+    machineRegistry.register('device-off', ['project-offline']);
+    mocks.orderedProjects = [{ id: 'project-1', state: 'mounted' }, { id: 'project-offline', state: 'mounted' }];
+    (accountProjectsStore as unknown as { extra: AccountProject[] }).extra = [{ chatId: 'chat-empty', name: 'paper', archived: false, bindings: [] }];
+    try {
+      await act(async () => {
+        root.render(localized(React.createElement(ComposerProjectPicker, { selectedId: undefined, onSelect })));
+      });
+      const listed = Array.from(container.querySelectorAll('[data-chat-id]'));
+      expect(listed.map((item) => [item.getAttribute('data-chat-id'), item.textContent?.trim()])).toEqual([
+        ['chat-project-1', 'project-1'],
+        ['chat-project-offline', 'project-offline'],
+        ['chat-empty', 'paper'],
+      ]);
+      expect(listed[2]?.getAttribute('data-testid')).toBe('folderless-project');
+      await act(async () => (listed[1] as HTMLButtonElement).click());
+      expect(onSelect).toHaveBeenCalledWith('project-offline');
+    } finally {
+      act(() => {
+        machineRegistry.forgetMachine('device-off');
+        (accountProjectsStore as unknown as { extra: AccountProject[] }).extra = [];
+      });
+    }
+  });
+
+  it('shows the read error with a retry instead of any project list when the account projects cannot be read', async () => {
+    const { accountProjectsStore } = await import('@renderer/features/projects/stores/account-projects-store');
+    mocks.orderedProjects = [{ id: 'project-1', state: 'mounted' }];
+    const { runInAction } = await import('mobx');
+    runInAction(() => { accountProjectsStore.status = 'error'; });
+    try {
+      await act(async () => {
+        root.render(localized(React.createElement(ComposerProjectPicker, { selectedId: undefined, onSelect: vi.fn() })));
+      });
+      expect(container.querySelector('[data-testid="account-projects-error"]')).not.toBeNull();
+      expect(container.querySelectorAll('[data-chat-id]')).toHaveLength(0);
+    } finally {
+      act(() => runInAction(() => { accountProjectsStore.status = 'ready'; }));
+    }
   });
 
 

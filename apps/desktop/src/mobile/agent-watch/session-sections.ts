@@ -14,6 +14,7 @@ import { assistantDescendants, isAssistantSession } from '@/session/renderer/fea
 import { sidebarStateGroup } from '@/session/renderer/features/sidebar/session-groups'
 import { sessionPresentation } from './watch-status'
 import type { SessionDirectoryRow } from '@/session/shared/remote-sessions/session-directory'
+import type { AccountProjectsStore } from '@/session/renderer/features/projects/stores/account-projects-store'
 
 export type SessionNode = SessionTreeNode<{
   id: string
@@ -44,8 +45,23 @@ export type SessionSection = {
   count: number
 }
 
-/** 一台机器报上来的项目,带账号上记着的项目群(device_projects.chat_id;没绑 = null / 缺席)。 */
+/** 一台机器报上来的项目,带它属于的账号项目(accountProjectsStore.projectOfLocal 的项目群;不属于 = null / 缺席)。 */
 export type SectionProject = SessionpageProjectSummary & { chatId?: string | null }
+
+/**
+ * 一台机器报上来的项目,认成账号上的项目(accountProjectsStore.projectOfLocal,桌面侧栏同一份):属于同一个项目的
+ * 各台机器上的本地项目并成一格,格名 = 项目名。不属于账号上任何项目的照旧是它那台机器上的一格。
+ */
+export function sectionProjects(
+  deviceId: string,
+  projects: readonly SessionpageProjectSummary[],
+  accounts: Pick<AccountProjectsStore, 'projectOfLocal'>,
+): SectionProject[] {
+  return projects.map((project) => {
+    const account = accounts.projectOfLocal(project.id, deviceId)
+    return { ...project, name: account?.name || project.name, chatId: account?.chatId ?? null }
+  })
+}
 
 /** 页上列出的一台机器与它报上来的项目(次序 = 它们在页上的次序)。 */
 export type SectionMachine = { deviceId: string; projects: readonly SectionProject[] }
