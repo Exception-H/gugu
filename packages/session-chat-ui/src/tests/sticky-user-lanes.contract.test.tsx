@@ -124,6 +124,44 @@ describe('sticky user lanes', () => {
     expect(t.pinTop('a-user')).toBeCloseTo(PIN_LINE, 0);
     expect(t.cardTop('a-user')!, 'the message itself scrolled away').toBeLessThan(0);
   });
+  it('draws a long message\'s summary only once the whole message is above the viewport', async () => {
+    const long: TranscriptTurn = { id: 'a', seq: 0, initiator: 'user', items: [
+      { kind: 'message', id: 'a-user', seq: 0, role: 'user', text: 'A long question that folds. '.repeat(60) },
+      // The agent conversation folds a turn's commentary into its process: one full final answer fills the turn.
+      { kind: 'message', id: 'a-final', seq: 1, role: 'assistant',
+        text: Array.from({ length: 150 }, (_, i) => `a reply ${i}. Lorem ipsum dolor sit amet.`).join('\n\n') },
+    ] as TranscriptTurn['items'] };
+    const theme = buildChatTheme(DEFAULT_CONFIG, { preset: 'double', userGutter: 72, agentConversation: true });
+    const t = await mount([long, longTurn('b', 1, 150)], undefined, theme);
+    t.host.querySelector<HTMLButtonElement>('[data-expand-user-card="a-final"]')!.click();
+    await untilStable('the full final answer is measured', () => t.scrollEl.scrollHeight);
+    const edge = () => t.scrollEl.getBoundingClientRect().top;
+    const shown = () => pinnedSummaryShown(t.summary('a-user')!);
+    const bottom = () => t.host.querySelector<HTMLElement>('[data-row-kind="message"][data-item-id="a-user"]')!.getBoundingClientRect().bottom - edge();
+    const check = async (expanded: boolean) => {
+      expect(t.card('a-user')!.getBoundingClientRect().height, 'several lines').toBeGreaterThan(100);
+      // Every position where some of the message is still on screen, down to its last pixel: no summary.
+      const frames = () => new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)));
+      for (const left of [200, 120, 60, 20, 4, 1]) {
+        t.scrollEl.scrollTop += bottom() - left;
+        await frames();
+        expect(bottom(), `${expanded} positioned`).toBeCloseTo(left, 0);
+        expect(shown(), `${expanded}: ${left}px of the message still on screen`).toBe(false);
+      }
+      t.scrollEl.scrollTop += bottom() + 1;
+      await frames();
+      expect(bottom(), `${expanded}: scrolled past the message`).toBeLessThan(0);
+      expect(shown(), `${expanded}: drawn once the message has left`).toBe(true);
+      expect(t.pinTop('a-user')).toBeCloseTo(PIN_LINE, 0);
+    };
+    await check(false);
+    await t.scrollTo(0);
+    t.card('a-user')!.click();
+    await until('a expanded', () => t.card('a-user')!.getBoundingClientRect().height, h => h > 400);
+    await t.scrollTo(0);
+    await check(true);
+  });
+
   it('sticks the user row in the same frame as the scroll, deep inside a long turn', async () => {
     const t = await mount();
     for (const st of [200, 900, 1700, 2600]) {
