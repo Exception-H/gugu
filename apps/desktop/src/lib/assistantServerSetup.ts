@@ -196,8 +196,11 @@ async function drive(record: AssistantServerSetupRecord, options: AssistantServe
     return result
   } catch (cause) {
     if ((cause as Error)?.name === 'AbortError') throw cause
+    const code = (cause as { code?: string })?.code
+    // A missing verb means the server's build is older; a policy refusal means it refused this account, not its version.
     const failure = cause instanceof AssistantServerSetupError ? { code: cause.code, retryable: cause.retryable, next: cause.next }
-      : (cause as { code?: string })?.code === 'server_outdated' || (cause as { code?: string })?.code === 'unknown_method'
+      : code === 'forbidden' ? assistantServerFailure('target_not_owned')
+      : code === 'server_outdated' || code === 'unknown_method'
         || String((cause as Error)?.message).includes("No handler registered for 'assistantHome.") ? assistantServerFailure('server_update_required')
       : assistantServerFailure(provisioning ? 'provision_failed' : 'target_unreachable')
     options.onProgress?.({ phase: 'failed', cancellable: !record.installationStarted, error: failure })
