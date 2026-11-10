@@ -14,8 +14,8 @@ export function imagePixelSize(b: Uint8Array): { width: number; height: number }
   if (b.length >= 10 && (ascii(0, 6) === 'GIF87a' || ascii(0, 6) === 'GIF89a')) return size(u16le(6), u16le(8))
   if (b.length >= 25 && ascii(0, 4) === 'RIFF' && ascii(8, 12) === 'WEBP') {
     const chunk = ascii(12, 16)
-    if (chunk === 'VP8 ' && b.length >= 30) return size(u16le(26) & 0x3fff, u16le(28) & 0x3fff)
-    if (chunk === 'VP8L') { const bits = (b[21]! | (b[22]! << 8) | (b[23]! << 16) | (b[24]! << 24)) >>> 0; return size((bits & 0x3fff) + 1, ((bits >>> 14) & 0x3fff) + 1) }
+    if (chunk === 'VP8 ' && b.length >= 30 && (b[20]! & 1) === 0 && ascii(23, 26) === '\x9d\x01\x2a') return size(u16le(26) & 0x3fff, u16le(28) & 0x3fff)
+    if (chunk === 'VP8L' && b[20] === 0x2f) { const bits = (b[21]! | (b[22]! << 8) | (b[23]! << 16) | (b[24]! << 24)) >>> 0; return size((bits & 0x3fff) + 1, ((bits >>> 14) & 0x3fff) + 1) }
     if (chunk === 'VP8X' && b.length >= 30) return size(u24le(24) + 1, u24le(27) + 1)
     return null
   }
