@@ -42,7 +42,7 @@ const NameRow = observer(function NameRow({ id, userId, name, query, onOpen }: {
   const identity = useAvatarIdentity(userId)
   return (
     <button type="button" data-testid="global-search-name" data-id={id} onClick={onOpen} className="gg-list-row gg-row">
-      <ListRowContent leading={<Avatar name={identity?.display_name ?? name} avatarUrl={identity?.avatar} seed={id} size="sm" isAgent={identity?.type === 'agent'} still />}
+      <ListRowContent leading={<Avatar name={identity?.display_name ?? name} avatarUrl={identity?.avatar} seed={id} size={20} isAgent={identity?.type === 'agent'} still />}
         title={<Highlighted text={name} query={query} />} />
     </button>
   )
@@ -270,7 +270,7 @@ export function GlobalSearch({ tasks, names = false, onClose, onOpen }: { tasks:
         {groups.map((group) => (
           <Fragment key={group.key}>
             {!scoped && <button type="button" title={translate('globalSearch.scopeTo')}
-              className="flex w-full items-center gap-2 px-3 pb-1 pt-3 text-left text-xs text-foreground/45 hover:text-foreground/70"
+              className="flex w-full items-center gap-2 px-2 pb-1 pt-3 text-left text-xs text-foreground/45 hover:text-foreground/70"
               onClick={() => setChips([...chips, group.scope])}>
               <span className="truncate font-medium">{group.label}</span>
               {group.task && <span className="shrink-0 text-foreground/35">· {translate('globalSearch.task')}</span>}
@@ -282,7 +282,7 @@ export function GlobalSearch({ tasks, names = false, onClose, onOpen }: { tasks:
                 <button type="button" role="option" aria-selected={isSelected} data-selected={isSelected} key={hit.id}
                   onMouseMove={() => { if (!isSelected) updateSearchSession({ selectedId: hit.id }) }}
                   onClick={() => open(hit)}
-                  className={cn('flex w-full items-start gap-3 rounded-lg px-3 py-2 text-left outline-none', isSelected && 'bg-foreground/[0.06]')}>
+                  className={cn('flex w-full items-start gap-[var(--row-gap)] rounded-lg px-2 py-2 text-left outline-none', isSelected && 'bg-foreground/[0.06]')}>
                   <ResultAvatar hit={hit} name={sender} />
                   <span className="min-w-0 flex-1">
                     <span className="line-clamp-2 text-sm leading-5 text-foreground/85"><Highlighted text={hit.text} query={view.query} /></span>
