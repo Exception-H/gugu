@@ -137,7 +137,7 @@ App 开源，审核后进市场。想要的 App 不存在，就在聊天里描�
 
 用微信扫码，打开当前的群二维码，长按识别即可加入，和团队及其他用户交流：
 
-<img src="docs/assets/gugu-wechat-qr.svg" width="220" alt="咕咕微信群二维码">
+<img src="docs/assets/gugu-wechat-qr.svg" width="240" alt="咕咕微信群二维码，打开 gugu.nextmind.space">
 
 ## 参与贡献
 

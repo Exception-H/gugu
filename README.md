@@ -137,7 +137,7 @@ See the [community setup guide](docs/guides/self-hosting.md) for configuration a
 
 Scan with WeChat to open the current group code, then long-press it to join and talk with the team and other users:
 
-<img src="docs/assets/gugu-wechat-qr.svg" width="220" alt="gugu WeChat group QR code">
+<img src="docs/assets/gugu-wechat-qr.svg" width="240" alt="gugu WeChat group QR code, opens gugu.nextmind.space">
 
 ## Contributing
 
