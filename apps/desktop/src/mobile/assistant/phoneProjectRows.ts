@@ -1,24 +1,19 @@
 import type { Device } from '@gugu/core/shared/types/chat'
 import type { AccountProject } from '@gugu/core/cloud/deviceProjects'
-import type { DeviceProject, DeviceProjectFolder } from '@gugu/core/shared/types/deviceProject'
-import { isAssistantHome } from '@/lib/assistantHome'
+import type { DeviceProjectFolder } from '@gugu/core/shared/types/deviceProject'
+import type { AssistantHomeRow } from '@/lib/assistantHome'
+import { hasStaleMember, phoneAccountProjects } from '../phoneAccountProjects'
 
-export type PhoneProjectEntry = { id: string; label: string; rootPath: string | null; folders: DeviceProjectFolder[] }
+/** `stale` = 那台(文件夹上)/ 有一台(项目上)的文件夹这一端没读到,列着的是上次那份。 */
+export type PhoneProjectEntry = { id: string; label: string; rootPath: string | null; folders: (DeviceProjectFolder & { stale: boolean })[]; stale: boolean }
 
 /**
- * 手机上的项目列表:项目 = accountProjectsStore(桌面侧栏同一份,❌ 自己按群拼 device_projects);
- * 文件夹路径照各台机器发布的 device_projects(`records`,按这个项目的绑定取)。
- * #1629 parity: projects bound only on the personal assistant's own host are the assistant's home, not the
- * person's projects, so the list leaves them out (host identity is the device row, never the project name).
+ * 手机「助理 → 工作区」的项目列表:项目与合并只走 phoneAccountProjects(accountProjectsStore 那一份);文件夹路径照
+ * 设备 store 里各台机器发布的 device_projects(❌ 这一页自己再读一份)。
  */
-export function phoneProjectRows(projects: readonly AccountProject[], records: Record<string, DeviceProject[]>, devices: readonly Device[], cloudDeviceId: string | null): PhoneProjectEntry[] {
-  const byDevice = new Map(devices.map(device => [device.device_id,device]))
-  const assistantHost = (deviceId: string) => { const device = byDevice.get(deviceId); return device ? isAssistantHome(device,cloudDeviceId) : deviceId === cloudDeviceId }
-  return projects.flatMap(project => {
-    if (project.archived) return []
-    if (project.bindings.length > 0 && project.bindings.every(binding => assistantHost(binding.deviceId))) return []
-    const folders = project.bindings.filter(binding => !assistantHost(binding.deviceId))
-      .flatMap(binding => records[binding.deviceId]?.find(record => record.localProjectId === binding.localProjectId)?.folders ?? [])
-    return [{ id: project.chatId,label: project.name,rootPath: folders[0]?.path ?? null,folders }]
+export function phoneProjectRows(projects: readonly AccountProject[], devices: readonly Device[], isHome: (device: AssistantHomeRow) => boolean): PhoneProjectEntry[] {
+  return phoneAccountProjects(projects, devices, isHome).map(({ project, members }) => {
+    const folders = members.flatMap((member) => (member.record?.folders ?? []).map((folder) => ({ ...folder, stale: !!member.device.projects_error })))
+    return { id: project.chatId, label: project.name, rootPath: folders[0]?.path ?? null, folders, stale: hasStaleMember(members) }
   })
 }

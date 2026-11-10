@@ -15,7 +15,7 @@ const mocks = vi.hoisted(() => ({
 
 vi.mock('../../../../apps/desktop/src/store/auth', () => ({ useAuth: () => ({ user: { id: 'account-a' } }) }))
 vi.mock('../../../../apps/desktop/src/lib/chat', () => ({ chatService: { listDevices: mocks.listDevices } }))
-vi.mock('../../../../apps/desktop/src/lib/deviceProjects', () => ({ listMyDeviceProjects: async () => [] }))
+vi.mock('../../../../apps/desktop/src/lib/deviceProjects', () => ({ listMyDeviceProjects: async () => [], listMyAccountProjects: async () => [] }))
 vi.mock('../../../../apps/desktop/src/store/chatContext', () => ({
   useChatStore: () => ({ subscribeAccountRevision: () => () => undefined }),
 }))

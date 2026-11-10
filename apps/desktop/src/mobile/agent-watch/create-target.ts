@@ -4,6 +4,7 @@ import { deviceAcceptsWork } from '@gugu/core/cloud/cloudComputer'
 import type { RunMachineCandidate } from '@renderer/features/projects/components/main-panel/project-device-scope'
 import type { AccountProject } from '@gugu/core/cloud/deviceProjects'
 import { isAssistantHome } from '@/lib/assistantHome'
+import { phoneAccountProjects } from '../phoneAccountProjects'
 
 /**
  * 手机「+」新建页的「项目 · 机器」两行(DESIGN 点击路径 4a):项目是账号上的,机器只是这一次跑在哪。
@@ -15,25 +16,15 @@ export type CreateProject = { key: string; name: string; homes: ReadonlyMap<stri
 
 /**
  * 账号下的项目 = accountProjectsStore(桌面项目选择器同一份,归档的不列);各台机器上的本地项目就是它的绑定。
- * #1629 只绑在个人助理云端宿主上的项目是助理的家,不列;那台宿主也不算项目的机器。
+ * 合并与助理宿主的判据只走 phoneAccountProjects(#1629 只绑在个人助理宿主上的项目是助理的家,不列;那台宿主也不算项目的机器)。
  */
 export function accountProjects(projects: readonly AccountProject[], devices: readonly Device[], cloudDeviceId: string | null): CreateProject[] {
-  const byDevice = new Map(devices.map((device) => [device.device_id, device]))
-  const assistantHost = (deviceId: string) => {
-    const device = byDevice.get(deviceId)
-    return device ? isAssistantHome(device, cloudDeviceId) : deviceId === cloudDeviceId
-  }
-  return projects.flatMap((project) => {
-    if (project.archived) return []
-    if (project.bindings.length > 0 && project.bindings.every((binding) => assistantHost(binding.deviceId))) return []
-    const homes = project.bindings.filter((binding) => byDevice.has(binding.deviceId) && !assistantHost(binding.deviceId))
-    return [{
-      key: project.chatId,
-      groupId: project.chatId,
-      name: project.name,
-      homes: new Map(homes.map((binding) => [binding.deviceId, binding.localProjectId] as const)),
-    }]
-  })
+  return phoneAccountProjects(projects, devices, (device) => isAssistantHome(device, cloudDeviceId)).map(({ project, members }) => ({
+    key: project.chatId,
+    groupId: project.chatId,
+    name: project.name,
+    homes: new Map(members.map((member) => [member.device.device_id, member.localProjectId] as const)),
+  }))
 }
 
 /**

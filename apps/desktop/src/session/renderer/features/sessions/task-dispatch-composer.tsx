@@ -7,11 +7,12 @@ import { useNewSessionMachine } from '@renderer/features/remote-hosts/use-new-se
 import { useSessionMessages } from '@renderer/localization/use-session-messages';
 import { sessionpageMessageHost } from '@renderer/lib/sessionpage-message-host';
 import { log } from '@renderer/utils/logger';
-import { ComposerBirthGroupChip, ComposerProjectPicker, accountProjects } from './composer-context-tray';
+import { ComposerBirthGroupChip, ComposerProjectPicker } from './composer-context-tray';
 import { ComposerFolderPicker } from '@renderer/features/projects/components/main-panel/composer-folder-picker';
 import { useProjectFolderStage } from '@renderer/features/projects/components/main-panel/project-folder-stage';
-import { sidebarStore } from '@renderer/lib/stores/app-state';
 import { accountProjectsStore } from '@renderer/features/projects/stores/account-projects-store';
+import { rememberedTaskRow, taskProjectChoice } from './task-project-memory';
+import { machineRegistry } from '@renderer/lib/machine-routing';
 import { composerDrafts } from './composer-drafts';
 import { ComposerTray } from './composer-tray';
 import { ensureImplicitSessionHomeProjectId } from './implicit-session-home-project';
@@ -70,7 +71,8 @@ export const TaskDispatchComposer = observer(function TaskDispatchComposer({
   const pickProject = (projectId: string | undefined) => {
     setSelectedId(projectId);
     if (localDeviceId) {
-      void sessionpageMessageHost().rememberTaskProject(chatId, localDeviceId, projectId ?? null).catch((error: unknown) => {
+      const choice = taskProjectChoice(projectId, localDeviceId, (id) => machineRegistry.machineOf(id));
+      void sessionpageMessageHost().rememberTaskProject(chatId, choice.deviceId, choice.projectId).catch((error: unknown) => {
         log.warn('remember the project picked for a chat failed', { chatId, error: error instanceof Error ? error.message : String(error) });
       });
     }
@@ -188,23 +190,20 @@ function useLocalDeviceId(): string | null {
   return id;
 }
 
-/** 这个对话在这台电脑上记着的项目(还挂在这台电脑上的才算);没记过 = 最近一次选的。 */
+/** 这个对话记着的项目(哪台机器上的都算,认回账号上的项目);没记过 = 这台电脑上最近一次选的。 */
 function useChatProjectMemory(chatId: string, deviceId: string | null): string | undefined {
-  const [projectId, setProjectId] = useState<string | undefined>(undefined);
+  const [remembered, setRemembered] = useState<{ chatId: string; choice: { deviceId: string; projectId: string } } | null>(null);
   useEffect(() => {
     if (!deviceId) return;
     let live = true;
     void sessionpageMessageHost().rememberedTaskProject(chatId, deviceId).then(
-      (id) => {
-        // 记着的若是并进某一行的(别的机器上同一个项目),按那一行选(与侧栏、项目块同一个身份)。
-        const row = id ? sidebarStore.rowProjectIdOf(id) : null;
-        if (live && row && accountProjects().some((project) => accountProjectsStore.representativeOf(project.chatId) === row)) setProjectId(row);
-      },
+      (choice) => { if (live && choice) setRemembered({ chatId, choice }); },
       (error: unknown) => log.warn('read the project remembered for a chat failed', { chatId, error: error instanceof Error ? error.message : String(error) }),
     );
     return () => { live = false; };
   }, [chatId, deviceId]);
-  return projectId;
+  // 在 observer 的渲染里认:账号上的项目列表读到 / 变了,跟着重认(❌ 只在读回记忆那一刻认一次)。
+  return remembered?.chatId === chatId ? rememberedTaskRow(remembered.choice, accountProjectsStore) : undefined;
 }
 
 /** 没选项目:与新建会话页同一个隐式工作目录(「未选择项目」是真状态,不是列表第一个)。 */

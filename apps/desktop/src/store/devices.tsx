@@ -15,6 +15,7 @@ import { readDeviceRevision } from '../lib/accountRevisionCoordinator'
 import type { AccountRevisionOperation } from '../lib/accountRevisionRuntime'
 import { cachedDevicesAccount, deviceCacheAction, readCachedDevices, writeCachedDevices } from './devicesCache'
 import { withDeviceProjects } from '@gugu/core/cloud/deviceProjects'
+import { withProjectsRead } from './deviceProjectsRead'
 import { listMyDeviceProjects } from '../lib/deviceProjects'
 import { accountProjectsStore } from '@/session/renderer/features/projects/stores/account-projects-store'
 import { withSshLinkOnline } from '../lib/sshLinkOnline'
@@ -59,16 +60,19 @@ export function DevicesProvider({ children, active = true }: { children: React.R
     setError(null)
     try {
       // #7199 一次读全(含手机):设置 → 设备要列出手机;「在哪跑」等只读下面拆出来的 devices(没有手机)。
-      // #113 同时读账号上记着的各台机器的项目:那份读不到不拖垮设备列表 —— 各台沿用上一份,原因进日志。
+      // #113 同时读账号上记着的各台机器的项目:那份读不到不拖垮设备列表 —— 各台沿用上一份,但记下没读到(projects_error),
+      // 画项目文件夹的地方把它们标成「上次的」。
+      let projectsError: string | null = null
       const [listed, projects] = await Promise.all([
         chatService.listDevices({ includePhones: true }),
         listMyDeviceProjects().catch((err: unknown) => {
           if (isLifecycleCancellation(err)) throw err
-          devicesLog.warn({ err: String((err as Error)?.message ?? err) }, 'list device projects failed')
+          projectsError = String((err as Error)?.message ?? err)
+          devicesLog.warn({ err: projectsError }, 'list device projects failed')
           return null
         }),
       ])
-      const rows = withDeviceProjects(listed, projects, devicesRef.current)
+      const rows = withProjectsRead(withDeviceProjects(listed, projects, devicesRef.current), projectsError, devicesRef.current)
       setDevices(sortDevices(rows))
       writeCachedDevices(userId, rows)
       // #6264 在别的电脑上被移除的远程 SSH 机器,这台电脑也忘掉它(只凭刚成功读到的完整名单对账)。
@@ -89,6 +93,8 @@ export function DevicesProvider({ children, active = true }: { children: React.R
       // ❌ 别把这一行删了只留 setError：那样两边都看不到原因，比原样外泄更糟。
       devicesLog.error({ err: String((err as Error)?.message ?? err) }, 'list devices failed')
       setError(String((err as Error)?.message ?? err))
+      // 列着的(含首帧的缓存)各台项目这一次也没读到。
+      setDevices((rows) => withProjectsRead(rows, String((err as Error)?.message ?? err), rows))
       if (options.throwOnError) throw err
     } finally {
       setLoading(false)
@@ -177,13 +183,17 @@ export function DevicesProvider({ children, active = true }: { children: React.R
     } catch (err) {
       // 与整读同一条:本机还没认出自己时不算失败,认出那一刻会整读一次(上面)。
       if (isLocalDeviceUnidentified(err)) return
-      if (!isLifecycleCancellation(err)) devicesLog.error({ err: String((err as Error)?.message ?? err) }, 'read changed devices failed')
+      if (!isLifecycleCancellation(err)) {
+        devicesLog.error({ err: String((err as Error)?.message ?? err) }, 'read changed devices failed')
+        // 重读那几台的项目没成(游标会重试):重试成功前它们列着的是上次的。
+        if (projectsOf.size > 0) setDevices((rows) => withProjectsRead(rows, String((err as Error)?.message ?? err), rows, projectsOf))
+      }
       throw err
     }
     // 那几台此刻的样子(没读回来的 = 已经不在了);其余各台原样,项目没变就沿用。
     const fresh = listed.filter((row) => changed.has(row.device_id))
     const kept = devicesRef.current.filter((row) => !changed.has(row.device_id) && !removed.has(row.device_id))
-    const rows = withDeviceProjects([...kept, ...fresh], projects, devicesRef.current, projectsOf)
+    const rows = withProjectsRead(withDeviceProjects([...kept, ...fresh], projects, devicesRef.current, projectsOf), null, devicesRef.current, projectsOf)
     setDevices(sortDevices(rows))
     writeCachedDevices(userId, rows)
     if (removed.size > 0) void desktopIpc()?.invoke(SERVER_SSH_MACHINES_CHANNELS.reconcile, { owner: userId, present: rows.map((row) => row.device_id) }).catch(() => undefined)

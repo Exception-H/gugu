@@ -217,6 +217,21 @@ export function resolveAgentCreateProject(
   return availableProjectIds.includes(remembered) ? remembered : null
 }
 
+/**
+ * 在这个对话里派任务记着的项目:这个对话选过的(哪台机器上的都算 —— 项目可以在别的机器上),否则 `localDeviceId` 这台上
+ * 最近一次选的。返回(机器, 那台上的本地项目);由调用方认回账号上的项目。
+ */
+export function rememberedChatProject(
+  defaults: AgentCreateDefaults,
+  chatId: string,
+  localDeviceId: string,
+): { deviceId: string; projectId: string } | null {
+  const inChat = defaults.projectByChat[chatId]
+  if (inChat) return inChat
+  const recent = defaults.projectByDevice[localDeviceId]
+  return recent ? { deviceId: localDeviceId, projectId: recent } : null
+}
+
 /** 记着的那个项目(还没对照可用列表):这个对话在这台设备上选过的,否则这台设备上最近一次选的。 */
 export function rememberedAgentCreateProject(
   defaults: AgentCreateDefaults,

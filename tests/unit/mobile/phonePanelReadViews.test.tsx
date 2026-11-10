@@ -33,3 +33,15 @@ it('bounds persona reads and retains the error while reloading',async () => {
   await act(async () => { result!.reload() })
   expect(result).toMatchObject({ loading: false,error: { code: 'read-timeout' } })
 })
+// Audit R8: a failed background re-read kept the last data and dropped the error. The page keeps the last data
+// and says this read failed.
+it('shows a failed re-read above the last data instead of dropping it',async () => {
+  const reload = vi.fn()
+  await h.render(<ReadView read={{ state: 'ok',data: ['kept note'],refreshError: new Error('permission denied'),reload }} failedTitle="read">
+    {(data: string[]) => <ul>{data.map(item => <li key={item}>{item}</li>)}</ul>}
+  </ReadView>)
+  expect(h.container.querySelector('[data-testid="assistant-read-refresh-failed"]')?.getAttribute('role')).toBe('alert')
+  expect(h.container.querySelector('li')?.textContent).toBe('kept note')
+  await h.render(<ReadView read={{ state: 'ok',data: ['fresh'],reload }} failedTitle="read">{(data: string[]) => <span>{data[0]}</span>}</ReadView>)
+  expect(h.container.querySelector('[data-testid="assistant-read-refresh-failed"]')).toBeNull()
+})

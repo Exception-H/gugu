@@ -3,8 +3,12 @@ import type { Device } from '@gugu/core/shared/types/chat'
 import type { AccountProject } from '@gugu/core/cloud/deviceProjects'
 import type { DeviceProject } from '@gugu/core/shared/types/deviceProject'
 import { phoneProjectRows } from '../../../../apps/desktop/src/mobile/assistant/phoneProjectRows'
+import { isAssistantHome } from '../../../../apps/desktop/src/lib/assistantHome'
 
-// The phone project list is the account project list (accountProjectsStore); folder paths come from device_projects.
+const homeOf = (cloudDeviceId: string | null) => (row: Parameters<typeof isAssistantHome>[0]) => isAssistantHome(row, cloudDeviceId)
+
+// The phone project list is the account project list (accountProjectsStore); folder paths come from the devices
+// store's device_projects (no read of its own).
 // #1629 parity: a project bound only on the personal assistant's host is not one of the person's projects.
 
 const device = (id: string, extra: Partial<Device> = {}): Device => ({
@@ -31,13 +35,12 @@ const project = (chatId: string, name: string, bindings: Array<[string, string]>
 })
 
 describe('phone projects list = account projects', () => {
-  it('one entry per account project, folders of every machine it is bound on, named by the project', () => {
-    const records = { laptop: [record('l-paper')], desk: [record('d-paper')] }
+  it('one entry per account project, folders of every machine it is bound on (connected machine first), named by the project', () => {
     const rows = phoneProjectRows([
       project('chat-paper', 'Paper', [['laptop', 'l-paper'], ['desk', 'd-paper']]),
       project('chat-empty', 'Empty', []),
       project('chat-old', 'Old', [], true),
-    ], records, [device('laptop'), device('desk')], null)
+    ], [device('laptop', { projects: [record('l-paper')] }), device('desk', { projects: [record('d-paper')], is_online: false })], homeOf(null))
     expect(rows.map(row => [row.id, row.label, row.folders.map(folder => folder.path)])).toEqual([
       ['chat-paper', 'Paper', ['/home/l-paper', '/home/d-paper']],
       ['chat-empty', 'Empty', []],
@@ -46,17 +49,23 @@ describe('phone projects list = account projects', () => {
   })
 
   it('drops a project bound only on the assistant host (by device row or by the cloud host id), keeps the same name elsewhere', () => {
-    const devices = [device('cloud-host', { capabilities: { assistant_home: true } as Device['capabilities'] }), device('laptop')]
-    const records = { 'cloud-host': [record('home')], laptop: [record('l1')] }
+    const devices = [device('cloud-host', { capabilities: { assistant_home: true } as Device['capabilities'], projects: [record('home')] }), device('laptop', { projects: [record('l1')] })]
     const list = [project('chat-home', '助理', [['cloud-host', 'home']]), project('chat-l1', '助理', [['laptop', 'l1']]), project('chat-x', 'x', [['cloud-x', 'x1']])]
-    expect(phoneProjectRows(list, records, devices, null).map(row => row.id)).toEqual(['chat-l1', 'chat-x'])
-    expect(phoneProjectRows(list, records, devices, 'cloud-x').map(row => row.id)).toEqual(['chat-l1'])
+    expect(phoneProjectRows(list, devices, homeOf(null)).map(row => row.id)).toEqual(['chat-l1', 'chat-x'])
+    expect(phoneProjectRows(list, devices, homeOf('cloud-x')).map(row => row.id)).toEqual(['chat-l1'])
   })
 
   it('does not mutate the published account records', () => {
-    const records = { laptop: [record('l1')] }
-    const before = JSON.stringify(records)
-    phoneProjectRows([project('chat-l1', 'Paper', [['laptop', 'l1']])], records, [device('laptop')], null)
-    expect(JSON.stringify(records)).toBe(before)
+    const devices = [device('laptop', { projects: [record('l1')] })]
+    const before = JSON.stringify(devices)
+    phoneProjectRows([project('chat-l1', 'Paper', [['laptop', 'l1']])], devices, homeOf(null))
+    expect(JSON.stringify(devices)).toBe(before)
+  })
+
+  it('marks the folders of a machine whose projects this end could not read (projects_error) as stale', () => {
+    const [row] = phoneProjectRows([project('chat-paper', 'Paper', [['laptop', 'l-paper'], ['desk', 'd-paper']])],
+      [device('laptop', { projects: [record('l-paper')] }), device('desk', { projects: [record('d-paper')], is_online: false, projects_error: 'permission denied' })], homeOf(null))
+    expect(row!.stale).toBe(true)
+    expect(row!.folders.map(folder => [folder.path, folder.stale])).toEqual([['/home/l-paper', false], ['/home/d-paper', true]])
   })
 })

@@ -775,6 +775,11 @@ export class RemoteHostsStore {
     });
   }
 
+  /** 这一端上一次读账号上那台机器的项目没读到:accountFolders 给的是更早读到的那份。 */
+  accountUnread(deviceId: string): boolean {
+    return !!this.device(deviceId)?.projectsError;
+  }
+
   /** #113 账号上记着的那台机器上这个项目的文件夹;没读到过账号上的那份 / 那里没有这个项目 = null。 */
   accountFolders(deviceId: string, projectId: string): ProjectFolder[] | null {
     const records = this.device(deviceId)?.projects;
