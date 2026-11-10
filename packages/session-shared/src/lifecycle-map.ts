@@ -81,6 +81,7 @@ export class LifecycleMap<T, PE, TE> {
         await this._hooks.preProvision?.(id);
         const result = await run();
         if (result.success) {
+          this._errors.delete(id);
           this._active.set(id, result.data);
           this._teardownErrors.delete(id);
           await this._hooks.postProvision?.(id, result.data);
