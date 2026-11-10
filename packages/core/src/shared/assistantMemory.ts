@@ -38,7 +38,8 @@ export function isOwnerProfileNote(note: { file: string }): boolean {
 const MEMORY_KINDS: readonly MemoryKind[] = ['user', 'feedback', 'project', 'reference'];
 const memoryKind = (value: string | undefined): MemoryKind | undefined => {
   const aliases: Record<string, MemoryKind> = { 用户: 'user', 关于主人: 'user', 偏好: 'user', 反馈: 'feedback', 关于助理: 'feedback', 项目: 'project', 参考: 'reference', 资料: 'reference' };
-  return MEMORY_KINDS.find(kind => kind === value?.toLowerCase()) ?? aliases[value ?? ''];
+  return MEMORY_KINDS.find(kind => kind === value?.toLowerCase())
+    ?? (value !== undefined && Object.hasOwn(aliases, value) ? aliases[value] : undefined);
 };
 
 /** Legacy memories often put their readable name/category in the index instead of YAML. */

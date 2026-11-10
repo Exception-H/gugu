@@ -2,6 +2,9 @@ import { describe, expect, it } from 'vitest'
 import { memoryIndexHints, parseMemoryNote, readFrontmatter, removeIndexEntry } from '@gugu/core/shared/assistantMemory'
 
 describe('memory text parsing boundaries', () => {
+  it.each(['constructor', '__proto__', 'toString'])('does not turn unknown category %s into a memory kind', (type) => {
+    expect(parseMemoryNote('note.md', `---\ntype: ${type}\n---\nBody`).kind).toBe('reference')
+  })
   it('retains metadata keys that also exist on Object.prototype', () => {
     const { fields } = readFrontmatter('---\nconstructor: note\n__proto__: own\nconstructor: later\n---\nBody')
     expect(Object.hasOwn(fields, 'constructor')).toBe(true)
