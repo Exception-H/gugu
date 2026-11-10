@@ -353,6 +353,7 @@ export function speakersOf(lines: readonly TranscriptLine[]): string[] {
 
 /** 接着上一段转写:把上一段最后几行带给模型,好让说话人编号接得上。 */
 export function transcriptTail(lines: readonly TranscriptLine[], count = 6): string {
+  if (count <= 0) return ''
   return lines.slice(-count).map((l) => `${l.speaker}：${l.text}`).join('\n')
 }
 
