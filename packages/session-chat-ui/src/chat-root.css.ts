@@ -6,7 +6,7 @@
  * should now pass a VE class or a raw CSS class string.
  */
 
-import { style } from '@vanilla-extract/css';
+import { globalStyle, style } from '@vanilla-extract/css';
 import { vars } from './styles/theme.css';
 import {
   CHAT_CONTENT_GUTTER_PX,
@@ -126,6 +126,10 @@ export const pinSticky = style({
   } },
 });
 
+const PIN_SHADOW = { y: 8, blur: 12, spread: -10 };
+/** How far the pinned backdrop's shadow reaches below its box. */
+export const PIN_SHADOW_REACH = PIN_SHADOW.y + PIN_SHADOW.blur + PIN_SHADOW.spread;
+
 /** A normal bubble has no full-width card behind it. Protect the pinned row once it actually sticks. */
 export const pinBackdrop = style({
   position: 'absolute', inset: 0, zIndex: -1, pointerEvents: 'none',
@@ -136,20 +140,20 @@ export const pinBackdrop = style({
     '[data-pin-stuck="true"] &': { opacity: 1 },
   },
   // A soft edge rather than a rule: says rows scroll beneath it without drawing a line across the page.
-  boxShadow: `0 8px 12px -10px color-mix(in srgb, ${vars.fg} 22%, transparent)`,
+  boxShadow: `0 ${PIN_SHADOW.y}px ${PIN_SHADOW.blur}px ${PIN_SHADOW.spread}px color-mix(in srgb, ${vars.fg} 22%, transparent)`,
 });
 
 /**
- * A user message's two-line summary: present only while stuck, i.e. once the message itself has gone
- * by, so the two are never on screen together. It switches in the frame the lane state changes; a fade
- * would keep it on screen while the message scrolls back into view.
+ * A user message's lane is a column: the message row, then the window its summary sticks in. The window
+ * starts at the row's bottom and is clipped from its top by the pin line plus the summary's full height
+ * (ChatRoot sets that inset), so the summary only shows once the row has left the viewport, in the same
+ * frame, by layout alone (@@@pin-window in ChatRoot).
  */
-export const pinSummaryLayer = style({
-  paddingBottom: PIN_SUMMARY_GAP,
-  opacity: 0,
-  pointerEvents: 'none',
-  selectors: { '[data-pin-stuck="true"] &': { opacity: 1, pointerEvents: 'auto' } },
-});
+export const pinMessageLane = style({ display: 'flex', flexDirection: 'column' });
+export const pinMessageRow = style({ flex: 'none' });
+export const pinWindow = style({ flex: '1 1 auto', minHeight: 0 });
+export const pinSummaryLayer = style({ paddingBottom: PIN_SUMMARY_GAP });
+globalStyle(`${pinSummaryLayer} > ${pinBackdrop}`, { opacity: 1 });
 
 /** Page-colored, square strip, including its seam so body text cannot peek between the two pins. */
 export const activityPinBackdrop = style({

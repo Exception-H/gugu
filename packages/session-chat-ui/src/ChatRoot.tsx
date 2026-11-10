@@ -114,7 +114,11 @@ import {
   pinBackdrop,
   pinLane,
   pinSticky,
+  pinMessageLane,
+  pinMessageRow,
+  PIN_SHADOW_REACH,
   pinSummaryLayer,
+  pinWindow,
   scrollContainer,
   scrollContainerEmbedded,
   unitRowWrapper,
@@ -851,10 +855,10 @@ export function ChatRoot(props: ChatRootProps) {
   const placeRow = (el: HTMLElement, idx: number, top: number, laneH: number | null) => {
     // Native sticky positioning supplies the reversible push-out. Under reduced motion,
     // hide the complete row as soon as that push starts instead of sliding a partial row.
-    // A user lane sticks its summary, which sits right below the message: it sticks once the message has gone by.
+    // A user lane's summary shows by layout alone (@@@pin-window); only an activity lane's backdrop reads `stuck`.
     const summary = laneH !== null && pinAnchorSet().has(idx);
     const pinLine = laneH === null ? 0 : shadowScrollTop + userTopGap + (summary ? 0 : activityPinOffset(idx) - (units().at(idx)?.gapBefore ?? 0));
-    const stuck = laneH !== null && pinLine > top + (summary ? virt.size(idx) : 0) + 0.5;
+    const stuck = laneH !== null && !summary && pinLine > top + 0.5;
     if (el.dataset.pinStuck !== String(stuck)) el.dataset.pinStuck = String(stuck);
     const leaving = laneH !== null && pinLine > top + laneH - (summary ? pinHeight(idx) : virt.size(idx)) + 0.5;
     if (el.dataset.pinLeaving !== String(leaving)) el.dataset.pinLeaving = String(leaving);
@@ -2354,7 +2358,7 @@ export function ChatRoot(props: ChatRootProps) {
                           <Show when={u()}>
                             <div
                               class={unitRowWrapper}
-                              classList={{ [pinLane]: isPinAnchor(), [activityPinLane]: isActivityPin() }}
+                              classList={{ [pinLane]: isPinAnchor(), [activityPinLane]: isActivityPin(), [pinMessageLane]: pinAnchorSet().has(unitIndex) }}
                               ref={(el) => {
                                 rowEls.set(unitIndex, el);
                                 // Seed the placement; commit() reconciles on each frame.
@@ -2368,7 +2372,7 @@ export function ChatRoot(props: ChatRootProps) {
                             >
                               {/* An opened activity sticks its own header row, on the pin line whatever its collapsed top gap is. */}
                               <div
-                                classList={{ [pinSticky]: isActivityPin() }}
+                                classList={{ [pinSticky]: isActivityPin(), [pinMessageRow]: pinAnchorSet().has(unitIndex) }}
                                 style={isActivityPin() ? { top: `${userTopGap + activityPinOffset(unitIndex) - (u()?.gapBefore ?? 0)}px` } : { 'pointer-events': 'auto' }}
                               >
                               <Show when={isActivityPin()}><div class={`${pinBackdrop} ${activityPinBackdrop}`}
@@ -2397,9 +2401,16 @@ export function ChatRoot(props: ChatRootProps) {
                               </div>
                               {/* A user message's lane sticks its two-line summary, not the message (@@@sticky-user-lanes). */}
                               <Show when={pinAnchorSet().has(unitIndex)}>
-                                <div class={`${pinSticky} ${pinSummaryLayer}`} style={{ top: `${userTopGap}px` }}>
-                                  <div class={pinBackdrop} style={{ top: `${-userTopGap}px` }} data-chat-pin-backdrop="" aria-hidden="true" />
-                                  <PinnedUserSummary item={u()!.data as ChatMessage} ctx={estimateContext()} vars={UNIT_REGISTRY.message!.vars as MessageVars} />
+                                {/* @@@pin-window — the summary sticks inside a window that starts at the row's bottom r, clipped
+                                    from its top by c = pin line + the summary's height + its shadow. The summary paints within
+                                    [s - pin line, s + height + shadow] and sticks at s = max(r, viewport top + pin line), so a visible
+                                    pixel needs s > r + pin line, i.e. viewport top > r: the row is out of view. The message and its
+                                    summary are never on screen together, whatever the scroll path or the main thread is doing. */}
+                                <div class={pinWindow} style={{ 'clip-path': `inset(${userTopGap + pinHeight(unitIndex) + PIN_SHADOW_REACH}px 0 0 0)` }}>
+                                  <div class={`${pinSticky} ${pinSummaryLayer}`} style={{ top: `${userTopGap}px` }}>
+                                    <div class={pinBackdrop} style={{ top: `${-userTopGap}px` }} data-chat-pin-backdrop="" aria-hidden="true" />
+                                    <PinnedUserSummary item={u()!.data as ChatMessage} ctx={estimateContext()} vars={UNIT_REGISTRY.message!.vars as MessageVars} />
+                                  </div>
                                 </div>
                               </Show>
                             </div>
