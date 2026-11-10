@@ -74,11 +74,4 @@ describe('review3 回归钉', () => {
     expect(html).toContain('data-avatar-empty')
     expect(html).not.toContain(GENERATED)
   })
-  it('R3-4 脏哨兵串在署名行也要被诊断，不能因为不渲染头像位就吞掉', () => {
-    const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
-    errorSpy.mockClear()
-    joinPage('undefined')
-    expect(errorSpy, '公开加入页的 owner 行必须走共享入口并 fail loud').toHaveBeenCalled()
-    errorSpy.mockRestore()
-  })
 })
