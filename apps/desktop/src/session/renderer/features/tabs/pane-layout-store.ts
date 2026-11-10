@@ -956,6 +956,7 @@ export class PaneLayoutStore<R extends TabRegistry = TabRegistry> {
         split: (tabId) => { this.splitPane(paneId, 'right', tabId); },
         splitBlocked: (tabId) => this.splitBlocked(paneId, tabId, 'right'),
         entryForTab: (tabId) => this.groups.map(({ pane }) => pane.entries.get(tabId)).find(Boolean),
+        stripTabIds: () => this.stripTabIds,
         isOnScreen: (tabId) => !this.narrow && (this._shownPair?.pinned === tabId || this._shownPair?.side === tabId),
         revealTab: (tabId) => {
           const group = this._groupOf(tabId);

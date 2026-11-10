@@ -23,12 +23,13 @@ function setup(memory: TabPlacementMemory = { read: () => undefined, write() {} 
     TabBarItemDragPreview: () => null,
     TabContent: () => null,
   });
-  const layout = new PaneLayoutStore(createTabRegistry(['conversation', 'topic', 'file', 'folder'].map(provider)), { viewId: 'pair' }, undefined, { placementMemory: memory });
+  const registry = createTabRegistry(['conversation', 'topic', 'file', 'folder'].map(provider));
+  const layout = new PaneLayoutStore(registry, { viewId: 'pair' }, undefined, { placementMemory: memory });
   layouts.push(layout);
   const conversation = layout.open('conversation', { path: 'conversation' }, { from: null, intent: 'newTab' })!;
   const open = (path: string, from = conversation, intent: 'navigate' | 'newTab' | 'beside' = 'navigate', kind = 'file') =>
     layout.open(kind, { path }, { from, intent })!;
-  return { layout, conversation, open };
+  return { layout, conversation, open, registry };
 }
 
 const pathOf = (layout: Layout, tabId: string) =>
@@ -870,5 +871,42 @@ describe('the pinned page leaving: the side takes its place in the strip', () =>
     const { layout, p } = pairedInMiddle();
     layout.detachToWindow(p);
     expect(strip(layout)).toEqual(['conversation', 'A.md', 'S.md', 'B.md']);
+  });
+});
+
+// A close of several tabs fixes its targets, by tab id, when it starts: closing one may collapse the pair and move the
+// others to the other pane, which must not let them escape.
+describe('closing several tabs closes exactly the ones named when it started', () => {
+  const strip = (layout: Layout) => layout.stripTabIds.map((id) => pathOf(layout, id));
+  async function settle() { await new Promise((resolve) => setTimeout(resolve, 0)); }
+
+  it('an App disabled while two of its pages are paired with each other: both close', () => {
+    const { layout, conversation, open, registry } = setup();
+    const x1 = open('X1', conversation, 'newTab', 'folder');
+    const x2 = open('X2', conversation, 'newTab', 'folder');
+    layout.pairWith(x1, x2, { by: 'user' });
+    expect(layout.pair).toEqual({ pinned: x1, side: x2 });
+    // The main pane closes X1 first; the pair collapses and X2 moves into the main pane, whose turn is over.
+    registry.closeKind('folder');
+    expect(strip(layout)).toEqual(['conversation']);
+  });
+
+  it('close all, from the strip: the side closes too', async () => {
+    const { layout, conversation, open } = setup();
+    open('A.md', conversation, 'newTab');
+    open('S.md');
+    expect(layout.pair).not.toBeNull();
+    layout.mainGroup.pane.closeAll();
+    await settle();
+    expect(strip(layout)).toEqual([]);
+  });
+
+  it('close the others: only the one asked for stays', async () => {
+    const { layout, conversation, open } = setup();
+    const a = open('A.md', conversation, 'newTab');
+    open('S.md');
+    layout.mainGroup.pane.closeOthers(a);
+    await settle();
+    expect(strip(layout)).toEqual(['A.md']);
   });
 });

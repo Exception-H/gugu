@@ -110,6 +110,8 @@ export interface PaneSplitter {
   pairSide?(): { paneId: string; pane: PaneStore } | undefined;
   /** This pane is the side of a pair: its tab is drawn in the main pane's strip, it has no strip of its own. */
   isSide?(): boolean;
+  /** The one strip this pane is drawn in (with the side of a pair), left to right. */
+  stripTabIds?(): string[];
   /** 拆开. */
   separatePair?(): void;
 }
@@ -257,10 +259,24 @@ export class PaneStore<R extends TabRegistry = TabRegistry>
    * the user had closed each one.
    */
   private _closeTabsOfKind(kind: string, which?: (state: unknown) => boolean): void {
-    const ids = [...this.entries.values()]
-      .filter((e) => e.kind === kind && (!which || which(e.state)))
-      .map((e) => e.tabId);
-    for (const id of ids) this._removeTab(id);
+    // The whole strip's, fixed now: closing one can collapse a pair, which moves the next into the other pane and
+    // closes this one's neighbour (its own listener then never runs). Each is closed where it is by then.
+    const ids = this._stripTabIds.filter((id) => {
+      const entry = this.entries.get(id) ?? this._layoutSplitter?.entryForTab?.(id);
+      return entry?.kind === kind && (!which || which(entry.state));
+    });
+    for (const id of ids) this._holderOf(id)?._removeTab(id);
+  }
+
+  /** The pane holding this tab now (a pair collapsing moves tabs between the two panes of a strip). */
+  private _holderOf(tabId: string): PaneStore<R> | undefined {
+    const entry = this.entries.get(tabId) ?? this._layoutSplitter?.entryForTab?.(tabId);
+    return entry ? (entryHolders.get(entry as TabEntryImpl) as PaneStore<R> | undefined) : undefined;
+  }
+
+  /** The strip the person sees this pane's tabs in: with the side of a pair, if there is one. */
+  private get _stripTabIds(): string[] {
+    return this._layoutSplitter?.stripTabIds?.() ?? this.tabOrder;
   }
 
   /**
@@ -649,7 +665,7 @@ export class PaneStore<R extends TabRegistry = TabRegistry>
 
 
   closeOthers(tabId: string): void {
-    void this._requestCloseInTurn(this.tabOrder.filter((id) => id !== tabId));
+    void this._requestCloseInTurn(this._stripTabIds.filter((id) => id !== tabId));
   }
 
   /** 这一格是不是它那个布局里握着焦点的那格;单独成窗的那一格只有它自己。 */
@@ -705,14 +721,15 @@ export class PaneStore<R extends TabRegistry = TabRegistry>
 
   /** 关闭右侧页签:这一枚右边的都关掉(照 VS Code / Chrome)。 */
   closeToRight(tabId: string): void {
-    const index = this.tabOrder.indexOf(tabId);
+    const strip = this._stripTabIds;
+    const index = strip.indexOf(tabId);
     if (index < 0) return;
-    void this._requestCloseInTurn(this.tabOrder.slice(index + 1));
+    void this._requestCloseInTurn(strip.slice(index + 1));
   }
 
   /** 关闭全部页签。最后一枚关掉,这一格跟着关掉(由布局的自动关闭接)。 */
   closeAll(): void {
-    void this._requestCloseInTurn([...this.tabOrder]);
+    void this._requestCloseInTurn([...this._stripTabIds]);
   }
 
   /**
@@ -720,7 +737,8 @@ export class PaneStore<R extends TabRegistry = TabRegistry>
    * 后一个会把前一个顶掉,被顶掉的那枚就永远等不到回答。❌ 直接强关:那会把没存的修改悄悄扔掉。
    */
   private async _requestCloseInTurn(tabIds: readonly string[]): Promise<void> {
-    for (const id of tabIds) await this._requestClose(id, false);
+    // The targets are fixed now, by id; each is closed by the pane holding it when its turn comes.
+    for (const id of tabIds) await this._holderOf(id)?._requestClose(id, false);
   }
 
   /** 关掉这几枚(一枚一枚问,同一排):会话那枚问过「会话和页签都关」之后,替它把别的页签关掉。 */
