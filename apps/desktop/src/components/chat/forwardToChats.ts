@@ -4,6 +4,7 @@ import { useCallback, useMemo } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useAuth } from '../../store/auth'
 import { useChatStore, type ChatContextValue } from '../../store/chatContext'
+import { markdownPlainText } from '../../lib/markdownPlainText'
 
 /**
  * What a forward carries, in reading order: chat messages, and words that have no chat message behind them
@@ -64,7 +65,7 @@ export async function forwardToChats(pieces: readonly ForwardPiece[], targetChat
     words.push({ message, quote: {
       sender: piece.sender ?? nameOf(message.sender_user_id, io),
       text: message.content,
-      replyTo: message.reply_to_content ? { sender: message.reply_to_sender_user_id ? nameOf(message.reply_to_sender_user_id, io) : io.unknownName, text: message.reply_to_content } : null,
+      replyTo: message.reply_to_content ? { sender: message.reply_to_sender_user_id ? nameOf(message.reply_to_sender_user_id, io) : io.unknownName, text: markdownPlainText(message.reply_to_content) } : null,
     } })
   }
   const quoted = words.length > 0

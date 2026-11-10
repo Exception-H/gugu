@@ -111,3 +111,11 @@ describe('forwardToChats, a note that @-s', () => {
     expect(again.sendMessageToChat).toHaveBeenCalledWith('g1', 'see', { toUserIds: ['bot'] })
   })
 })
+
+describe('forwardToChats, the line a reply answered', () => {
+  it('is quoted as plain text, not as the markdown it was written in', async () => {
+    const send = io()
+    await forwardToChats([lead, { kind: 'message', message: message({ id: 'r', content: 'Agreed.', reply_to_message_id: 'x', reply_to_content: '> **Mei**\n>\n> ship **Friday**', reply_to_sender_user_id: 'u-mei' }) }], ['g1'], note(''), send)
+    expect((send.forwardMessage.mock.calls[0] as unknown as [MessageItem])[0].content).toContain('> > **Mei**：Mei ship Friday')
+  })
+})
