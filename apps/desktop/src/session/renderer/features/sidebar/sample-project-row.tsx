@@ -13,6 +13,7 @@ import { SidebarMenuAction, SidebarMenuRow, sidebarGroupInsetX } from './sidebar
 import { sidebarRowContentInsetPx, sidebarRowInsetPx } from './sidebar-row-metrics';
 import { SidebarTwistyLane } from './sidebar-twisty';
 import { AccountProjectsError } from '@renderer/features/projects/components/account-projects-error';
+import { accountProjectsStore } from '@renderer/features/projects/stores/account-projects-store';
 
 /**
  * 项目列表最后:示例项目那一行(#709,账号上的键说它在才有),和用户自己一个项目都没有时那一句空状态。
@@ -22,7 +23,7 @@ export const SampleProjectSidebar = observer(function SampleProjectSidebar() {
   const { translate } = useSessionMessages();
   const sample = useSampleProject();
   // 账号上的项目读到了、一个都没有,才算空(还在读 / 读失败 ❌ 说成「没有项目」)。
-  const empty = sidebarStore.sidebarProjects.length === 0 && sidebarStore.accountProjects.status === 'ready';
+  const empty = sidebarStore.sidebarProjects.length === 0 && accountProjectsStore.status === 'ready';
   return (
     <>
       <div style={{ paddingInlineStart: `${sidebarRowContentInsetPx('project')}px` }}><AccountProjectsError className="py-2 pr-3" /></div>
