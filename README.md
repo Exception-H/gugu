@@ -118,8 +118,6 @@ As you read this, an average of 30 gugu agents are actively developing gugu, and
 </tr>
 </table>
 
-<sub>Screenshots use a demo workspace. The interface, harnesses and turns are real; the people's lines and the agents' assignments were written for the shot.</sub>
-
 ## Get started
 
 <a href="https://gugu.nextmind.space/en/#download"><img src="https://img.shields.io/badge/Download-1F883D?style=for-the-badge" height="44" alt="Download"></a>
@@ -137,11 +135,9 @@ See the [community setup guide](docs/guides/self-hosting.md) for configuration a
 
 ## Community
 
-Scan to join the gugu WeChat group and talk with the team and other users:
+Scan with WeChat to open the current group code, then long-press it to join and talk with the team and other users:
 
-<img src="https://github.com/GUYI-AI/gugu/releases/download/assets/gugu-readme-wechat-qr.png" width="220" alt="gugu WeChat group QR code">
-
-The code changes every week. [Open the latest QR code](https://gugu.nextmind.space/gugu-assets/wechat-group-qr.png).
+<img src="docs/assets/gugu-wechat-qr.svg" width="220" alt="gugu WeChat group QR code">
 
 ## Contributing
 
