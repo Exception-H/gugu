@@ -17,6 +17,8 @@ import { TooltipProvider } from '@renderer/lib/ui/tooltip';
 import { useSessionMessages } from '@renderer/localization/use-session-messages';
 import { log } from '@renderer/utils/logger';
 import type { LibraryMcpProvidedServer, LibraryMcpServer } from '@shared/mcp-library';
+import { SectionLabel } from '@/components/ui/SectionLabel';
+import { GuguToolGroups } from './gugu-tool-groups';
 import { McpLibraryRow } from './mcp-library-row';
 import { useHarnessMcpServers, useMcpLibrary } from './use-mcp-library';
 import type { AgentPayload } from '@shared/core/agents/agent-payload';
@@ -79,26 +81,56 @@ export const McpLibraryView: React.FC<{ onOpenIntegrations: () => void }> = ({ o
         ) : notice && !library.hasData ? null : (
           <div className="flex flex-col gap-6 py-8">
             <section data-slot="mcp-library-gugu" className="flex flex-col gap-3">
-              <h3 className="text-base font-semibold text-foreground">{translate('mcpLibrary.ownGroup')}</h3>
+              <SectionLabel className="!px-0">{translate('mcpLibrary.ownGroup')}</SectionLabel>
               <FoldGroup slot="mcp-library-builtin" title={translate('mcpLibrary.builtInGroup')} fixed>
                 {library.provided?.builtIn.map((name) => (
-                  <ProvidedRow key={name} name={name} />
+                  <BuiltInRow key={name} name={name} library={library} disabled={disabled} onFail={fail} />
                 ))}
               </FoldGroup>
-              <FoldGroup
-                slot="mcp-library-own"
-                title={translate('mcpLibrary.ownServers')}
-                count={library.servers.length}
-                defaultOpen
-                action={{ label: translate('mcpLibrary.add'), onClick: () => void openAdd(), icon: <Plus className="size-3" />, disabled }}
+              <ProvidedGroup
+                slot="mcp-library-integrations"
+                title={translate('mcpLibrary.integrationsGroup')}
+                servers={library.provided?.servers.filter((server) => server.group === 'integrations') ?? []}
+                action={{
+                  label: translate('mcpLibrary.manageIntegrations'),
+                  onClick: onOpenIntegrations,
+                }}
+                keepEmpty
+                library={library}
+                onFail={fail}
+              />
+              <ProvidedGroup
+                slot="mcp-library-apps"
+                title={translate('mcpLibrary.appsGroup')}
+                servers={library.provided?.servers.filter((server) => server.group === 'apps') ?? []}
+                {...(appsHere
+                  ? {
+                      action: {
+                        label: translate('mcpLibrary.manageApps'),
+                        onClick: () => appsHere!.openAppsPage(),
+                      },
+                    }
+                  : {})}
+                library={library}
+                onFail={fail}
+              />
+            </section>
+            <section data-slot="mcp-library-own" className="flex flex-col gap-3">
+              <SectionLabel
+                className="!px-0"
+                trailing={
+                  <Button variant="ghost" size="xs" className="text-foreground-muted" onClick={() => void openAdd()} disabled={disabled}>
+                    <Plus className="size-3" />
+                    {translate('mcpLibrary.add')}
+                  </Button>
+                }
               >
+                {translate('mcpLibrary.ownServers')}
+              </SectionLabel>
+              <div className={CARD}>
                 {library.servers.length === 0 ? (
-                  <div data-slot="mcp-library-own-empty" className="flex flex-wrap items-center gap-2 px-3 py-2">
-                    <span className="mr-auto text-sm text-foreground-muted">{translate('mcpLibrary.ownEmpty')}</span>
-                    <Button variant="ghost" size="sm" data-slot="mcp-library-via-integrations" onClick={onOpenIntegrations}>
-                      {translate('mcpLibrary.addViaIntegrations')}
-                      <ArrowRight className="size-3" />
-                    </Button>
+                  <div data-slot="mcp-library-own-empty" className="px-3 py-3 text-sm text-foreground-muted">
+                    {translate('mcpLibrary.ownEmpty')}
                   </div>
                 ) : (
                   library.servers.map((server) => (
@@ -116,30 +148,14 @@ export const McpLibraryView: React.FC<{ onOpenIntegrations: () => void }> = ({ o
                     />
                   ))
                 )}
-              </FoldGroup>
-              <ProvidedGroup
-                slot="mcp-library-integrations"
-                title={translate('mcpLibrary.integrationsGroup')}
-                servers={library.provided?.servers.filter((server) => server.group === 'integrations') ?? []}
-                action={{ label: translate('mcpLibrary.manageIntegrations'), onClick: onOpenIntegrations }}
-                library={library}
-                onFail={fail}
-              />
-              <ProvidedGroup
-                slot="mcp-library-apps"
-                title={translate('mcpLibrary.appsGroup')}
-                servers={library.provided?.servers.filter((server) => server.group === 'apps') ?? []}
-                {...(appsHere ? { action: { label: translate('mcpLibrary.manageApps'), onClick: () => appsHere!.openAppsPage() } } : {})}
-                library={library}
-                onFail={fail}
-              />
+              </div>
             </section>
             {library.installed.length > 0 && (
               <section data-slot="mcp-library-harnesses" className="flex flex-col gap-3">
-                <h3 className="text-sm font-medium text-foreground-muted">{translate('mcpLibrary.harnessesGroup')}</h3>
-            {library.installed.map((agent) => (
-              <HarnessGroup key={agent.id} agent={agent} library={library} disabled={disabled} onFail={fail} />
-            ))}
+                <SectionLabel className="!px-0">{translate('mcpLibrary.harnessesGroup')}</SectionLabel>
+                {library.installed.map((agent) => (
+                  <HarnessGroup key={agent.id} agent={agent} library={library} disabled={disabled} onFail={fail} />
+                ))}
               </section>
             )}
           </div>
@@ -222,7 +238,6 @@ function FoldGroup({
   title,
   count,
   action,
-  defaultOpen,
   fixed,
   open,
   onOpenChange,
@@ -233,9 +248,8 @@ function FoldGroup({
   icon?: React.ReactNode;
   title: string;
   count?: number;
-  action?: { label: string; onClick: () => void; icon?: React.ReactNode; disabled?: boolean };
-  defaultOpen?: boolean;
-  /** 只有一两行、不值得折叠的组(内置):常开,没有箭头。 */
+  action?: { label: string; onClick: () => void };
+  /** 只有一两行、不值得折叠的组(内置):常开,没有箭头。`count` 为 0 的组只剩段头(和它的「去管理」)。 */
   fixed?: boolean;
   open?: boolean;
   onOpenChange?: (open: boolean) => void;
@@ -245,13 +259,19 @@ function FoldGroup({
     <Collapsible
       data-slot={slot}
       {...(providerId ? { 'data-provider-id': providerId } : {})}
-      {...(fixed ? { open: true } : open === undefined ? { defaultOpen: !!defaultOpen } : { open })}
+      {...(fixed ? { open: true } : open === undefined ? {} : { open })}
       {...(onOpenChange ? { onOpenChange } : {})}
       className="flex flex-col gap-2"
     >
       <div className="flex min-h-7 items-center gap-2">
         {fixed ? (
           <span className="truncate text-sm text-foreground">{title}</span>
+        ) : count === 0 ? (
+          // 没有可展开的:箭头的位置空着,标题和能展开的那几组对齐。
+          <span className="flex min-w-0 items-center gap-2">
+            <span className="size-4 shrink-0" />
+            <span className="truncate text-sm text-foreground">{title}</span>
+          </span>
         ) : (
           <CollapsibleTrigger className="group/trigger flex min-w-0 items-center gap-2 rounded-md text-left">
             <ChevronRight className="size-4 shrink-0 text-foreground-muted transition-transform group-data-[panel-open]/trigger:rotate-90" />
@@ -261,26 +281,66 @@ function FoldGroup({
           </CollapsibleTrigger>
         )}
         {action && (
-          <Button variant="ghost" size="xs" className="ml-auto text-foreground-muted" onClick={action.onClick} disabled={action.disabled}>
-            {action.icon}
+          <Button variant="ghost" size="xs" className="ml-auto text-foreground-muted" onClick={action.onClick}>
             {action.label}
-            {!action.icon && <ArrowRight className="size-3" />}
+            <ArrowRight className="size-3" />
           </Button>
         )}
       </div>
-      <CollapsibleContent>
-        <div className={CARD}>{children}</div>
-      </CollapsibleContent>
+      {count !== 0 && (
+        <CollapsibleContent>
+          <div className={CARD}>{children}</div>
+        </CollapsibleContent>
+      )}
     </Collapsible>
   );
 }
 
-/** 内置那一台:只有名字 —— 「内置」这个组名已经说了它每个任务都带。 */
-function ProvidedRow({ name }: { name: string }) {
+/**
+ * 内置那一台(咕咕自己):和别的 server 同一种行,展开时向宿主取它此刻组装出来的那台的工具,按组列出、每组一个开关。
+ * 没有「检测」—— 它就是宿主自己,工具列表就是读数。
+ */
+function BuiltInRow({
+  name,
+  library,
+  disabled,
+  onFail,
+}: {
+  name: string;
+  library: ReturnType<typeof useMcpLibrary>;
+  disabled: boolean;
+  onFail: (failure: unknown) => void;
+}) {
+  const { translate } = useSessionMessages();
+  const check = library.providedChecks[name];
+  const load = () => void library.checkProvided(name).catch(onFail);
+  // 进页就取(进程内组装一台、不连不跑),行上直接有工具数。
+  React.useEffect(load, []);
   return (
-    <div data-slot="mcp-library-provided" data-server-id={name} className="flex min-h-12 items-center gap-3 px-3 py-2">
-      <span className="min-w-0 flex-1 truncate text-sm text-foreground" title={name}>{name}</span>
-    </div>
+    <McpLibraryRow
+      server={{ name }}
+      check={check}
+      checking={library.checking.has(name)}
+      disabled={disabled}
+      details={
+        check ? (
+          <GuguToolGroups
+            tools={check.tools}
+            off={library.provided?.guguToolsOff}
+            disabled={disabled}
+            onChange={(off) => void library.setGuguToolsOff(off).catch(onFail)}
+          />
+        ) : library.checking.has(name) ? (
+          <div className="px-3 pb-3 pl-9 text-sm text-foreground-muted">{translate('mcpLibrary.harnessReading')}</div>
+        ) : (
+          <div className="px-3 pb-3 pl-9">
+            <Button variant="outline" size="sm" onClick={load}>
+              {translate('common.retry')}
+            </Button>
+          </div>
+        )
+      }
+    />
   );
 }
 
@@ -292,18 +352,21 @@ function ProvidedGroup({
   title,
   servers,
   action,
+  keepEmpty,
   library,
   onFail,
 }: {
   slot: string;
   title: string;
   servers: readonly LibraryMcpProvidedServer[];
+  /** 没连任何集成时也留着段头:「去集成页」是从 MCP 页加集成的那条路。 */
+  keepEmpty?: boolean;
   action?: { label: string; onClick: () => void };
   library: ReturnType<typeof useMcpLibrary>;
   onFail: (failure: unknown) => void;
 }) {
   const { translate } = useSessionMessages();
-  if (servers.length === 0) return null;
+  if (servers.length === 0 && !keepEmpty) return null;
   const loadTools = (open: boolean) => {
     if (!open) return;
     for (const server of servers) {

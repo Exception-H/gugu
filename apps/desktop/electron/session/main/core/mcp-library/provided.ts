@@ -3,13 +3,15 @@ import { integrationPluginRegistry } from '@gugu/session-plugins/integrations';
 import { sessionHostLocale } from '@main/core/host-locale';
 import { localizedManifestText } from '@shared/extensions/catalog';
 import { programName } from '@shared/extensions/manifest';
-import type { LibraryMcpCheck, LibraryMcpProvided, LibraryMcpProvidedServer } from '@shared/mcp-library';
+import { libraryMcpToolOf, type LibraryMcpCheck, type LibraryMcpProvided, type LibraryMcpProvidedServer } from '@shared/mcp-library';
 import { GUGU_MCP_SERVER_NAME } from '../../../../mcp/gugu-mcp-name.mjs';
+import { guguMcpTools } from '../../../../acp-engine-utils';
 import { listConnectedTools } from '../../../../integration-mcp-bridge';
 import { extensionServerName } from '../../../../extension-session-mcp';
 import { extensionPrograms } from '../extensions/extension-programs';
 import { extensionsService } from '../extensions/extensions-root';
 import { connectedSessionIntegrations } from '../integrations/session-integrations';
+import { mcpLibraryService } from './service';
 
 /** 集成那台的名字 —— 与 integration-mcp-bridge 里 `new McpServer({ name: 'connected-apps' })` 同一个。 */
 const INTEGRATION_SERVER = 'connected-apps';
@@ -52,18 +54,22 @@ export async function libraryMcpProvided(): Promise<LibraryMcpProvided> {
       ...(refusal ? { refusal } : {}),
     });
   }
-  return { builtIn: [GUGU_MCP_SERVER_NAME], servers };
+  return { builtIn: [GUGU_MCP_SERVER_NAME], guguToolsOff: await mcpLibraryService.guguToolsOff(), servers };
 }
 
-/** 一台的工具列表,和递给 agent 时 `tools/list` 答的是同一份(集成:桥的 `listConnectedTools`;App:`extensionPrograms.tools`)。 */
+/**
+ * 一台的工具列表,和递给 agent 时 `tools/list` 答的是同一份(内置:宿主组装的那台 server;集成:桥的 `listConnectedTools`;
+ * App:`extensionPrograms.tools`)。
+ */
 export async function libraryMcpProvidedTools(key: string): Promise<LibraryMcpCheck> {
   const signal = AbortSignal.timeout(30_000);
   const at = new Date().toISOString();
   const shape = (tools: readonly Tool[]): LibraryMcpCheck => ({
     status: 'ok',
     at,
-    tools: tools.map((tool) => ({ name: tool.name, ...(tool.description ? { description: tool.description } : {}) })),
+    tools: tools.map(libraryMcpToolOf),
   });
+  if (key === GUGU_MCP_SERVER_NAME) return shape(await guguMcpTools());
   if (key === 'integrations') {
     return shape(await listConnectedTools(await connectedSessionIntegrations(), signal, { requestId: 'library' }));
   }
