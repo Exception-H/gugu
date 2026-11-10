@@ -20,7 +20,9 @@ function belowPins(scroller: Element, element: Element, clip: ElementBox): Eleme
   let edge = clip.top
   for (const backdrop of scroller.querySelectorAll('[data-chat-pin-backdrop]')) {
     const pin = backdrop.parentElement
-    if (!pin || pin.contains(element) || backdrop.getBoundingClientRect().top > top + 1) continue
+    // A pin covers only once its row says it is drawn stuck (data-pin-stuck): one at the top but not yet shown cuts nothing.
+    if (!pin || pin.contains(element) || pin.closest('[data-pin-stuck]')?.getAttribute('data-pin-stuck') !== 'true'
+      || backdrop.getBoundingClientRect().top > top + 1) continue
     edge = Math.max(edge, pin.getBoundingClientRect().bottom)
   }
   return edge > clip.top ? intersect(clip, { left: clip.left, top: edge, width: clip.width, height: clip.top + clip.height - edge }) : clip
