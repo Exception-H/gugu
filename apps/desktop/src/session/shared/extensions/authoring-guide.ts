@@ -216,7 +216,7 @@ Free:
 - \`gugu.navigation.go(-1|1)\` → boolean; own history/chat opener. State: \`getContext().navigation\`.
 - \`onContextChanged(fn)\` → theme, language, visibility and size changes; member changes only through API 26. Returns an unsubscribe.
 - \`onCommand(fn)\` → the person picked one of your menu/toolbar entries: its id.
-- \`showContextMenu({ x, y, items: [{ id, label, enabled?, checked?, danger?, title?, person?, items? }, { type: "separator" }] })\` (API 18/38, page): host menu → id or null.
+- \`showContextMenu({ x, y, items: [{ id, label, enabled?, checked?, danger?, title?, person?, items? }, { type: "separator" }] })\` (API 18/38, page) → id | null.
 - \`setTabTitle(title)\` → title (max 48); file tabs use it as a tooltip. Back/forward stay local.
 - \`setTabBadge(badge)\` → a count (99+ max, <=0 none), a string (a dot) or \`null\`.
 - \`openBrowserTab(url)\` → http(s) only.
