@@ -12,7 +12,6 @@ import App from './App'
 import { notifyHostTheme } from '@renderer/lib/theme/host-theme'
 import { renderEntryRoot } from './lib/renderer-entry-root'
 import { AppErrorBoundary } from './components/AppErrorBoundary'
-import { captureReferralFromUrl } from './lib/referral'
 import { installScrollbarAutoHide } from './lib/scrollbarAutoHide'
 import { installWindowMaterialAttribute } from './lib/windowMaterial'
 import {
@@ -61,9 +60,6 @@ startFirstRunApps()
 // `data-scrolling`,显隐规则在 styles/tokens.css。装在这里而不是某个组件的 effect 里:
 // 它是一条进程级的 DOM 监听,与任何一棵 React 子树的生死无关。
 installScrollbarAutoHide()
-
-// @@@1511 启动即捕获邀请链接 ?ref=<gugu_number>,暂存待注册时塞进 signup metadata(给双方发返利积分)。
-captureReferralFromUrl()
 
 // @@@1238-platform-attr / @@@822 — surface the OS to CSS so the frameless title bar can reserve the
 // right window-control inset only where it actually draws controls. Mac keeps native traffic lights
