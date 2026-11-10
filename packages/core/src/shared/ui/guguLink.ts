@@ -42,11 +42,12 @@ export const FILE_LINK_IN_TEXT = /gugu-file:\/\/[^\s()[\]<>"'`]+/gi
 export function parseGroupFileLink(href: string): GroupFileLink | null {
   const match = GROUP_FILE_LINK.exec(href.trim())
   if (!match) return null
-  const version = /(?:^|&)v=(\d+)(?:&|$)/.exec(match[2] ?? '')?.[1]
+  const versionText = /(?:^|&)v=(\d+)(?:&|$)/.exec(match[2] ?? '')?.[1]
+  const version = versionText === undefined ? undefined : Number(versionText)
   const at = match[3] === undefined ? null : placeOf(match[3])
   return {
     itemId: match[1]!.toLowerCase(),
-    ...(version === undefined ? {} : { version: Number(version) }),
+    ...(Number.isSafeInteger(version) ? { version } : {}),
     ...(at && Object.keys(at).length > 0 ? { at } : {}),
   }
 }
