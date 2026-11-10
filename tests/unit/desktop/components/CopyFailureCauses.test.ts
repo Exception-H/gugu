@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { ExtPanel } from '../../../../apps/desktop/src/components/agentsettings/AgentSharePane'
-import { GroupInviteLinkBlock } from '../../../../apps/desktop/src/components/chat/groupSettingsUi'
+import { GroupInviteShare } from '../../../../apps/desktop/src/components/chat/GroupInviteShare'
 import { GroupInviteQrShare } from '../../../../apps/desktop/src/components/contacts/GroupInvite'
 import { MessageLoadFailure } from '../../../../apps/desktop/src/components/chat/MessageLoadFailure'
 import { platform } from '../../../../apps/desktop/src/platform'
@@ -28,10 +28,11 @@ describe('copy actions preserve the refusal', () => {
     expect(writeText).toHaveBeenCalledWith('https://share.example.test/join/agent/agent')
     expect(harness.container.textContent).toContain(reason)
   })
-  it('shows the cause when copying a group management link', async () => {
+  it('shows the cause when copying the group invite link', async () => {
     const toast = vi.fn()
-    await renderWithAppProviders(harness, createNode(GroupInviteLinkBlock, { inviteLink: 'https://share.example.test/group', onOpenPoster: () => {} }), { toast })
-    await clickElement(harness.container.querySelector('button')!)
+    const settings = { name: 'Group', public_id: 123, join_token: '5f0c6a52-3a1e-4f6e-9a57-2d1b0c8e4f11', invite_link_enabled: true } as never
+    await renderWithAppProviders(harness, createNode(GroupInviteShare, { chatId: 'group', settings, snapshot: { humans: [], agents: [] } as never }), { toast })
+    await clickElement(harness.container.querySelector('[data-testid="group-invite-copy-link"]')!)
     expect(toast).toHaveBeenCalledWith('复制失败', 'error', reason)
   })
   it('shows the cause when copying a group QR link', async () => {
