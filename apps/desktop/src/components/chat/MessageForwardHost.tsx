@@ -1,5 +1,4 @@
 import { useEffect, useState } from 'react'
-import { excerpt } from '@gugu/core/shared/ui/forwardQuote'
 import { markdownPlainText } from '../../lib/markdownPlainText'
 import { LiveForwardMessageDialog } from './ForwardMessageDialog'
 import { FORWARD_PIECES_OPEN, pieceSender, useForwardNames, useForwardToChats, type ForwardPiece } from './forwardToChats'
@@ -16,9 +15,9 @@ export function MessageForwardHost() {
   }, [])
   if (!pieces?.length) return null
   const messages = pieces.flatMap(piece => piece.kind === 'message' ? [piece.message] : [])
-  // The bubble that was pressed is the last piece; a prompt before it only says what it answers.
-  const said = pieces[pieces.length - 1]!
-  const preview = said.kind === 'text' ? `${pieceSender(said, names)}：${excerpt(markdownPlainText(said.text), 200)}` : undefined
+  // Every piece in reading order, one line each; the line the page shows is the last, the bubble that was pressed.
+  const words = pieces.flatMap(piece => piece.kind === 'text' ? [`${pieceSender(piece, names)}：${markdownPlainText(piece.text)}`] : [])
+  const preview = words.length ? words.join('\n') : undefined
   return (
     <LiveForwardMessageDialog
       messages={messages}
