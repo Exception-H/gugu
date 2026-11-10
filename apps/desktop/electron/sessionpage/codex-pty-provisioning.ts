@@ -308,10 +308,7 @@ async function provisionAndOverrideOnce(
         model: info.model ?? undefined,
         reasoningEffort: info.effort ?? undefined,
       },
-      {
-        mode: info.permissionMode === 'full-access' ? 'full-access' : 'approval-required',
-        ...(info.permissionMode ? { permissionMode: info.permissionMode } : {}),
-      },
+      { permissionMode: info.permissionMode ?? 'edit' },
       !resumeThreadId,
       provisioned.projectContext,
       provisioned.agentIdentityFacts,

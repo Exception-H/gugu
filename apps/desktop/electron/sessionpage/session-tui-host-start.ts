@@ -303,13 +303,10 @@ const startOpencodeServeAttach: HostStart = async (ctx, info, platformPromise, {
   const bundle = await buildSessionTuiSessionBundle({
     bootstrap: {
       runtime,
-      // `permissionMode` crosses this boundary unchanged; the coarse mode is projected from it.
+      // `permissionMode` crosses this boundary unchanged (no tier recorded = the product default, edit).
       // OpenCode's provider materializer is the only place that interprets the exact tier into
       // its permission rules.
-      autonomy: {
-        mode: info.permissionMode === 'full-access' ? 'full-access' : 'approval-required',
-        ...(info.permissionMode !== undefined ? { permissionMode: info.permissionMode } : {}),
-      },
+      autonomy: { permissionMode: info.permissionMode ?? 'edit' },
       additionalEnv: { ...platform.env, ...platform.spawnEnv },
       promptBlocks: {
         platform: `${GUGU_PLATFORM_BLOCK}${buildSessionpageProjectContextBlock(provisioned.projectContext)}`,

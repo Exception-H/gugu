@@ -707,10 +707,7 @@ describe('conversation provider respawn state', () => {
           mcpServers: [],
           env: { GUGU_HOME: '/tmp/codex-permission-mode-transport-home' },
           model: null,
-          autonomy: {
-            mode: info.permissionMode === 'full-access' ? 'full-access' : 'approval-required',
-            ...(info.permissionMode ? { permissionMode: info.permissionMode } : {}),
-          },
+          autonomy: { permissionMode: info.permissionMode ?? 'edit' },
           promptBlocks: {},
           packages: [CODEX_GUGU_CAPABILITY_PACKAGE],
         },
@@ -742,10 +739,7 @@ describe('conversation provider respawn state', () => {
           runtime: { authProvider: {} as never, env: {} },
           sessionKey: info.sessionId,
           model: null,
-          autonomy: {
-            mode: info.permissionMode === 'full-access' ? 'full-access' : 'approval-required',
-            ...(info.permissionMode !== undefined ? { permissionMode: info.permissionMode } : {}),
-          },
+          autonomy: { permissionMode: info.permissionMode ?? 'edit' },
           promptBlocks: {},
         },
         identity: null,
