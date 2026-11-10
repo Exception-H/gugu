@@ -337,18 +337,8 @@ function CreateOnMachine({
     if (phoneAttempt && pendingText === null && !runtime.thread.composer.getState().text) runtime.thread.composer.setText(phoneAttempt.prompt)
   }, [phoneAttempt, pendingText, runtime.thread.composer])
 
-  // The header owns the page title and machine; the empty thread only explains the first action.
-  const Welcome = useMemo(
-    () =>
-      function CreateWelcome() {
-        return (
-          <div className="aui-thread-welcome-root gg-aw-create-intro">
-            <p className="aui-thread-welcome-hint">{t('agentWatch.create.welcomeHint')}</p>
-          </div>
-        )
-      },
-    [t],
-  )
+  // The empty thread stays empty: the rows above the composer already say where it runs (no helper sentence).
+  const Welcome = useMemo(() => function CreateWelcome() { return <div className="aui-thread-welcome-root gg-aw-create-intro" /> }, [])
 
   const errorNotice = createError ? (
     <div
@@ -441,9 +431,7 @@ function CreateOnMachine({
       <LiveGlyph state="busy" />
       <span>{busyLabel}</span>
     </span>
-  ) : (
-    <span>{machineLabel(device)}</span>
-  )
+  ) : null
 
   return (
     <AgentWatchScreen

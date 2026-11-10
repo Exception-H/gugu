@@ -36,6 +36,8 @@
 }
 
 .gg-aw .gg-aw-thread-host .gg-aw-pill {
+  /* 选项胶囊不让输入框挤没(只剩「C…」):它守住自己的宽度,至多 44vw,输入框吃剩下的。 */
+  flex-shrink: 0;
   max-width: min(44vw, 200px);
   min-height: var(--control-h-touch);
   padding-inline: var(--spacing-xs);

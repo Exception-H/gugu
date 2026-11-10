@@ -282,7 +282,6 @@ export default {
       "title": "New task",
       "pickMachine": "On which machine",
       "welcome": "Start a new task on {{machine}}",
-      "welcomeHint": "Choose how to run, then send the first message to begin.",
       "placeholder": "First message…",
       "project": "Project",
       "harness": "Harness",

@@ -276,7 +276,6 @@ export default {
       "title": "新建任务",
       "pickMachine": "在哪台机器上",
       "welcome": "在 {{machine}} 上开始新任务",
-      "welcomeHint": "选好运行方式，发第一句话开始。",
       "placeholder": "第一句话…",
       "project": "项目",
       "harness": "Harness",
