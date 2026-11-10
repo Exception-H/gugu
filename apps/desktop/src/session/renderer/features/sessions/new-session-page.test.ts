@@ -648,7 +648,7 @@ describe('NewSessionPage', () => {
   it('keeps the current machine when attaching a folder on another machine fails', async () => {
     const pickable = vi.spyOn(remoteHostsStore, 'pickableMachineIds').mockReturnValue(['device-9']);
     const pickFolder = vi.spyOn(remoteHostsStore, 'pickFolder').mockResolvedValue('/srv/someone-elses-project');
-    const device = vi.spyOn(remoteHostsStore, 'device').mockImplementation((id) => (id === 'device-9' ? { id, label: 'd9', hostKind: 'server', isOnline: true, lastSeenAt: null } as never : undefined));
+    const device = vi.spyOn(remoteHostsStore, 'device').mockImplementation((id) => (id === 'device-9' ? { id, label: 'd9', hostKind: 'server', isOnline: true, lastSeenAt: null } as never : null));
     const connection = vi.spyOn(remoteHostsStore, 'connectionState').mockImplementation((id) => (id === 'device-9' ? 'connected' : 'offline') as never);
     mocks.orderedProjects = [{ id: 'project-1', state: 'mounted' }];
     try {
