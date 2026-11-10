@@ -53,7 +53,8 @@ export function sentMessageOf(item: TranscriptItem): MessageItem | null {
   if (tool === 'widget_send') {
     const { app, view, text, height, data } = args;
     if (typeof app !== 'string' || typeof view !== 'string' || typeof text !== 'string') return null;
-    const content = serializeWidgetMessage({ v: 2, text, app, view,
+    // The widget's identity is the receipt's, as in the message the chat holds (`send_widget` writes it into the body).
+    const content = serializeWidgetMessage({ v: 2, text, app, view, ...(typeof receipt.widget_id === 'string' ? { wid: receipt.widget_id } : {}),
       ...(typeof height === 'number' ? { height } : {}), ...(data && typeof data === 'object' && !Array.isArray(data) ? { data: data as Record<string, unknown> } : {}) });
     return sentChatMessage({ id, chat_id: linked, content, content_type: 'widget', at });
   }

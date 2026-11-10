@@ -15,7 +15,7 @@ export const GUGU_TOOL_GROUPS = [
   { id: 'projects', locked: false, match: /^project_/ },
   { id: 'library', locked: false, match: /^library_/ },
   { id: 'schedules', locked: false, match: /^schedule_/ },
-  { id: 'apps', locked: false, match: /^(app_|widget_send$)/ },
+  { id: 'apps', locked: false, match: /^(app_|widget_send$|widget_get$)/ },
   { id: 'web', locked: false, match: /^web_search$/ },
   { id: 'passwords', locked: false, match: /^password_/ },
 ] as const;

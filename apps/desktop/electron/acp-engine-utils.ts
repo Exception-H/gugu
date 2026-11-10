@@ -17,7 +17,7 @@ import { makeIdentityClient } from './supabase'
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
 import { GuguMcpHost, type GuguMcpHostPersistence, type GuguMcpServerFactory } from './gugu-mcp-host'
 // @ts-expect-error -- the MCP tool implementation is an untyped ESM module.
-import { advertisedTool, createGuguImServer, createSessionState, sendWidgetOf, serveToolsList } from './mcp/gugu-im-server.mjs'
+import { advertisedTool, createGuguImServer, createSessionState, sendWidgetOf, serveToolsList, widgetGetOf } from './mcp/gugu-im-server.mjs'
 import type { RegisteredTool } from '@modelcontextprotocol/sdk/server/mcp.js'
 import type { Tool } from '@modelcontextprotocol/sdk/types.js'
 import { guguToolGroupOf, type GuguToolsOff } from '../src/session/shared/gugu-tool-groups'
@@ -351,6 +351,10 @@ function buildGuguMcpServer(off: ReadonlySet<string>, ...[getContext, grantSigna
     const context = getContext()
     if (context.kind !== 'social') throw new Error('widget_send needs a Gugu identity')
     return trackRequest(sendWidgetOf({ ...context, getAccessToken: () => context.getAccessToken(grantSignal) }, args, content, {}, imState), 'widget_send')
+  }, async (widgetId) => {
+    const context = getContext()
+    if (context.kind !== 'social') throw new Error('widget_get needs a Gugu identity')
+    return trackRequest(widgetGetOf({ ...context, getAccessToken: () => context.getAccessToken(grantSignal) }, widgetId), 'widget_get')
   })
   registerPasswordBetaTools(server, getContext, trackRequest, grantSignal)
   switchGuguTools(server, off)
