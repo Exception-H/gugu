@@ -2253,7 +2253,7 @@ export class SessionManager implements InboundRouter {
     const record = {} as SessionRecord;
     const provider = this.deps.agentHost.get(input.providerId);
     const assistant = input.sessionMeta?.guguAssistant;
-    const assistantOwnerId = input.providerId === 'claude' && isRecord(assistant)
+    const assistantOwnerId = isRecord(assistant)
       && typeof assistant.ownerId === 'string' && assistant.ownerId.trim() ? assistant.ownerId : null;
     const callbacks: SessionCellCallbacks = {
       onPromptSteered: () => this.deps.onPromptSteered?.(input.sessionId),
@@ -2346,7 +2346,7 @@ export class SessionManager implements InboundRouter {
       lastSynced: initialLastSynced(cell),
     });
     this.cells.set(input.sessionId, record);
-    if (input.providerId === 'claude' && isRecord(assistant) && assistant.idleCompaction === true) {
+    if (isRecord(assistant) && assistant.idleCompaction === true) {
       record.idleCompaction = new IdleCompaction(
         () => ({ ...cell.idleCompactionState, idle: record.phase === 'ready' && cell.idleCompactionState.idle }),
         async () => {
