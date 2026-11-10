@@ -2,6 +2,12 @@ import { describe, expect, it } from 'vitest'
 import { memoryIndexHints, parseMemoryNote, readFrontmatter, removeIndexEntry } from '@gugu/core/shared/assistantMemory'
 
 describe('memory text parsing boundaries', () => {
+  it('removes the relative index spelling that the hints reader accepts', () => {
+    const index = '- [Note](./note.md)\n- [Other](other.md)\n'
+    expect(memoryIndexHints(index).has('note.md')).toBe(true)
+    expect(removeIndexEntry(index, 'note.md')).toBe('- [Other](other.md)\n')
+    expect(removeIndexEntry(index, 'missing.md')).toBe(index)
+  })
   it.each(['constructor', '__proto__', 'toString'])('does not turn unknown category %s into a memory kind', (type) => {
     expect(parseMemoryNote('note.md', `---\ntype: ${type}\n---\nBody`).kind).toBe('reference')
   })
