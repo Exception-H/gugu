@@ -59,6 +59,8 @@ export function createContactQrPayload(guguNumber: number): GuguContactQrPayload
 
 /** The one encoder for every QR and share link. */
 export function createGuguQrUrl(payload: GuguQrPayload): string {
+  const id = payload.kind === 'contact' ? payload.gugu_number : payload.group_public_id
+  if (!isPositiveInteger(id)) throw new Error('QR link requires a positive safe integer id')
   if (payload.kind === 'contact') return `${GUGU_SHORT_LINK_BASE}?${payload.gugu_number}`
   const token = payload.join_token ?? ''
   // join_token is encode(gen_random_bytes(16), 'hex') in the database; anything else is a bug upstream.
