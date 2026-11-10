@@ -134,6 +134,10 @@ export class PaneStore<R extends TabRegistry = TabRegistry>
   dimensions: { width: number; height: number } | null = null;
   /** The tab that had focus before the one in front: 向右分 / ⌘\ put the one in front beside it. */
   private _previousActiveTabId: string | undefined = undefined;
+  /** What `onActivate` last saw on screen here. */
+  private _lastShown: TabResource[] = [];
+  /** Moved in while on screen (@@@carried-on-screen); good until the move's action has ended. */
+  private readonly _carriedShown = new Set<TabResource>();
 
   readonly registry: R;
   private readonly _ctx: TabViewContext;
@@ -235,8 +239,11 @@ export class PaneStore<R extends TabRegistry = TabRegistry>
         this.isVisible
           ? this.shownTabIds.map((id) => this._resources.get(id)).filter((r): r is TabResource => r !== undefined)
           : [],
-      (shown, previous) => {
-        for (const resource of shown) if (!previous?.includes(resource)) resource.onActivate?.();
+      (shown) => {
+        // @@@carried-on-screen - a page moved here from another pane while on screen (a pair collapsing, 向右分, a
+        // window) did not come on screen: the move says so (`adoptEntry` `shown`), this pane's history cannot.
+        for (const resource of shown) if (!this._lastShown.includes(resource) && !this._carriedShown.has(resource)) resource.onActivate?.();
+        this._lastShown = shown;
       },
       { fireImmediately: true, equals: comparer.shallow }
     );
@@ -856,7 +863,8 @@ export class PaneStore<R extends TabRegistry = TabRegistry>
    * Used by moveTab — the resource survives unchanged.
    * Returns { entry, resource } or undefined if not found.
    */
-  detachTab(id: string): { entry: TabEntryImpl; resource: TabResource } | undefined {
+  /** `shown`: it was on screen here as it left (what `onActivate` last saw), told to the pane that adopts it. */
+  detachTab(id: string): { entry: TabEntryImpl; resource: TabResource; shown: boolean } | undefined {
     const entry = this.entries.get(id);
     const resource = this._resources.get(id);
     if (!entry || !resource) return undefined;
@@ -864,7 +872,7 @@ export class PaneStore<R extends TabRegistry = TabRegistry>
     this.entries.delete(id);
     this._resources.delete(id);
     removeTabId(this, id);
-    return { entry, resource };
+    return { entry, resource, shown: this._lastShown.includes(resource) };
   }
 
   /**
@@ -874,8 +882,13 @@ export class PaneStore<R extends TabRegistry = TabRegistry>
   adoptEntry(
     entry: TabEntryImpl,
     resource: TabResource,
-    opts?: { insertBeforeTabId?: string; activate?: boolean }
+    opts?: { insertBeforeTabId?: string; activate?: boolean; shown?: boolean }
   ): void {
+    // Until this pane's next look at its screen: a page that stays on screen through the move is not newly shown.
+    if (opts?.shown) {
+      this._carriedShown.add(resource);
+      queueMicrotask(() => this._carriedShown.delete(resource));
+    }
     this.entries.set(entry.tabId, entry);
     entryHolders.set(entry, this);
     this._resources.set(entry.tabId, resource);

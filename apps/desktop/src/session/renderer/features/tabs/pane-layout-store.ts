@@ -299,7 +299,7 @@ export class PaneLayoutStore<R extends TabRegistry = TabRegistry> {
       // 窗开着就是看得见的,和这条会话此刻是不是正看着的那页无关。
       isViewActive: () => true,
     });
-    pane.adoptEntry(detached.entry, detached.resource, { activate: true });
+    pane.adoptEntry(detached.entry, detached.resource, { activate: true, shown: detached.shown });
     this._windowPanes.set(paneId, { paneId, pane, originPaneId: source.paneId });
     // 窗里那枚被 × 关掉了:这一格跟着收掉(窗也就跟着关)。
     this._autoCloseDisposers.set(
@@ -322,7 +322,7 @@ export class PaneLayoutStore<R extends TabRegistry = TabRegistry> {
     const target = this.mainGroup;
     for (const tabId of [...windowPane.pane.tabOrder]) {
       const detached = windowPane.pane.detachTab(tabId);
-      if (detached) target.pane.adoptEntry(detached.entry, detached.resource, { activate });
+      if (detached) target.pane.adoptEntry(detached.entry, detached.resource, { activate, shown: detached.shown });
     }
     if (activate) this.activePaneId = target.paneId;
     this._dropWindowPane(windowPaneId);
@@ -511,7 +511,7 @@ export class PaneLayoutStore<R extends TabRegistry = TabRegistry> {
     if (!detached) return;
     const at = after ? to.pane.tabOrder.indexOf(after) : -1;
     const insertBeforeTabId = after === null ? to.pane.tabOrder[0] : at === -1 ? undefined : to.pane.tabOrder[at + 1];
-    to.pane.adoptEntry(detached.entry, detached.resource, { insertBeforeTabId, activate: false });
+    to.pane.adoptEntry(detached.entry, detached.resource, { insertBeforeTabId, activate: false, shown: detached.shown });
   }
 
   closePane(paneId: string): void {
