@@ -22,6 +22,9 @@ export function openForward(pieces: ForwardPiece[]): void {
   window.dispatchEvent(new CustomEvent<ForwardPiece[]>(FORWARD_PIECES_OPEN, { detail: pieces }))
 }
 
+/** The forwarder's note, and who it addresses (its @, resolved against the one chat it goes into). */
+export type ForwardNote = { text: string; toUserIds: string[] }
+
 type Send = Pick<ChatContextValue, 'forwardMessage' | 'sendMessageToChat'>
 type Names = {
   /** A name this account knows for a user (`null` = the forwarder), if any: a big group's profiles load lazily, a member may have left. */
@@ -40,12 +43,13 @@ export function pieceSender(piece: Extract<ForwardPiece, { kind: 'text' }>, name
 /**
  * One forward into each picked chat. Words (text messages and plain text) go as one message: the note, then each piece
  * quoted under who said it, one piece too (a line forwarded alone is the one that most needs its speaker). Files, widgets
- * and cards go as themselves, after the words; with nothing to quote, the note follows them.
+ * and cards go as themselves, after the words; with nothing to quote, the note follows them. The message carrying the note
+ * addresses whom the note @-ed, the way a message typed in that chat would.
  *
  * Chats are written to one after another; `sent` hears each one done, so a failure part-way (the outbox refusing a write)
  * can tell which chats already have their copy.
  */
-export async function forwardToChats(pieces: readonly ForwardPiece[], targetChatIds: readonly string[], note: string, io: Send & Names,
+export async function forwardToChats(pieces: readonly ForwardPiece[], targetChatIds: readonly string[], note: ForwardNote, io: Send & Names,
   sent: (chatId: string) => void = () => {}): Promise<void> {
   const words: { quote: ForwardQuoteItem; message?: MessageItem }[] = []
   const own: MessageItem[] = []
@@ -64,16 +68,17 @@ export async function forwardToChats(pieces: readonly ForwardPiece[], targetChat
     } })
   }
   const quoted = words.length > 0
-  const body = quoted ? forwardQuote(words.map(word => word.quote), note) : null
+  const body = quoted ? forwardQuote(words.map(word => word.quote), note.text) : null
+  const addressed = { toUserIds: note.toUserIds }
   // A chat message among the words keeps the link to where they came from (read rights, the forwarded badge).
   const source = words.find(word => word.message)?.message
   for (const chatId of targetChatIds) {
     if (body !== null) {
-      if (source) await io.forwardMessage({ ...source, content: body, reply_to_message_id: null, reply_to_content: null, reply_to_sender_user_id: null }, chatId)
-      else await io.sendMessageToChat(chatId, body)
+      if (source) await io.forwardMessage({ ...source, content: body, reply_to_message_id: null, reply_to_content: null, reply_to_sender_user_id: null }, chatId, addressed)
+      else await io.sendMessageToChat(chatId, body, addressed)
     }
     for (const message of own) await io.forwardMessage(message, chatId)
-    if (!quoted && note.trim()) await io.sendMessageToChat(chatId, note.trim())
+    if (!quoted && note.text.trim()) await io.sendMessageToChat(chatId, note.text.trim(), addressed)
     sent(chatId)
   }
 }
@@ -82,7 +87,7 @@ export async function forwardToChats(pieces: readonly ForwardPiece[], targetChat
 export function useForwardToChats() {
   const { forwardMessage, sendMessageToChat } = useChatStore('forwardMessage', 'sendMessageToChat')
   const names = useForwardNames()
-  return useCallback((pieces: readonly ForwardPiece[], targetChatIds: readonly string[], note: string, sent?: (chatId: string) => void) =>
+  return useCallback((pieces: readonly ForwardPiece[], targetChatIds: readonly string[], note: ForwardNote, sent?: (chatId: string) => void) =>
     forwardToChats(pieces, targetChatIds, note, { forwardMessage, sendMessageToChat, ...names }, sent), [forwardMessage, sendMessageToChat, names])
 }
 

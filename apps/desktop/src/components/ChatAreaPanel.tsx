@@ -18,7 +18,7 @@ import { useGroupCollabLoader, EMPTY_GROUP_COLLAB } from '../hooks/useGroupColla
 import { useRoomAuthorityRevision } from '../hooks/useRoomAuthorityRevision'
 import { useTopicScopedMemberProfile } from '../hooks/useTopicScopedMemberProfile'
 import { LiveForwardMessageDialog } from './chat/ForwardMessageDialog'
-import { useForwardToChats } from './chat/forwardToChats'
+import { useForwardToChats, type ForwardNote } from './chat/forwardToChats'
 import { AUTOMATION_TEST_IDS } from '../lib/automationDom'
 import { UI_EVENTS } from '../lib/uiEvents'
 import { drainTopicSplitRequest, requestTopicSplit } from '../lib/topicSplitRequest'
@@ -355,7 +355,7 @@ function ChatAreaSurface({ viewportKey = 'chats', imPage = false, navigationTarg
   // @@@message-forward (#899) / @@@multi-select (#988) - fan out every pending message into every
   // selected target chat. On success (and if we were in batch select), leave select mode.
   const forwardTo = useForwardToChats()
-  const handleForwardTo = useCallback(async (targetChatIds: string[], note: string, sent: (chatId: string) => void) => {
+  const handleForwardTo = useCallback(async (targetChatIds: string[], note: ForwardNote, sent: (chatId: string) => void) => {
     if (forwardMessages.length === 0) return
     // Several picked messages read in the order they were said, however they were ticked.
     const pieces = [...forwardMessages].sort((a, b) => a.seq - b.seq).map(message => ({ kind: 'message' as const, message }))

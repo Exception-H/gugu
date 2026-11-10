@@ -6,7 +6,8 @@ import { chatDisplayName } from '@gugu/core/shared/ui/chatModels'
 import { ChatPickSheet } from './ChatPickSheet'
 import { useChatStore } from '../../store/chatContext'
 import { ShareToAppsRow } from '../share/ShareToAppsRow'
-import { Field } from '../ui/Field'
+import { ForwardNoteEditor } from './ForwardNoteEditor'
+import type { ForwardNote } from './forwardToChats'
 
 interface ForwardMessageDialogProps {
   // @@@multi-select (#988) - one or many messages to forward. Single-forward passes [msg];
@@ -23,7 +24,7 @@ interface ForwardMessageDialogProps {
    * Forward into every selected chat, with the forwarder's note (may be empty). Rejects to surface an error. `sent` names each
    * chat once it has its copy: it is unticked, so forwarding again after a failure part-way only reaches the rest.
    */
-  onForward: (targetChatIds: string[], note: string, sent: (chatId: string) => void) => Promise<void>
+  onForward: (targetChatIds: string[], note: ForwardNote, sent: (chatId: string) => void) => Promise<void>
   onClose: () => void
 }
 
@@ -32,7 +33,7 @@ export function ForwardMessageDialog({ messages = [], preview: subject, topRow, 
   const { identitiesById } = useChatStore('identitiesById')
   const [selected, setSelected] = useState<Set<string>>(new Set())
   const [query, setQuery] = useState('')
-  const [note, setNote] = useState('')
+  const [note, setNote] = useState<ForwardNote>({ text: '', toUserIds: [] })
   const [forwarding, setForwarding] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
@@ -136,10 +137,7 @@ export function ForwardMessageDialog({ messages = [], preview: subject, topRow, 
             </>
           ))}
         </div>
-        <Field.Root className="mt-2">
-          <Field.Label className="sr-only">{t('forward.note')}</Field.Label>
-          <Field.Input value={note} placeholder={t('forward.note')} data-testid="forward-note" onChange={(event) => setNote(event.target.value)} />
-        </Field.Root>
+        <ForwardNoteEditor chat={selected.size === 1 ? chats.find((chat) => selected.has(chat.id)) ?? null : null} several={selected.size > 1} onChange={setNote} />
       </>}
       picked={t('forward.selected', { count: selected.size })}
       actionLabel={forwarding ? t('forward.forwarding') : t('forward.title')}

@@ -6,6 +6,14 @@ import { ForwardMessageDialog } from '../../../../apps/desktop/src/components/ch
 import { chatPickRows, forwardPreview, forwardableChats } from '../../../../apps/desktop/src/components/chat/forwardMessageUtils'
 import messagingZhCN from '../../../../apps/desktop/src/i18n/locales/zh-CN/messaging'
 import type { ChatItem, MessageItem } from '@gugu/core/shared/types/chat'
+
+// The note's editor and @ are the composer's (ForwardNoteEditor); here it is a plain field saying which chat it may @ in.
+vi.mock('../../../../apps/desktop/src/components/chat/ForwardNoteEditor', async () => {
+  const { createElement: h } = await import('react')
+  return { ForwardNoteEditor: ({ chat, several, onChange }: { chat: ChatItem | null; several: boolean; onChange: (note: { text: string; toUserIds: string[] }) => void }) =>
+    h('input', { 'data-testid': 'forward-note', 'data-mention-chat': chat?.id ?? '', 'data-several': several ? '1' : '',
+      onChange: (event: { target: { value: string } }) => onChange({ text: event.target.value, toUserIds: chat ? ['agent-1'] : [] }) }) }
+})
 function chat(overrides: Partial<ChatItem> = {}): ChatItem {
   return {
     id: 'chat-x',
@@ -108,7 +116,7 @@ afterEach(() => {
 })
 describe('ForwardMessageDialog', () => {
   it('unticks the chats a failed forward already reached, so forwarding again only reaches the rest', async () => {
-    const onForward = vi.fn(async (_ids: string[], _note: string, sent: (chatId: string) => void): Promise<void> => { sent('a'); throw new Error('outbox refused') })
+    const onForward = vi.fn(async (_ids: string[], _note: unknown, sent: (chatId: string) => void): Promise<void> => { sent('a'); throw new Error('outbox refused') })
     const onClose = vi.fn()
     await act(async () => {
       root.render(createElement(ForwardMessageDialog, {
@@ -127,9 +135,9 @@ describe('ForwardMessageDialog', () => {
     onForward.mockImplementation(async () => {})
     await act(async () => { forwardBtn().dispatchEvent(new MouseEvent('click', { bubbles: true })); await Promise.resolve() })
     await flush()
-    expect(onForward).toHaveBeenLastCalledWith(['b'], '', expect.any(Function))
+    expect(onForward).toHaveBeenLastCalledWith(['b'], { text: '', toUserIds: [] }, expect.any(Function))
   })
-  it('hands the typed note to the forward', async () => {
+  it('hands the typed note, and whom it @-s in the one chat picked, to the forward', async () => {
     const onForward = vi.fn(async () => {})
     await act(async () => {
       root.render(createElement(ForwardMessageDialog, {
@@ -139,16 +147,18 @@ describe('ForwardMessageDialog', () => {
       }))
     })
     await flush()
-    const note = document.body.querySelector<HTMLInputElement>('[data-testid="forward-note"]')!
-    await act(async () => {
-      Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!.call(note, '看一下这条')
-      note.dispatchEvent(new Event('input', { bubbles: true }))
-    })
+    const note = () => document.body.querySelector<HTMLInputElement>('[data-testid="forward-note"]')!
+    expect(note().dataset.mentionChat).toBe('')
     await act(async () => { (document.body.querySelector('[data-pick-row="a"]') as HTMLElement).dispatchEvent(new MouseEvent('click', { bubbles: true })) })
+    expect(note().dataset.mentionChat).toBe('a')
+    await act(async () => {
+      Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!.call(note(), '看一下这条')
+      note().dispatchEvent(new Event('input', { bubbles: true }))
+    })
     const forwardBtn = Array.from(document.body.querySelectorAll('button')).find((b) => b.textContent === '转发')!
     await act(async () => { forwardBtn.dispatchEvent(new MouseEvent('click', { bubbles: true })); await Promise.resolve() })
     await flush()
-    expect(onForward).toHaveBeenCalledWith(['a'], '看一下这条', expect.any(Function))
+    expect(onForward).toHaveBeenCalledWith(['a'], { text: '看一下这条', toUserIds: ['agent-1'] }, expect.any(Function))
   })
   it('forwards the message to selected chats and closes', async () => {
     const onForward = vi.fn(async () => {})
@@ -178,7 +188,7 @@ describe('ForwardMessageDialog', () => {
       await Promise.resolve()
     })
     await flush()
-    expect(onForward).toHaveBeenCalledWith(['a'], '', expect.any(Function))
+    expect(onForward).toHaveBeenCalledWith(['a'], { text: '', toUserIds: [] }, expect.any(Function))
     expect(onClose).toHaveBeenCalledTimes(1)
   })
   it('surfaces forward failures without closing', async () => {
@@ -243,7 +253,7 @@ describe('ForwardMessageDialog', () => {
       await Promise.resolve()
     })
     await flush()
-    expect(onForward).toHaveBeenCalledWith(['a'], '', expect.any(Function))
+    expect(onForward).toHaveBeenCalledWith(['a'], { text: '', toUserIds: [] }, expect.any(Function))
     expect(onClose).toHaveBeenCalledTimes(1)
   })
 })

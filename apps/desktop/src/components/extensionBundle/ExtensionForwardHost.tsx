@@ -12,6 +12,7 @@ import { rpc } from '../../session/renderer/lib/ipc'
 import { appsHere } from '../appSlot/appsHere'
 import { updateUnasked } from '../appSlot/updateUnasked'
 import { ForwardMessageDialog } from '../chat/ForwardMessageDialog'
+import type { ForwardNote } from '../chat/forwardToChats'
 import { useToast } from '../toastContext'
 import { ListRow } from '../ui/ListRow'
 import { installPackageOf, packageArrived } from './sharedPackages'
@@ -62,7 +63,7 @@ export function ExtensionForwardHost() {
   const t = translateSessionMessage
   const close = () => setRequest(null)
 
-  const forward = async (targetChatIds: string[], note: string, sent: (chatId: string) => void) => {
+  const forward = async (targetChatIds: string[], note: ForwardNote, sent: (chatId: string) => void) => {
     const packed = await rpc.extensions.packInstalled({ extensionId: request.extensionId })
     if (!packed.success || !packed.data) {
       log.error({ extensionId: request.extensionId, error: packed.error }, 'packing an extension to forward failed')
@@ -71,7 +72,7 @@ export function ExtensionForwardHost() {
     const file = new File([packed.data.bytes], packed.data.fileName, { type: packed.data.mimeType })
     for (const chatId of targetChatIds) {
       await sendAttachmentsToChat(chatId, [file])
-      if (note.trim()) await sendMessageToChat(chatId, note.trim())
+      if (note.text.trim()) await sendMessageToChat(chatId, note.text.trim(), { toUserIds: note.toUserIds })
       sent(chatId)
     }
   }

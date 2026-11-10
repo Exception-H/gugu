@@ -4,6 +4,7 @@ import { APP_FORWARD_FILES_EVENT, type AppForwardFilesDetail } from '../../sessi
 import { useAuth } from '../../store/auth'
 import { useChatStore } from '../../store/chatContext'
 import { ForwardMessageDialog } from './ForwardMessageDialog'
+import type { ForwardNote } from './forwardToChats'
 
 /**
  * The folder's 「转发」 (`files.forward`, desktop and phone): the chat's own forward page. Each chat picked gets one file card
@@ -26,11 +27,11 @@ export function ChatFileForwardHost() {
   }, [])
   if (!request || !user) return null
   // The note follows the files, as a forward's note follows what has no words to quote.
-  const forward = async (targetChatIds: string[], note: string, sent: (chatId: string) => void) => {
+  const forward = async (targetChatIds: string[], note: ForwardNote, sent: (chatId: string) => void) => {
     for (const chatId of targetChatIds) {
       if ('copies' in request) await sendAttachmentsToChat(chatId, request.copies)
       else for (const file of request.files) await forwardMessage(file, chatId)
-      if (note.trim()) await sendMessageToChat(chatId, note.trim())
+      if (note.text.trim()) await sendMessageToChat(chatId, note.text.trim(), { toUserIds: note.toUserIds })
       sent(chatId)
     }
   }
