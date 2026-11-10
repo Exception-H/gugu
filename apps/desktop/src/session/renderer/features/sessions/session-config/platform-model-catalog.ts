@@ -242,7 +242,10 @@ export function usePlatformModelCatalog(
     queryFn: () => loadPlatformModelCatalog(providerId!, surface, sessionId ?? null, machine),
     // 机器没连上就不问:问不到只会落一个「模型列表尚未就绪」,而原因是机器离线(那由机器的提示说)。
     enabled: online && providerId !== null,
+    // Loaded once and kept for the account: an unused entry is not dropped (react-query's default
+    // drops it after 5 minutes, and the next New task would start empty again).
     staleTime: Infinity,
+    gcTime: Infinity,
     retry: false,
     // Switching sessions keeps the list on screen and drops just the previous session's
     // preselection until this one's arrives. Another provider / surface / machine starts empty:
@@ -253,7 +256,8 @@ export function usePlatformModelCatalog(
         : undefined,
   }, queryClient);
   const refetch = query.refetch;
-  const refresh = () => { void refetch({ cancelRefetch: false }); };
+  // A fresh request, never the one already in flight: after a hot switch the record just changed (#6182).
+  const refresh = () => { void refetch(); };
 
   const wasOnline = useRef(online);
   useEffect(() => {
@@ -266,7 +270,7 @@ export function usePlatformModelCatalog(
 
   useEffect(() => {
     const refreshAll = () => {
-      void queryClient.invalidateQueries({ queryKey: PLATFORM_MODEL_CATALOG_QUERY_KEY }, { cancelRefetch: false });
+      void queryClient.invalidateQueries({ queryKey: PLATFORM_MODEL_CATALOG_QUERY_KEY });
     };
     // 回到前台就重取(#7056):人可能刚在网页上开通、续费会员 —— 点「升级解锁更多模型」去付完钱回来,
     // 下拉里就该是会员的模型。开会员只写会员表(bind_subscription),没有任何推送会到这里;
