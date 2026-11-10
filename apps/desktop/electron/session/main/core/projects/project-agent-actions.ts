@@ -221,7 +221,7 @@ async function bindFolder(action: Extract<ProjectAgentAction, { action: 'project
     },
     bind: (_machine, id, chatId) => api.bind(id, chatId), unbind: (_machine, id) => api.unbind(id), deleteProject: api.delete,
     sessionCountOf: api.sessionCount,
-  }, { rowId: '', machine: null, path: action.path, existingProjectId: existing?.id })
+  }, { rowId: '', machine: null, path: action.path })
   if (!linked.ok) throw linked.error
   return { project_id: action.chat_id, path: action.path, chat_id: action.chat_id, group_notice: notice(action.chat_id, `把这台设备上的 ${action.path} 接进了项目「${action.name}」。`), undo: { tool: 'project_remove_device', project_id: action.chat_id, path: action.path } }
 }
