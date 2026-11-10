@@ -140,18 +140,20 @@ export function buildSections({
 }): HistorySection[] {
   const compareRows = compareBy<HistoryEntry>(sort, (row) => row.title);
   // 节的先后:在线的是目录、离线的是单条,两种东西只有「它归哪一节」是同一种 —— 按标题排时就按节名(项目名)比,
-  // ❌ 拿目录路径与会话标题互相比(归并的前提「各路同一把尺子、各自有序」就不成立了)。各路先按这把尺子排好再归并。
+  // ❌ 拿目录路径与会话标题互相比(归并的前提「各路同一把尺子、各自有序」就不成立了):那时各路先按这把尺子排好再归并。
+  // 按时间排时主进程给的就是这把尺子排好的,照它的顺序(❌ 再排一遍:时间相同的会被换位);只有一路(一台在线、没有离线的)
+  // 也照主进程的顺序 —— 没有要归并的,渲染层不自己排。
   const compareItems = compareBy<Item>(sort, (item) => item.ref.label);
   const onlineItems = pages.map(({ machine, rows }) =>
-    rows.map((row): Item => ({ ...pickSortable(row), ref: sectionOfDirectory(machine, row), online: { machine, row } }))
-      .sort(compareItems)
-  );
+    rows.map((row): Item => ({ ...pickSortable(row), ref: sectionOfDirectory(machine, row), online: { machine, row } })));
   const offlineItems = offline
     .map((entry): Item => ({ ...pickSortable(entry), ref: sectionOfEntry(entry), offline: entry }))
     .sort(compareItems);
+  const lists = [...onlineItems, offlineItems].filter((list) => list.length > 0);
+  if (sort === 'title' && lists.length > 1) for (const list of onlineItems) list.sort(compareItems);
 
   const sections = new Map<string, HistorySection & { previews: HistoryEntry[][] }>();
-  for (const item of mergeSorted([...onlineItems, offlineItems], compareItems)) {
+  for (const item of mergeSorted(lists, compareItems)) {
     let section = sections.get(item.ref.key);
     if (!section) {
       section = { ...item.ref, onlineCount: 0, providers: [], members: [], preview: [], offline: [], offlineMachines: [], previews: [] };
