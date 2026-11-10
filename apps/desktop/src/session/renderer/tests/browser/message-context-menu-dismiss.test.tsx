@@ -5,7 +5,7 @@
  */
 import { afterEach, expect, it, vi } from 'vitest';
 import { cdp, page, userEvent } from 'vitest/browser';
-import { act, useState } from 'react';
+import { act } from 'react';
 import { createReactHarness, message, renderWithAppProviders } from '../../../../../../../tests/support/testHarness';
 import { until } from '../../../../../../../tests/support/awaitCondition';
 import '@/styles/tokens.css';
@@ -14,7 +14,7 @@ import '@renderer/index.css';
 vi.mock('@gugu/core/cloud/config', async (original) => ({ ...(await original<object>()), getSupabaseUrl: () => 'http://supabase.test.local', getSupabaseAnonKey: () => 'test-anon-key' }));
 vi.mock('@/hooks/useAgentHarnessIdentity', () => ({ useAgentHarnessIdentity: () => 'codex' }));
 const { MessageBubble } = await import('@/components/chat/MessageBubble');
-const { Menu, MenuItem } = await import('@/components/ui/Menu');
+const { DropdownMenu, MenuItem } = await import('@/components/ui/Menu');
 
 let harness: ReturnType<typeof createReactHarness>;
 afterEach(() => { harness?.cleanup(); });
@@ -85,22 +85,37 @@ it.each([50, 250])('a left click on the bubble %ims after the right click closes
   await until('the menu closes', () => menus().length === 0);
 });
 
-it('a button-anchored menu closes on an immediate outside press too', async () => {
+// owner 11-09:成员行「⋯」点了又点,菜单不关反而一直开着。按钮打开的菜单 = 那颗按钮是 Trigger:
+// 再按同一颗就关,按另一行的就挪过去(只开着一个),外面一按就关。真鼠标(CDP),pointerdown 与 click 各自到。
+it('a menu opened from a button: a second press on it closes, another row moves it, an outside press closes', async () => {
+  const handle = DropdownMenu.createHandle<string>();
   function Host() {
-    const [open, setOpen] = useState(false);
     return <>
-      <button data-testid="opener" style={{ position: 'fixed', left: 100, top: 100 }} onClick={() => setOpen(true)}>open</button>
-      {open && <Menu anchor={document.querySelector('[data-testid="opener"]')!} onClose={() => setOpen(false)}><MenuItem data-testid="row">row</MenuItem></Menu>}
+      {['a', 'b'].map((row, index) => <DropdownMenu.Trigger key={row} handle={handle} payload={row} data-testid={`opener-${row}`}
+        style={{ position: 'fixed', left: 100, top: 100 + index * 200, width: 40, height: 30 }}>{row}</DropdownMenu.Trigger>)}
+      <DropdownMenu.Root handle={handle} modal={false}>
+        {({ payload }) => <DropdownMenu.Content><MenuItem data-testid={`row-${payload}`}>{payload}</MenuItem></DropdownMenu.Content>}
+      </DropdownMenu.Root>
     </>;
   }
+  const rows = () => document.querySelectorAll('[data-testid^="row-"]');
   await page.viewport(1280, 800);
   harness = createReactHarness();
   await renderWithAppProviders(harness, <Host />);
-  await press(110, 108, 'left');
-  await until('the menu opens', () => !!document.querySelector('[data-testid="row"]'));
+  await press(108, 108, 'left');
+  await until('the menu opens', () => !!document.querySelector('[data-testid="row-a"]'));
+  await sleep(50);
+  await press(108, 108, 'left');
+  await until('a second press on the same button closes it', () => rows().length === 0);
+  await sleep(300);
+  expect(rows(), 'and it stays closed').toHaveLength(0);
+  await press(108, 108, 'left');
+  await until('it opens again', () => !!document.querySelector('[data-testid="row-a"]'));
+  await press(108, 308, 'left');
+  await until('another row moves the one menu', () => !!document.querySelector('[data-testid="row-b"]') && rows().length === 1);
   await sleep(50);
   await press(700, 600, 'left');
-  await until('the menu closes', () => !document.querySelector('[data-testid="row"]'));
+  await until('an outside press closes it', () => rows().length === 0);
 });
 
 it('right-clicking another message moves the one menu there; a click on another row closes it', async () => {

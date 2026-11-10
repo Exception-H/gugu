@@ -103,7 +103,7 @@ async function renderConversation(width: number, naturallySeen = false, surface:
     const rowProps: MessageListRowProps = { rows, messages, mobile: width < 720, memberReadSeqs: {}, deliveryWaits: new Map(), memberProfiles: {},
       isGroupChat: true, onReaction: noop, onQuote: noop, onForward: noop, onDelete: noop, onVisible: noop, selectMode: false,
       selectedIds: new Set(), onToggleSelect: noop, onEnterSelectMode: noop, flashMessageId, threeParty: undefined,
-      onShowReadReceipt: undefined, onOpenMemberProfile: undefined, onOpenTopic: undefined, topicAnchors: undefined, onOpenTopicAnchor: undefined,
+      readReceiptHandle: undefined, memberProfileOpener: undefined, onOpenTopic: undefined, topicAnchors: undefined, onOpenTopicAnchor: undefined,
       agentFloodNoticeMessageId: undefined, onAgentFloodUndone: undefined, onOpenFile: undefined, onMentionMember: undefined }
     return <><button onClick={pinToBottom}>Return to latest</button>
       <button onClick={() => setEmptySearch(!emptySearch)}>Toggle empty search</button>

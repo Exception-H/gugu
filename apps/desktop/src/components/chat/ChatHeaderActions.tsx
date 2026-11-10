@@ -94,13 +94,11 @@ export const ChatHeaderActions = observer(function ChatHeaderActions({
         {groupId && narrow && <>
           {invite.showInvite && <MenuItem data-testid={AUTOMATION_TEST_IDS.chatHeaderInviteButton} onClick={() => openPopup('invite')} icon={<UserPlus size={16} />}>{t('header.invite')}</MenuItem>}
           <MenuItem onClick={() => openPopup('apps')} icon={<LayoutGrid size={16} />}>{t('header.groupApps')}</MenuItem>
-          <MenuSeparator />
         </>}
         <MenuItem data-testid={AUTOMATION_TEST_IDS.chatHeaderSearchButton} onClick={onSearch} icon={<Search size={16} />} shortcut={isRoomChat ? '⌘F' : undefined}>
           {t(isRoomChat ? 'header.searchHistory' : 'header.searchChat')}
         </MenuItem>
         <MenuItem onClick={onOpenFolder} icon={<Folder size={16} />}>{folderName}</MenuItem>
-        <MenuSeparator />
         <ChatDetailsMenuItems isGroupChat={isGroupChat} onOpenInfo={() => isGroupChat ? onOpenInfo('main') : onOpenInfo()} />
         <MenuSeparator />
         <ChatHeaderSwitches />

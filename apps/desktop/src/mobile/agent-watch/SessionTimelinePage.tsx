@@ -18,7 +18,7 @@ import { AgentFailureSlot } from '@/components/AgentFailureSlot'
 import { Button } from '@/components/ui/Button'
 import { useBackLayer } from '@/components/ui/sheetStack'
 import { IconButton } from '@/components/ui/IconButton'
-import { MoreHorizontal, RefreshCw } from '@/lib/icons'
+import { RefreshCw } from '@/lib/icons'
 import { AgentWatchScreen } from './AgentWatchChrome'
 import { SessionConversation } from './SessionConversation'
 import { enqueueSessionInput, releaseQueuedSessionInput, queuedSessionInputs, useQueuedSessionInputs } from '@/lib/sessionInputOutboxBridge'
@@ -34,7 +34,8 @@ import { sessionPresentation } from './watch-status'
 import { agentStatusText } from '@/lib/agentStatusText'
 import { agentStatusColorVar, presentAgentStatus } from '@gugu/core/shared/agentStatusPresentation'
 import { useAgentWatchSession } from './useAgentWatchSession'
-import { SessionActions } from './SessionsPage'
+import { DropdownMenu } from '@/components/ui/Menu'
+import { type SessionMenuTarget, SessionActions, SessionMenuButton } from './SessionsPage'
 import { SessionAppMenu } from './SessionAppMenu'
 import { useMachineLabel } from './useMachineLabel'
 import { SessionAppFrame } from '@/components/appSlot/SessionAppFrame'
@@ -96,7 +97,7 @@ export const SessionTimelinePage = observer(function SessionTimelinePage({
   const { issue: wakeIssue, dropped: wakeDropped, retry: retryWake } = useCloudComputerWake(device)
   const cloudAsleep = device.cloud_computer === 'asleep' || device.cloud_computer === 'waking'
   const [appliedDraft, setAppliedDraft] = useState<typeof draft>(undefined)
-  const [menuAnchor, setMenuAnchor] = useState<Element | null>(null)
+  const [sessionMenu] = useState(() => DropdownMenu.createHandle<SessionMenuTarget>())
   // owner 10-16 The App this page shows instead of the timeline, picked from the mode button; null = the timeline.
   const [appKind, setAppKind] = useState<string | null>(initialAppKind ?? null)
   useEffect(() => showPhoneAppView({
@@ -234,9 +235,7 @@ export const SessionTimelinePage = observer(function SessionTimelinePage({
         onOpenApp={setAppKind}
       /> : null}
       {reachable && !hostSilent ? (
-        <IconButton size="md" aria-label={t('agentWatch.sessions.menu')} data-testid="agent-watch-session-page-menu" onClick={(event) => setMenuAnchor(event.currentTarget)}>
-          <MoreHorizontal />
-        </IconButton>
+        <SessionMenuButton menu={sessionMenu} target={{ deviceId: device.device_id, session, phoneHost }} size="md" testId="agent-watch-session-page-menu" />
       ) : null}
     </>
   )
@@ -319,14 +318,7 @@ export const SessionTimelinePage = observer(function SessionTimelinePage({
         />
       )}
 
-      <SessionActions
-          anchor={menuAnchor}
-          session={session}
-          deviceId={device.device_id}
-          phoneHost={phoneHost}
-          onClose={() => setMenuAnchor(null)}
-          onArchived={onBack}
-        />
+      <SessionActions menu={sessionMenu} onArchived={onBack} />
     </AgentWatchScreen>
   )
 })

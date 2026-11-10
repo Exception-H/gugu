@@ -16,7 +16,8 @@ import { translateSessionMessage } from '@/session/renderer/localization/locale-
 import { usePhoneAssistantIdentity } from '../assistant/phoneAssistantIdentity'
 import { AgentWatchNote, AgentWatchScreen } from './AgentWatchChrome'
 import { ConnectionStatus } from '@/components/connection/ConnectionStatus'
-import { SessionActions, SessionRow } from './SessionsPage'
+import { DropdownMenu } from '@/components/ui/Menu'
+import { type SessionMenuTarget, SessionActions, SessionRow } from './SessionsPage'
 import { assistantGroupIds, locateSession, sessionSections, type SessionNode, type SessionSection } from './session-sections'
 import { useMachineLabel } from './useMachineLabel'
 import { directoryMachines, visibleMachines } from './machine-list'
@@ -137,8 +138,8 @@ export const ProjectsPage = observer(function ProjectsPage({
   const [collapsed, toggleCollapsed] = useStoredSet(COLLAPSED_KEY)
   /** 点了「展开显示」的分区(收起的闲置家族全露)。 */
   const [moreOpen, toggleMore] = useStoredSet(MORE_KEY)
-  /** 正在看管理动作的那条会话(行尾「…」打开的抽屉);null = 关着。 */
-  const [menuFor, setMenuFor] = useState<{ deviceId: string; session: SessionpageSessionSummary; anchor: Element } | null>(null)
+  /** 会话的管理菜单:一页一个,每行的 ⋯ 是它的 Trigger。 */
+  const [sessionMenu] = useState(() => DropdownMenu.createHandle<SessionMenuTarget>())
 
   // Read during every observer render: React's useMemo cannot track MobX presence dependencies.
   const sections = sessionSections(sectionMachines, rows, { assistantId, homeIds }, { expanded: moreOpen, online })
@@ -234,7 +235,7 @@ export const ProjectsPage = observer(function ProjectsPage({
           statusAvailable={phone ? hostAvailable : undefined}
           phoneHost={phone}
           onOpen={(session) => onOpenSession(deviceId, session)}
-          onMenu={(phone ? hostAvailable && cancellable : rowDevice?.is_online) ? (session, anchor) => setMenuFor({ deviceId, session, anchor }) : undefined}
+          menu={(phone ? hostAvailable && cancellable : rowDevice?.is_online) ? { handle: sessionMenu, target: { deviceId, session: node.item.session, phoneHost: phone } } : undefined}
         />,
         ...(open ? renderTree(section, node.children, depth + 1, { deviceId, projectId }) : []),
       ]
@@ -371,13 +372,7 @@ export const ProjectsPage = observer(function ProjectsPage({
         )
       })}
 
-      <SessionActions
-          anchor={menuFor?.anchor ?? null}
-          session={menuFor?.session ?? null}
-          deviceId={menuFor?.deviceId ?? ''}
-          phoneHost={!!menuFor && !!deviceOf.get(menuFor.deviceId) && isPhoneDevice(deviceOf.get(menuFor.deviceId)!)}
-          onClose={() => setMenuFor(null)}
-        />
+      <SessionActions menu={sessionMenu} />
     </AgentWatchScreen>
   )
 })
