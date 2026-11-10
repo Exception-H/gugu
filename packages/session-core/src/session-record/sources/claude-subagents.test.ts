@@ -106,10 +106,10 @@ describe('Claude native subagent records', () => {
   });
 
   it('says a child finished where the root record notes it, with its reply, and only there', async () => {
-    const notification = (uuid: string, agentId: string, callId: string, reply: string) => JSON.stringify({
+    const notification = (uuid: string, agentId: string, callId: string, reply: string, status = 'completed') => JSON.stringify({
       uuid, type: 'user', sessionId: 'parent', timestamp: '2026-10-26T11:41:00Z', origin: { kind: 'task-notification' },
       message: { role: 'user', content: `<task-notification>\n<task-id>${agentId}</task-id>\n<tool-use-id>${callId}</tool-use-id>\n`
-        + `<status>completed</status>\n<summary>Agent "Audit" finished</summary>\n<result>${reply}</result>\n</task-notification>` },
+        + `<status>${status}</status>\n<summary>Agent "Audit" finished</summary>\n<result>${reply}</result>\n</task-notification>` },
     });
     const { locator } = await fixture([
       line('user', 'user', [text('Inspect the repository')]),
@@ -121,9 +121,16 @@ describe('Claude native subagent records', () => {
       line('sync-result', 'user', [result('launch-sync', 'hand-back')], { toolUseResult: { status: 'completed', agentId: 'helper',
         content: [text('HELPER_RESULT')] } }),
       notification('notified', 'worker', 'launch-worker', 'WORKER_RESULT'),
+      line('more', 'assistant', [launch('launch-broken', 'Break'), launch('launch-halted', 'Halt')]),
+      launched('broken-launched', 'launch-broken', 'broken'),
+      launched('halted-launched', 'launch-halted', 'halted'),
+      notification('broken-notified', 'broken', 'launch-broken', 'BROKEN', 'failed'),
+      notification('halted-notified', 'halted', 'launch-halted', 'HALTED', 'killed'),
       end('next-end', 'BOTH DONE'),
     ], {
       worker: [line('child-user', 'user', [text('Audit')], child), end('child-end', 'WORKER_RESULT', child)],
+      broken: [line('broken-user', 'user', [text('Break')], { isSidechain: true, agentId: 'broken' })],
+      halted: [line('halted-user', 'user', [text('Halt')], { isSidechain: true, agentId: 'halted' })],
       helper: [line('helper-user', 'user', [text('Check')], { isSidechain: true, agentId: 'helper' }),
         end('helper-end', 'HELPER_RESULT', { isSidechain: true, agentId: 'helper' })],
     });
@@ -136,6 +143,8 @@ describe('Claude native subagent records', () => {
       expect(turns[1].items.filter((item) => item.kind === 'subagent-done-tool-call')).toEqual([
         expect.objectContaining({ launchToolCallId: 'helper', outcome: 'completed', outputText: 'HELPER_RESULT' }),
         expect.objectContaining({ launchToolCallId: 'worker', outcome: 'completed', outputText: 'WORKER_RESULT' }),
+        expect.objectContaining({ launchToolCallId: 'broken', outcome: 'failed', outputText: 'BROKEN' }),
+        expect.objectContaining({ launchToolCallId: 'halted', outcome: 'stopped', outputText: 'HALTED' }),
       ]);
     }
   });
