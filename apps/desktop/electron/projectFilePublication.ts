@@ -40,7 +40,7 @@ export function createProjectFilePublisher(deps: {
   rpc: Rpc; env?: NodeJS.ProcessEnv
   /** This account's own file storage setting. */
   storage(): Promise<FileStorage>
-  /** Whether a device of this account binds the chat to a project: what makes it a project chat here. */
+  /** Whether the chat is one of this account's projects (its project group), whatever folders its machines bind. */
   projectChat(chatId: string): Promise<boolean>
   /** Ask for a version's temporary copy, as a reader's first open does. */
   requestCopy?(itemId: string, version: number): Promise<unknown>

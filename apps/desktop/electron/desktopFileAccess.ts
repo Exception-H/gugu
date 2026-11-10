@@ -10,6 +10,7 @@ import { attachmentStage } from '@gugu/core/local/files/attachmentDiagnostics'
 import { DEVICE_STORE, createFileResolver, type FileContext, type FileRef, type FileRevision } from '@gugu/core/shared/fileResolver'
 import { parseFileStorage } from '@gugu/core/shared/fileStorage'
 import { readUserSettingsConfig, type SettingsTableClient } from '@gugu/core/cloud/userSettings'
+import { listAccountProjects, type AccountProjectsRpcClient } from '@gugu/core/cloud/deviceProjects'
 import { PROJECT_FILE_READ, createProjectFileReader, localProjectFileProvider } from './projectFileHost'
 import { ownSshFileProvider, type HeldFileSshLinks } from './projectFileSsh'
 import { createProjectTransferHost } from './projectFileTransferHost'
@@ -45,7 +46,7 @@ export function createDesktopFileAccess(deps: {
   rpc(name: string, args: Record<string, unknown>): Promise<unknown>
   /** Where this device keeps what it sends into project chats it binds no project to (DEVICE_STORE). */
   deviceStore: string
-  /** The identity schema, as the signed-in account: its own settings and device projects. */
+  /** The identity schema, as the signed-in account: its own settings and projects. */
   identityDb(accessToken: string): ReturnType<typeof makeIdentityClient>
 }) {
   // The device store is served and written like a project root.
@@ -96,11 +97,10 @@ export function createDesktopFileAccess(deps: {
   const publish = createProjectFilePublisher({ identity, root, rpc: deps.rpc, env: deps.env,
     requestCopy: async (itemId, version) => attachmentRequest(await endpoint(), 'file-request', { ref: { item_id: itemId, version }, as: (await identity()).accountId, request_id: crypto.randomUUID() }),
     async storage() { const { auth, db } = await identityDb(); return parseFileStorage(await readUserSettingsConfig(db as unknown as SettingsTableClient, auth.userId, 'user')) },
+    // The account's projects are its project groups (chat.project_groups), with or without a folder on any machine.
     async projectChat(chatId) {
       const { db } = await identityDb()
-      const { count, error } = await db.from('device_projects').select('device_id', { count: 'exact', head: true }).eq('chat_id', chatId)
-      if (error) throw new Error(error.message)
-      return (count ?? 0) > 0
+      return (await listAccountProjects(db as unknown as AccountProjectsRpcClient)).some((project) => project.chatId === chatId)
     },
   })
   return { providers, resolve, resolveAccount, read, drain, publish,

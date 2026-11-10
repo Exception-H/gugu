@@ -4,7 +4,8 @@
  * 每台机器把自己的本地项目 —— 名字、根目录、建立时间、绑的项目群、挂的文件夹 —— 整份记到账号上
  * (identity.device_projects,一项目一行,只有本人读得到);别的端打开时从账号读到完整的项目与文件夹,
  * 那台机器此刻离线也照样列出来,不靠这一端从前问到过。写只有一条路:那台机器自己整份替换
- * (identity.publish_device_projects),变了才推进账号 revision(device_changed,与设备行同一个信号)。
+ * (identity.publish_device_projects_v2),变了才推进账号 revision(device_changed,与设备行同一个信号)。
+ * 绑到不归这个账号的群上的那几行,账号不认那个群:行照记、群不记,并把这几个本地项目报回来(rejected)。
  */
 import type { AbortablePromiseLike } from './boundedOperation'
 import type { Device } from '../shared/types/chat'
@@ -16,7 +17,7 @@ type RpcResult = { data: unknown; error: { message: string } | null }
 type PageResult = RpcResult & { count?: number | null }
 
 export interface DeviceProjectsRpcClient {
-  rpc(fn: 'publish_device_projects', args: { p_device_id: string; p_projects: unknown[] }): AbortablePromiseLike<RpcResult>
+  rpc(fn: 'publish_device_projects_v2', args: { p_device_id: string; p_projects: unknown[] }): AbortablePromiseLike<RpcResult>
 }
 
 type DeviceProjectsPage = {
@@ -33,18 +34,18 @@ export interface DeviceProjectsTableClient {
   }
 }
 
-/**
- * 这台机器的项目整份记到账号上(没列进来的那台机器上的项目从账号上删掉)。
- * @returns 账号上那份变没变(没变 = 账号 revision 不动)。
- */
+/** What the account made of a publish: whether its copy changed, and the local projects whose group it refused. */
+export type DeviceProjectsPublished = { changed: boolean; rejected: string[] }
+
+/** 这台机器的项目整份记到账号上(没列进来的那台机器上的项目从账号上删掉)。 */
 export async function publishDeviceProjects(
   client: DeviceProjectsRpcClient,
   deviceId: string,
   projects: readonly DeviceProject[],
   /** 等太久就作废这次请求(见 deviceProjectsPublisher)。 */
   signal?: AbortSignal,
-): Promise<boolean> {
-  const request = client.rpc('publish_device_projects', {
+): Promise<DeviceProjectsPublished> {
+  const request = client.rpc('publish_device_projects_v2', {
     p_device_id: deviceId,
     p_projects: projects.map((project) => ({
       local_project_id: project.localProjectId,
@@ -62,7 +63,11 @@ export async function publishDeviceProjects(
   })
   const { data, error } = await (signal && request.abortSignal ? request.abortSignal(signal) : request)
   if (error) throw new Error(error.message)
-  return data === true
+  const reply = data as { changed?: unknown; rejected?: unknown } | null
+  if (typeof reply?.changed !== 'boolean' || !Array.isArray(reply.rejected) || !reply.rejected.every((id) => typeof id === 'string' && id)) {
+    throw new Error('Device project publish response must be {changed, rejected}')
+  }
+  return { changed: reply.changed, rejected: reply.rejected as string[] }
 }
 
 const DEVICE_PROJECT_COLUMNS = 'device_id, local_project_id, name, root_path, created_at, chat_id, folders'
