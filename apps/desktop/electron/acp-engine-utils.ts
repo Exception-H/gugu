@@ -223,9 +223,28 @@ export function setGuguToolsOffReader(read: () => Promise<GuguToolsOff>): void {
 }
 export const guguToolsOff = (): Promise<GuguToolsOff> => guguToolsOffReader()
 
+/** 已连上的那几台,开关一变就当场改它们(`applyGuguToolsOff`)。 */
+const liveGuguServers = new Set<McpServer>()
+
+/** 按开关给一台的工具标 enabled;变了就返回 true。关掉的工具原生清单、catalog 都不列,按名调也被拒(SDK 认 enabled)。 */
+function switchGuguTools(server: McpServer, off: ReadonlySet<string>): boolean {
+  let changed = false
+  for (const [name, tool] of Object.entries(registeredTools(server))) {
+    const enabled = !off.has(guguToolGroupOf(name) ?? '')
+    if (tool.enabled !== enabled) { tool.enabled = enabled; changed = true }
+  }
+  return changed
+}
+
+/** 开关改了:作用到每台已连上的 server,发一次 `notifications/tools/list_changed`,支持它的 harness 当场重新列工具。 */
+export function applyGuguToolsOff(off: GuguToolsOff): void {
+  const set = new Set<string>(off)
+  for (const server of liveGuguServers) if (switchGuguTools(server, set) && server.isConnected()) void server.sendToolListChanged()
+}
+
 /**
- * 一个 MCP 客户端连上来时组装的那台 server。`off` 里的组不注册:原生清单、catalog 都没有它们,按名调也找不到。
- * 每次连上现读开关,所以改了以后新开的会话就按新的来;同一份开关下清单不变,模型前缀照样复用。
+ * 一个 MCP 客户端连上来时组装的那台 server。`off` 里的组照常注册、标成不可用;连着的时候开关再变由 `applyGuguToolsOff` 改。
+ * 同一份开关下清单不变,模型前缀照样复用。
  */
 function buildGuguMcpServer(off: ReadonlySet<string>, ...[getContext, grantSignal, trackHostRequest]: Parameters<GuguMcpServerFactory<GuguMcpContext>>): McpServer {
   const initial = getContext()
@@ -233,8 +252,6 @@ function buildGuguMcpServer(off: ReadonlySet<string>, ...[getContext, grantSigna
   const search = initial.webSearch?.available() ? initial.webSearch : undefined
   const listedTools = new Set<string>(search ? [...baseTools, 'web_search'] : baseTools)
   if (PASSWORD_BETA_ENABLED) for (const name of ['password_credentials', 'password_login']) listedTools.add(name)
-  const isOff = (name: string) => off.has(guguToolGroupOf(name) ?? '')
-  for (const name of listedTools) if (isOff(name)) listedTools.delete(name)
   const trackRequest: GuguMcpRequestTracker = (work, toolName, requestId) => {
     const tracked = trackHostRequest(work, toolName, requestId)
     if (initial.personalAssistant && toolName) {
@@ -336,8 +353,11 @@ function buildGuguMcpServer(off: ReadonlySet<string>, ...[getContext, grantSigna
     return trackRequest(sendWidgetOf({ ...context, getAccessToken: () => context.getAccessToken(grantSignal) }, args, content, {}, imState), 'widget_send')
   })
   registerPasswordBetaTools(server, getContext, trackRequest, grantSignal)
-  for (const [name, tool] of Object.entries(registeredTools(server))) if (isOff(name)) tool.remove()
-  serveToolsList(server, getContext, (name: string) => listedTools.has(name))
+  switchGuguTools(server, off)
+  liveGuguServers.add(server)
+  const closed = server.server.onclose
+  server.server.onclose = () => { liveGuguServers.delete(server); closed?.() }
+  serveToolsList(server, getContext, (name: string) => listedTools.has(name) && registeredTools(server)[name]?.enabled === true)
   return server
 }
 
@@ -357,6 +377,7 @@ export async function guguMcpTools(): Promise<Tool[]> {
   const server = buildGuguMcpServer(new Set(), () => context, new AbortController().signal, (work) => work)
   const tools = Object.entries(registeredTools(server)).map(([name, tool]) => advertisedTool(name, tool) as Tool)
   await server.close()
+  liveGuguServers.delete(server)
   return tools
 }
 

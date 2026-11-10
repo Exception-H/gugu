@@ -30,6 +30,15 @@ export function guguToolGroupOf(name: string): GuguToolGroupId | undefined {
 
 const switchableIds = GUGU_TOOL_GROUPS.filter((group) => !group.locked).map((group) => group.id) as [SwitchableGroupId, ...SwitchableGroupId[]];
 
-/** 存在那台机器 KV 里的那一份:关掉的组。锁住的组写不进来。 */
+/** 存在那台机器 KV 里的那一份:关掉的组。写的时候严格,锁住的组、认不出的 id 写不进来。 */
 export const guguToolsOffSchema = z.array(z.enum(switchableIds));
 export type GuguToolsOff = z.infer<typeof guguToolsOffSchema>;
+
+/**
+ * 读存着的那一份:认不出的 id(别的版本写的、改过名的)和锁住的组直接丢掉。每个 MCP 连接、每次建会话都读它,
+ * 读不懂一个 id 不能让所有会话都起不来。
+ */
+export function guguToolsOffFromStored(stored: unknown): GuguToolsOff {
+  if (!Array.isArray(stored)) return [];
+  return stored.filter((id): id is SwitchableGroupId => (switchableIds as readonly unknown[]).includes(id));
+}

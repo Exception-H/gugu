@@ -11,7 +11,7 @@ import {
   type LibraryMcpHarnessServer,
   type LibraryMcpServer,
 } from '@shared/mcp-library';
-import { guguToolsOffSchema, type GuguToolsOff } from '@shared/gugu-tool-groups';
+import { guguToolsOffFromStored, guguToolsOffSchema, type GuguToolsOff } from '@shared/gugu-tool-groups';
 import { GUGU_MCP_SERVER_NAME } from '../../../../mcp/gugu-mcp-name.mjs';
 import { mcpService } from '../mcp/services/McpService';
 import { checkLibraryMcp } from './check';
@@ -89,9 +89,9 @@ export class McpLibraryService {
     await this.write(current.map((item) => (item.name === name ? { ...item, enabledByDefault } : item)));
   }
 
-  /** 内置那台关掉的工具组。读不懂 ⇒ 抛,同 `list`。 */
+  /** 内置那台关掉的工具组;认不出的 id 丢掉(见 `guguToolsOffFromStored`)。 */
   async guguToolsOff(): Promise<GuguToolsOff> {
-    return guguToolsOffSchema.parse((await libraryKV.get('guguToolsOff')) ?? []);
+    return guguToolsOffFromStored(await libraryKV.get('guguToolsOff'));
   }
 
   async setGuguToolsOff(off: GuguToolsOff): Promise<void> {

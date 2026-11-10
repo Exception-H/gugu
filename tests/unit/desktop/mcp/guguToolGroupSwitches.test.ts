@@ -1,9 +1,10 @@
 import { Client } from '@modelcontextprotocol/sdk/client/index.js'
 import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/streamableHttp.js'
 import { afterEach, describe, expect, it } from 'vitest'
-import { createDesktopGuguMcpHost, guguMcpTools, setGuguToolsOffReader, type DesktopGuguMcpHost } from '../../../../apps/desktop/electron/acp-engine-utils'
+import { ToolListChangedNotificationSchema } from '@modelcontextprotocol/sdk/types.js'
+import { applyGuguToolsOff, createDesktopGuguMcpHost, guguMcpTools, setGuguToolsOffReader, type DesktopGuguMcpHost } from '../../../../apps/desktop/electron/acp-engine-utils'
 import { setExtensionCheckAvailable } from '../../../../apps/desktop/electron/mcp/gugu-extension-tool'
-import { GUGU_TOOL_GROUPS, guguToolGroupOf, guguToolsOffSchema, type GuguToolsOff } from '../../../../apps/desktop/src/session/shared/gugu-tool-groups'
+import { GUGU_TOOL_GROUPS, guguToolGroupOf, guguToolsOffFromStored, guguToolsOffSchema, type GuguToolsOff } from '../../../../apps/desktop/src/session/shared/gugu-tool-groups'
 
 // 资源库 → MCP 的内置工具组开关:起真 host、按会话页 agent 的 grant 连真客户端,看 agent 实际拿到的清单与目录。
 let host: DesktopGuguMcpHost | undefined
@@ -73,6 +74,29 @@ describe('built-in gugu tool groups', () => {
     expect(listed).toEqual(expect.arrayContaining(['device_actions', 'device_call', 'schedule_create']))
     expect(await catalogNames(client)).toContain('app_install')
     await client.close()
+  })
+
+  it('a switch flipped while a client is connected reaches it at once: list_changed, then the new list', async () => {
+    const client = await connect([])
+    let notified = 0
+    client.setNotificationHandler(ToolListChangedNotificationSchema, async () => { notified += 1 })
+    // a GET stream for server-initiated notifications is opened lazily; one request makes sure it is up
+    await client.listTools()
+    applyGuguToolsOff(['schedules'])
+    await expect.poll(() => notified, { timeout: 5000 }).toBeGreaterThan(0)
+    expect((await client.listTools()).tools.map((tool) => tool.name)).not.toContain('schedule_create')
+    expect(await catalogNames(client)).not.toContain('schedule_list')
+    const call = await client.callTool({ name: 'schedule_create', arguments: {} })
+    expect(call.isError).toBe(true)
+    applyGuguToolsOff([])
+    await expect.poll(async () => (await client.listTools()).tools.map((tool) => tool.name)).toContain('schedule_create')
+    await client.close()
+  })
+
+  it('a stored id this build does not know, or a locked one, is dropped on read instead of failing every session', () => {
+    expect(guguToolsOffFromStored(['schedules', 'apps-v0', 'messages', 7])).toEqual(['schedules'])
+    expect(guguToolsOffFromStored(null)).toEqual([])
+    expect(guguToolsOffFromStored({ devices: true })).toEqual([])
   })
 
   it('locked groups cannot be stored as off', () => {
