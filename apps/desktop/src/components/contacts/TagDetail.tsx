@@ -7,9 +7,12 @@
  */
 import { useMemo, useState } from 'react'
 import { Check, ChevronLeft, Tag, UserPlus } from '@/lib/icons'
+import { cn } from '@/lib/cn'
 import type { ContactGroup, ContactUser } from '@gugu/core/shared/types/contacts'
 import { displayName } from '../../lib/contactsListSort'
 import { Avatar } from '../Avatar'
+import { SelectionCheckbox } from './ContactSearch'
+import { ListRowContent } from '../ui/ListRow'
 import { IconButton } from '../contactsDetailControls'
 import { useTranslation } from 'react-i18next'
 import { SearchField } from '../ui/SearchField'
@@ -262,78 +265,16 @@ export function TagMemberEditorDetail({
                   <button
                     key={contact.id}
                     type="button"
-                    className="gg-row"
-                    data-selected={checked ? '' : undefined}
+                    className={cn('gg-list-row gg-row', saving && 'opacity-70')}
                     aria-pressed={checked}
                     disabled={Boolean(savingId)}
                     onClick={() => toggleMember(contact.id)}
-                    style={{
-                      width: '100%',
-                      minHeight: 50,
-                      // 2026-09-22 按 design.md 删逐行 hairline(「A ledger of forty rows with forty hairlines
-                      // is a cage」):行靠 minHeight 节奏 + .gg-row 的 hover/selected 底色分组。
-                      // ❌ 选中态别写 inline background:inline 赢过 .gg-row:hover/:active —— 线删了、
-                      //    hover 也被盖掉,这一列就既无分隔也无响应。走 data-selected 交给 .gg-row。
-                      border: 0,
-                      color: 'var(--text-primary)',
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: 10,
-                      padding: '8px 12px',
-                      textAlign: 'left',
-                      cursor: savingId ? 'default' : 'pointer',
-                      opacity: saving ? 0.68 : 1
-                    }}
                   >
-                    <span
-                      aria-hidden="true"
-                      style={{
-                        width: 18,
-                        height: 18,
-                        borderRadius: 'var(--radius-surface)',
-                        border: `1px solid ${checked ? 'var(--accent)' : 'var(--border-color)'}`,
-                        background: checked ? 'var(--accent)' : 'transparent',
-                        color: 'var(--text-on-accent)',
-                        display: 'inline-flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        flexShrink: 0
-                      }}
-                    >
-                      {checked ? <Check size={12} /> : null}
-                    </span>
-                    <Avatar
-                      name={contact.display_name}
-                      avatarUrl={contact.avatar}
-                      seed={contact.id}
-                      size="sm"
-                      isAgent={contact.type === 'agent'}
+                    <ListRowContent
+                      leading={<><SelectionCheckbox checked={checked} /><Avatar name={contact.display_name} avatarUrl={contact.avatar} seed={contact.id} size="sm" isAgent={contact.type === 'agent'} /></>}
+                      title={displayName(contact)}
+                      subtitle={contact.type === 'agent' ? t('tags.filters.agent') : t('tags.contactKind')}
                     />
-                    <div style={{ flex: 1, minWidth: 0 }}>
-                      <div
-                        style={{
-                          color: 'var(--text-primary)',
-                          fontSize: 'var(--font-body)',
-                          overflow: 'hidden',
-                          textOverflow: 'ellipsis',
-                          whiteSpace: 'nowrap'
-                        }}
-                      >
-                        {displayName(contact)}
-                      </div>
-                      <div
-                        style={{
-                          color: 'var(--text-secondary)',
-                          fontSize: 'var(--font-caption)',
-                          marginTop: 2,
-                          overflow: 'hidden',
-                          textOverflow: 'ellipsis',
-                          whiteSpace: 'nowrap'
-                        }}
-                      >
-                        {contact.type === 'agent' ? t('tags.filters.agent') : t('tags.contactKind')}
-                      </div>
-                    </div>
                   </button>
                 )
               })
