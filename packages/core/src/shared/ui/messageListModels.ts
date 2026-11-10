@@ -90,7 +90,9 @@ export function mergeMessagesById(prev: MessageItem[], fresh: MessageItem[], cha
 
   const out: MessageItem[] = []
   const seen = new Set<string>()
-  for (const f of fresh) {
+  const freshById = new Map<string, MessageItem>()
+  for (const f of fresh) if (f.chat_id === chatId) freshById.set(f.id, mergeMessageState(freshById.get(f.id), f))
+  for (const f of freshById.values()) {
     // @@@chat-bleed (critical): never merge a message whose chat_id doesn't match this list's chat.
     // A poisoned cache (another chat's messages written here via a cross-chat prev-bleed) must not
     // survive a merge — drop foreign entries from `fresh` just as `prev` is filtered below.
