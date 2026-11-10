@@ -102,8 +102,8 @@ describe('forwardToChats, a failure part-way', () => {
 describe('forwardToChats, a note that @-s', () => {
   it('addresses the message carrying the note, whether quoted words or the note alone', async () => {
     const send = io()
-    await forwardToChats([{ kind: 'text', sender: 'Han', text: 'Because.' }], ['g1'], note('@[Bot](aid:bot) look', ['bot']), send)
-    expect(send.sendMessageToChat).toHaveBeenCalledWith('g1', '@[Bot](aid:bot) look\n\n> **Han**\n>\n> Because.', { toUserIds: ['bot'] })
+    await forwardToChats([lead, { kind: 'text', sender: 'Han', text: 'Because.' }], ['g1'], note('@[Bot](aid:bot) look', ['bot']), send)
+    expect(send.sendMessageToChat).toHaveBeenCalledWith('g1', '@[Bot](aid:bot) look\n\n' + LEAD + '> **Han**\n>\n> Because.', { toUserIds: ['bot'] })
     const file = message({ id: 'f', content_type: 'attachment', content: '[file]' })
     const again = io()
     await forwardToChats([{ kind: 'message', message: file }], ['g1'], note('see', ['bot']), again)
