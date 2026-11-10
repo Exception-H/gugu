@@ -27,6 +27,7 @@ export class StatusParser {
   }
 
   update(chunk: string): void {
+    if (this.tooManyFiles) return;
     let raw = this.lastRaw + chunk;
     let index = 0;
     let nextIndex: number | undefined;
