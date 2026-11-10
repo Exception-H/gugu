@@ -41,7 +41,7 @@ const ResultAvatar = observer(function ResultAvatar({ hit, name }: { hit: Search
 const NameRow = observer(function NameRow({ id, userId, name, query, onOpen }: { id: string; userId: string; name: string; query: string; onOpen: () => void }) {
   const identity = useAvatarIdentity(userId)
   return (
-    <button type="button" data-testid="global-search-name" data-id={id} onClick={onOpen} className="gg-list-row gg-row">
+    <button type="button" data-testid="global-search-name" data-id={id} onClick={onOpen} className="gg-list-row gg-row max-sm:min-h-11">
       <ListRowContent leading={<Avatar name={identity?.display_name ?? name} avatarUrl={identity?.avatar} seed={id} size={20} isAgent={identity?.type === 'agent'} still />}
         title={<Highlighted text={name} query={query} />} />
     </button>
