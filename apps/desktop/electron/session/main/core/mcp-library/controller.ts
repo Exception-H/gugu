@@ -1,3 +1,4 @@
+import type { GuguToolsOff } from '@shared/gugu-tool-groups';
 import { createRPCController } from '@shared/lib/ipc/rpc';
 import type { LibraryMcpCheck, LibraryMcpHarnessServer, LibraryMcpProvided, LibraryMcpServer } from '@shared/mcp-library';
 import { libraryMcpProvided, libraryMcpProvidedTools } from './provided';
@@ -13,6 +14,7 @@ export const mcpLibraryController = createRPCController({
     mcpLibraryService.setEnabledByDefault(name, enabledByDefault),
   check: (name: string): Promise<LibraryMcpCheck> => mcpLibraryService.check(name),
   provided: (): Promise<LibraryMcpProvided> => libraryMcpProvided(),
+  setGuguToolsOff: (off: GuguToolsOff): Promise<void> => mcpLibraryService.setGuguToolsOff(off),
   providedTools: (key: string): Promise<LibraryMcpCheck> => libraryMcpProvidedTools(key),
   harnessServers: (providerIds: string[]): Promise<LibraryMcpHarnessServer[]> =>
     mcpLibraryService.harnessServers(providerIds),
