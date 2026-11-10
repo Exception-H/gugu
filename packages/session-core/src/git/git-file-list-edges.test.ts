@@ -22,6 +22,14 @@ async function fixture(test: (worktree: GitWorktree, root: string, git: (args: s
 }
 
 describe('Git file list filename fidelity', () => {
+  it('keeps Unicode paths and line counts in commit files', async () => {
+    await fixture(async (worktree, root, git) => {
+      const name = '资料.md';
+      await writeFile(path.join(root, name), 'one\ntwo\n'); await git(['add', '.']); await git(['commit', '-m', 'add note']);
+      const hash = (await git(['rev-parse', 'HEAD'])).trim();
+      expect(await worktree.getCommitFiles(hash)).toContainEqual(expect.objectContaining({ path: path.join(root, name), additions: 2, deletions: 0 }));
+    });
+  });
   it('keeps Unicode and whitespace paths and line counts in changed files', async () => {
     await fixture(async (worktree, root, git) => {
       const names = ['资料.md', ' leading.md'];

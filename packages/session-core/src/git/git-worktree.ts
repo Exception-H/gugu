@@ -357,14 +357,16 @@ export class GitWorktree implements IGitWorktree {
 
   async getCommitFiles(hash: string): Promise<CommitFile[]> {
     const [numstatRes, nameStatusRes] = await Promise.all([
-      this.exec.exec(['diff-tree', '--root', '--no-commit-id', '--numstat', '-r', hash]),
-      this.exec.exec(['diff-tree', '--root', '--no-commit-id', '--name-status', '-r', hash]),
+      this.exec.exec(['diff-tree', '--root', '--no-commit-id', '--numstat', '-z', '-r', hash]),
+      this.exec.exec(['diff-tree', '--root', '--no-commit-id', '--name-status', '-z', '-r', hash]),
     ]);
     const numstat = parseNumstat(numstatRes.stdout);
     const statusByPath = new Map<string, ReturnType<typeof mapGitChangeStatus>>();
-    for (const line of nameStatusRes.stdout.trim().split('\n').filter(Boolean)) {
-      const [code = '', ...parts] = line.split('\t');
-      const filePath = parts[parts.length - 1];
+    const entries = nameStatusRes.stdout.split('\0');
+    for (let i = 0; i < entries.length - 1;) {
+      const code = entries[i++];
+      const original = entries[i++];
+      const filePath = /^[RC]/.test(code) ? entries[i++] : original;
       if (filePath) statusByPath.set(filePath, mapGitChangeStatus(code));
     }
     return [...numstat.entries()].map(([filePath, stat]) => ({
