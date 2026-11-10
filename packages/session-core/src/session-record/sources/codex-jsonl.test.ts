@@ -293,6 +293,7 @@ describe('codex rollout 记录源', () => {
     // The parent's own record says the child finished, in the parent's turn. The nested child's finish is a line in
     // the child's record: it completes the nested card (above) and adds no row. Neither makes a turn of its own.
     expect(snapshot.turns).toHaveLength(1);
+    // `completed` and the FINAL_ANSWER after it are two events for one child: one row, with the reply.
     expect(all.filter((item) => item.kind === 'subagent-done-tool-call')).toEqual([
       expect.objectContaining({ launchToolCallId: childId, outcome: 'completed', outputText: 'CHILD_RESULT' }),
     ]);
@@ -326,6 +327,42 @@ describe('codex rollout 记录源', () => {
     ]);
     expect(afterFollowup.filter((item) => item.kind === 'message' && item.role === 'assistant')).toEqual([
       expect.objectContaining({ text: 'PARENT_RESULT' }),
+    ]);
+  });
+
+  it('a child ended in the parent\'s record: completed with its reply, interrupted as stopped; a reused path is the latest child', async () => {
+    const line = (type: string, payload: object) => JSON.stringify({ type, timestamp: '2026-06-18T07:03:21Z', payload });
+    const spawn = (id: string, thread: string, path: string) => [
+      line('response_item', { type: 'function_call', namespace: 'collaboration', name: 'spawn_agent', call_id: id, arguments: JSON.stringify({ message: `task ${thread}` }) }),
+      line('event_msg', { type: 'item_completed', item: { type: 'SubAgentActivity', id, kind: 'started', agent_thread_id: thread, agent_path: path } }),
+      line('response_item', { type: 'function_call_output', call_id: id, output: '{}' }),
+    ];
+    const ended = (thread: string, path: string, kind: string) =>
+      line('event_msg', { type: 'item_completed', item: { type: 'SubAgentActivity', id: `end-${thread}`, kind, agent_thread_id: thread, agent_path: path } });
+    const answer = (path: string, text: string) => line('response_item', { type: 'agent_message', author: path, recipient: '/root',
+      content: [{ type: 'input_text', text: `Message Type: FINAL_ANSWER\nTask name: /root\nSender: ${path}\nPayload:\n${text}` }] });
+    const { root, file } = await stage([
+      line('event_msg', { type: 'task_started' }),
+      line('response_item', { type: 'message', role: 'user', content: [{ type: 'input_text', text: 'Run three' }] }),
+      ...spawn('s1', 'first', '/root/worker'), ended('first', '/root/worker', 'completed'), answer('/root/worker', 'FIRST_RESULT'),
+      ...spawn('s2', 'second', '/root/worker'), ended('second', '/root/worker', 'completed'), answer('/root/worker', 'SECOND_RESULT'),
+      ...spawn('s3', 'third', '/root/other'), ended('third', '/root/other', 'interrupted'),
+      line('response_item', { type: 'message', role: 'assistant', content: [{ type: 'output_text', text: 'DONE' }] }),
+      line('event_msg', { type: 'task_complete' }),
+    ]);
+    for (const [thread, end] of [['first', {}], ['second', {}], ['third', null]] as const) await writeFile(file.replace(THREAD_ID, thread), [
+      line('event_msg', { type: 'task_started' }),
+      line('response_item', { type: 'message', role: 'user', content: [{ type: 'input_text', text: `task ${thread}` }] }),
+      end ? line('event_msg', { type: 'task_complete' }) : line('event_msg', { type: 'turn_aborted' }),
+    ].join('\n') + '\n');
+    const timeline = await createSessionTimeline(createCodexJsonlSource({ harness: 'codex', providerSessionId: THREAD_ID, roots: [root] }), { sessionId: 'ended' });
+    disposers.push(() => timeline.dispose());
+    const turns = timeline.getSnapshot().turns;
+    expect(turns).toHaveLength(1);
+    expect(turns[0].items.filter((item) => item.kind === 'subagent-done-tool-call')).toEqual([
+      expect.objectContaining({ launchToolCallId: 'first', outcome: 'completed', outputText: 'FIRST_RESULT' }),
+      expect.objectContaining({ launchToolCallId: 'second', outcome: 'completed', outputText: 'SECOND_RESULT' }),
+      expect.objectContaining({ launchToolCallId: 'third', outcome: 'stopped' }),
     ]);
   });
 

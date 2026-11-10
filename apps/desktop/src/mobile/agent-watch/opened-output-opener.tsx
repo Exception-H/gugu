@@ -13,6 +13,7 @@ import type { DocumentPreviewKind } from '@/components/chat/documentPreview'
 import type { ChatCommands, OpenedOutput } from '@gugu/session-chat-ui'
 import { useToast } from '@/components/toastContext'
 import { Menu, MenuItem, MenuSeparator } from '@/components/ui/Menu'
+import { useExternalMenuTrigger } from '@/components/ui/externalMenuTrigger'
 import { Sheet } from '@/components/ui/Sheet'
 import { downloadBlob } from '@/lib/download'
 import { messageActionItems } from '@/components/chat/messageActionItems'
@@ -58,7 +59,10 @@ export function useOpenedOutputOpener({ deviceId, sessionId, onQuote, readFileCh
   const { toast } = useToast()
   const [preview, setPreview] = useState<Preview | null>(null)
   // 卡上「预览 ▾ / 浏览器 ▾」点开的那张打开方式菜单:锚在那枚按钮下面(❌ 底部抽屉)。
-  const [menu, setMenu] = useState<{ output: OpenedOutput; anchor: HTMLElement } | null>(null)
+  // 「▾」在 Solid 画的行里:按同一条 Trigger 规则(再点一次就关,按它不算点外面)。
+  const menuTrigger = useExternalMenuTrigger<OpenedOutput>()
+  const menu = menuTrigger.opened ? { output: menuTrigger.opened.value, anchor: menuTrigger.opened.anchor } : null
+  const { press } = menuTrigger
   const requestRef = useRef<AbortController | null>(null)
   const blobUrlRef = useRef<{ url: string; image?: { name: string; path: string } } | null>(null)
 
@@ -194,15 +198,15 @@ export function useOpenedOutputOpener({ deviceId, sessionId, onQuote, readFileCh
         const kind = phoneOpenPlan(output).kind
         return kind === 'file' ? t('agentWatch.output.modePreview') : kind === 'browser' ? t('agentWatch.output.modeBrowser') : null
       },
-      onOutputMenu: ({ output, anchor }) => setMenu({ output, anchor }),
+      onOutputMenu: ({ output, anchor }) => press(anchor, output),
     }),
-    [t, openOutput],
+    [t, openOutput, press],
   )
 
   const menuPlan = menu ? phoneOpenPlan(menu.output) : null
   const menuNode =
     menu && menuPlan && menuPlan.kind !== 'machine-only' ? (
-      <Menu anchor={menu.anchor} onClose={() => setMenu(null)} minWidth={180}>
+      <Menu anchor={menu.anchor} onClose={(details) => menuTrigger.onOpenChange(false, details)} minWidth={180}>
         {menuPlan.kind === 'file' ? (
           <>
             <MenuItem shortcut={t('agentWatch.output.default')} onClick={() => openOutput(menu.output)}>

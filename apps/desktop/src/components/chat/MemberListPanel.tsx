@@ -28,6 +28,8 @@ import { SearchField } from '../ui/SearchField'
 import { HeaderSearch } from '../ui/HeaderSearch'
 import { useMobileShell } from '../../hooks/useMobileShell'
 import type { MemberProfileChatTarget } from '../MemberProfileCard'
+import type { ActiveMemberProfile, MemberProfileHandle } from '../memberProfileModels'
+import { Popover } from '../ui/Popover'
 import { useGroupMemberPanelControls } from './GroupMemberPanelControls'
 import { groupRoleRevision, useGroupChatSettings, type GroupChatSettingsState } from './useGroupChatSettings'
 import { useCallback, useEffect, useMemo, useState } from 'react'
@@ -146,9 +148,8 @@ function MemberRow({
   statusBadge,
   metaCells,
   trailing,
-  onOpen,
+  profile,
   actions,
-  selected,
 }: {
   memberId: string
   identity: DisplayIdentity | undefined
@@ -157,41 +158,35 @@ function MemberRow({
   statusBadge?: AgentDisplayStatus
   metaCells?: ReactNode
   trailing?: ReactNode
-  /** 群:点行打开资料卡(anchor = 这一行)。话题没有这一格。 */
-  onOpen?: (anchor: Element) => void
+  /** 群:这一行是资料卡的 Trigger(再点同一行就关;开着时行是选中色)。话题没有这一格。 */
+  profile?: { handle: MemberProfileHandle; payload: ActiveMemberProfile } | null
   actions?: ReactNode
-  selected?: boolean
 }) {
   // 名册里有这个 id、身份却没跟上来 —— 这是数据层该出而没出的值,照 GroupMemberAvatarRow 的做法喊出来,
   // ❌ 不静默补一个「未知用户」。
   const diagnostic = identity ? null : resolveOrLoud(undefined, `member list identity ${memberId}`)
   const shownName = useShownAgentName({ id: memberId, name: identity?.display_name ?? diagnostic ?? '', createdAt: isAgent ? identity?.created_at ?? undefined : undefined })
-  return (
-    <div
-      data-member-row={memberId}
-      data-member-kind={isAgent ? 'agent' : 'human'}
-      className={onOpen ? 'gg-list-row gg-row group/member-row' : 'gg-list-row'}
-      data-selected={selected || undefined}
-      role={onOpen ? 'button' : undefined}
-      tabIndex={onOpen ? 0 : undefined}
-      onClick={onOpen ? (event) => onOpen(event.currentTarget) : undefined}
-      onKeyDown={onOpen ? (event) => { if (event.target === event.currentTarget && (event.key === 'Enter' || event.key === ' ')) { event.preventDefault(); onOpen(event.currentTarget) } } : undefined}
-    >
-      <ListRowContent
-        leading={<Avatar name={shownName} avatarUrl={identity?.avatar ?? null} seed={memberId} size="sm" isAgent={isAgent} agentStatus={statusBadge} />}
-        title={<span data-member-name={memberId}>{shownName}</span>}
-        accessory={(
-          <>
-            <ArchivedAgentLabel status={statusBadge} />
-            {roleLabel ? <span data-member-role={memberId} style={MEMBER_ROW_ROLE_STYLE}>{roleLabel}</span> : null}
-          </>
-        )}
-        meta={actions ? <span style={MEMBER_ROW_ACTIONS_STYLE}>{actions}</span> : undefined}
-        subtitle={metaCells}
-        trailing={trailing}
-      />
-    </div>
+  const rowData = { 'data-member-row': memberId, 'data-member-kind': isAgent ? 'agent' : 'human' }
+  const content = (
+    <ListRowContent
+      leading={<Avatar name={shownName} avatarUrl={identity?.avatar ?? null} seed={memberId} size="sm" isAgent={isAgent} agentStatus={statusBadge} />}
+      title={<span data-member-name={memberId}>{shownName}</span>}
+      accessory={(
+        <>
+          <ArchivedAgentLabel status={statusBadge} />
+          {roleLabel ? <span data-member-role={memberId} style={MEMBER_ROW_ROLE_STYLE}>{roleLabel}</span> : null}
+        </>
+      )}
+      meta={actions ? <span style={MEMBER_ROW_ACTIONS_STYLE}>{actions}</span> : undefined}
+      subtitle={metaCells}
+      trailing={trailing}
+    />
   )
+  // 群:这一行就是资料卡的 Trigger(开着时 Base UI 挂 data-popup-open,.gg-row 给它选中色);几何仍是 ListRow 那一套。
+  return profile
+    ? <Popover.Trigger handle={profile.handle} payload={profile.payload} nativeButton={false}
+        render={<div {...rowData} className="gg-list-row gg-row group/member-row" />}>{content}</Popover.Trigger>
+    : <div {...rowData} className="gg-list-row">{content}</div>
 }
 
 function joinMeta(cells: ReactNode[]): ReactNode {
@@ -347,9 +342,8 @@ export function MemberListPanel({ chatId, chatKind, head, chatName, snapshot, se
         isAgent
         roleLabel={roleLabel(agent.role)}
         statusBadge={shownAgent.status(agent.id, groupAgentDisplayStatus(agent, agentStatuses))}
-        onOpen={(anchor) => group.openProfile(agent.id, anchor)}
+        profile={group.profileTrigger(agent.id)}
         actions={group.rowActions(agent.id)}
-        selected={group.activeMemberId === agent.id}
         metaCells={joinMeta([
           // 自己的 agent 已在「我的 agent」组里,不再写一遍主人。
           identity?.owner_user_id === user?.id ? null : <span key="owner" data-agent-meta="owner"><AgentOwnerLabel ownerUserId={identity?.owner_user_id} ownerDisplayName={identity ? agentOwnerDisplayName(identity, identities) : null} /></span>,
@@ -448,9 +442,8 @@ export function MemberListPanel({ chatId, chatKind, head, chatName, snapshot, se
                   roleLabel={roleLabel((member.raw as GroupMemberItem).role)}
                   // 在线态:人这一侧产品里没有真值 ⇒ 不给角标(❌ 不编一个「在线」出来)。
                   statusBadge={undefined}
-                  onOpen={(anchor) => group.openProfile(member.id, anchor)}
+                  profile={group.profileTrigger(member.id)}
                   actions={group.rowActions(member.id)}
-                  selected={group.activeMemberId === member.id}
                 />
               ))}
             </div>

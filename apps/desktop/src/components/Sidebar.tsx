@@ -1,6 +1,6 @@
 import { rendererLogger } from '@/lib/log';
 import { messageForUser } from '@/lib/userFacingError';
-import { useRef, useState, useSyncExternalStore } from 'react'
+import { useState, useSyncExternalStore } from 'react'
 import type { AgentAttention } from '@gugu/core/shared/agentStatus'
 import { observer } from 'mobx-react-lite'
 import { DndContext, PointerSensor, closestCenter, useSensor, useSensors, type DragEndEvent } from '@dnd-kit/core'
@@ -32,7 +32,7 @@ import { useAuth } from '../store/auth'
 import '../components/productTour/catalog'
 import { readAssistantShellBridge } from '../lib/assistantShellBridge'
 import { cn } from '@/lib/cn'
-import { Menu, MenuItem as DropdownMenuItem, MenuSeparator } from './ui/Menu'
+import { DropdownMenu, Menu, MenuItem as DropdownMenuItem, MenuSeparator } from './ui/Menu'
 import { useRowContextMenu } from '../hooks/useRowContextMenu'
 import { followLink } from '../lib/guguLinks'
 import { Hint } from './ui/Tooltip'
@@ -96,7 +96,8 @@ function AppsIcon() {
 
 // ─── Rail button (`.ri` equivalent) ──────────────────────────────────────────
 
-interface RailItemProps {
+/** The rest of a button's props: a menu Trigger renders a RailItem and hands it its own (ref, handlers, data-popup-open). */
+interface RailItemProps extends Omit<React.ComponentPropsWithRef<'button'>, 'title' | 'onClick' | 'onContextMenu' | 'className'> {
   icon: React.ReactNode
   active?: boolean
   onClick?: () => void
@@ -132,12 +133,14 @@ function RailItem({
   menuOpen = false,
   className,
   entry,
+  ...button
 }: RailItemProps) {
   // @@@4323 说明文字走产品自己的浮层。原生 title 在这条竖排图标栏上最难受:
   // 图标只有形状没有文字,而 title 要等操作系统那 ~1s、扫过一排时一个都不弹、触屏上永远不弹。
   return (
     <Hint label={title}>
       <button
+        {...button}
         type="button"
         className={cn('gg-sidebar-item', className)}
         aria-label={title}
@@ -169,26 +172,21 @@ function HelpOnRail() {
   const tour = useProductTourState(user?.id ?? null)
   const resume = resumableStep(tour.data)
   const [open, setOpen] = useState(false)
-  const anchor = useRef<HTMLDivElement>(null)
   const request = (detail: ProductTourRequest) => {
-    setOpen(false)
     window.dispatchEvent(new CustomEvent(UI_EVENTS.reopenProductTour, { detail }))
   }
   return (
-    <div ref={anchor}>
-      <RailItem icon={<HelpCircle size={22} />} active={open} menuOpen={open} onClick={() => setOpen((value) => !value)}
-        title={t('help.label')} rail="help" badge={resume ? 1 : 0} />
-      {open && (
-        <Menu anchor={anchor} minWidth={200} onClose={() => setOpen(false)} ariaLabel={t('help.label')}>
-          {resume && (
-            <DropdownMenuItem onClick={() => request({ mode: 'resume', step: resume })}>
-              {t('help.resume', { current: TOUR_STEPS.indexOf(resume) + 1, total: TOUR_STEPS.length })}
-            </DropdownMenuItem>
-          )}
-          <DropdownMenuItem onClick={() => request({ mode: 'restart' })}>{t('help.restart')}</DropdownMenuItem>
-        </Menu>
-      )}
-    </div>
+    <DropdownMenu.Root open={open} onOpenChange={setOpen} modal={false}>
+      <DropdownMenu.Trigger render={<RailItem icon={<HelpCircle size={22} />} active={open} menuOpen={open} title={t('help.label')} rail="help" badge={resume ? 1 : 0} />} />
+      <DropdownMenu.Content className="min-w-[200px]" aria-label={t('help.label')}>
+        {resume && (
+          <DropdownMenuItem onClick={() => request({ mode: 'resume', step: resume })}>
+            {t('help.resume', { current: TOUR_STEPS.indexOf(resume) + 1, total: TOUR_STEPS.length })}
+          </DropdownMenuItem>
+        )}
+        <DropdownMenuItem onClick={() => request({ mode: 'restart' })}>{t('help.restart')}</DropdownMenuItem>
+      </DropdownMenu.Content>
+    </DropdownMenu.Root>
   )
 }
 
