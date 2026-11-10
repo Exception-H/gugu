@@ -2459,6 +2459,8 @@ const pickInput = () => {
   input.onchange = () => void uploadToCopy([...input.files].map((file) => ({ file, path: file.name })), state.folder ?? '')
   return input
 }
+// @@@pick-gesture: Upload is picked in the host's menu, and the host lends this page the person's gesture as it answers
+// (app-context-menu.ts runs `executeJavaScript('0', true)` first), so the file input opens even when the menu stayed open a while.
 const pickUpload = () => pickInput().click()
 
 const droppingFiles = (event) => inWorkspace() && canWriteHere() && !state.dragging && !!event.dataTransfer?.types.includes('Files')
