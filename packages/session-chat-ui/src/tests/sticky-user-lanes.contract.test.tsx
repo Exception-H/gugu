@@ -16,6 +16,7 @@ import { DEFAULT_CONFIG, buildChatTheme } from '@session-chat/core/config';
 import type { ChatItem, TranscriptTurn } from '@session-chat/model';
 import { createChatState } from '@session-chat/state/chat-state';
 import { afterEach, describe, expect, it } from 'vitest';
+import { page } from 'vitest/browser';
 import { until, untilStable } from '../../../../tests/support/awaitCondition';
 import { pinnedSummaryShown } from '../../../../tests/support/pinnedSummaryShown';
 
@@ -47,6 +48,8 @@ async function mount(
   active?: TranscriptTurn,
   theme = DEFAULT_THEME
 ) {
+  // The host is 800 px wide; hit-testing a right-aligned card needs the whole host inside the viewport.
+  await page.viewport(800, 600);
   const context = createChatContext({ locale: () => 'en-US', theme });
   const state = createChatState(context);
   state.transcript.history.seed(committed);
@@ -160,6 +163,43 @@ describe('sticky user lanes', () => {
     await until('a expanded', () => t.card('a-user')!.getBoundingClientRect().height, h => h > 400);
     await t.scrollTo(0);
     await check(true);
+  });
+
+  it('pushes a message that fits like a card, and pins one that folds only after it has gone', async () => {
+    // Either side of the transcript's own fold (展开全文): five short lines fit, six fold.
+    const lines = (n: number) => Array.from({ length: n }, (_, i) => `line ${i + 1}`).join('\n');
+    const turn = (id: string, seq: number, text: string): TranscriptTurn => ({ id, seq, initiator: 'user', items: [
+      { kind: 'message', id: `${id}-user`, seq: 0, role: 'user', text },
+      { kind: 'message', id: `${id}-final`, seq: 1, role: 'assistant',
+        text: Array.from({ length: 150 }, (_, i) => `${id} reply ${i}. Lorem ipsum dolor sit amet.`).join('\n\n') },
+    ] as TranscriptTurn['items'] });
+    const theme = buildChatTheme(DEFAULT_CONFIG, { preset: 'double', userGutter: 72, agentConversation: true });
+    const t = await mount([turn('a', 0, lines(5)), turn('b', 1, lines(6)), longTurn('c', 2, 150)], undefined, theme);
+    for (const id of ['a-final', 'b-final']) {
+      await until(`${id} mounted`, () => t.host.querySelector(`[data-expand-user-card="${id}"]`), el => el != null);
+      t.host.querySelector<HTMLButtonElement>(`[data-expand-user-card="${id}"]`)!.click();
+      await untilStable(`${id} measured`, () => t.scrollEl.scrollHeight);
+    }
+    const edge = () => t.scrollEl.getBoundingClientRect().top;
+    const frames = () => new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)));
+    const row = (id: string) => t.host.querySelector<HTMLElement>(`[data-row-kind="message"][data-item-id="${id}"]`)!;
+    const placeTop = async (id: string, cardTop: number) => {
+      for (let i = 0; i < 40 && !t.card(id); i++) { t.scrollEl.scrollTop += 600; await frames(); }
+      t.scrollEl.scrollTop += t.card(id)!.getBoundingClientRect().top - edge() - cardTop;
+      await frames();
+    };
+    expect(t.card('a-user')!.dataset.userCardExpandable, 'five lines do not fold').toBeUndefined();
+    await placeTop('a-user', -20);
+    expect(row('a-user').getBoundingClientRect().bottom - edge(), 'a is still partly on screen').toBeGreaterThan(20);
+    expect(pinnedSummaryShown(t.summary('a-user')!), 'a fitting message pins as its top reaches the line').toBe(true);
+    await placeTop('b-user', 200);
+    expect(t.card('b-user')!.dataset.userCardExpandable, 'six lines fold').toBe('true');
+    await placeTop('b-user', -20);
+    expect(row('b-user').getBoundingClientRect().bottom - edge(), 'b is still partly on screen').toBeGreaterThan(20);
+    expect(pinnedSummaryShown(t.summary('b-user')!), 'a folding message does not pin while any of it shows').toBe(false);
+    t.scrollEl.scrollTop += row('b-user').getBoundingClientRect().bottom - edge() + 1;
+    await frames();
+    expect(pinnedSummaryShown(t.summary('b-user')!), 'it pins once it has gone').toBe(true);
   });
 
   it('sticks the user row in the same frame as the scroll, deep inside a long turn', async () => {

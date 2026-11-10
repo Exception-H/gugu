@@ -5,9 +5,10 @@ import type { MeasureCtx } from '@session-chat/core/define';
 import { blockPlainText } from '@session-chat/core/markdown/plain-text';
 import { isDoubleColumnLayout } from '@session-chat/core/layout/preset';
 import type { ChatMessage } from '@session-chat/model';
-import { conversationContext } from './ConversationMessage';
+import { conversationContext, conversationVars } from './ConversationMessage';
 import { conversationRoot } from './conversation-message.css';
 import { attachStripHeight, effectiveMessageVars, userAvailableWidth, userInnerWidth, type MessageVars } from './metrics';
+import { userMessageFolds } from './user-message-metrics';
 import { card } from './user-message.css';
 
 /**
@@ -29,7 +30,9 @@ export function pinSummary(item: ChatMessage, ctx: MeasureCtx, baseVars: Message
   const height = Math.min(Math.max(lines, 1), 2) * lineHeight + 2 * vars.userCardPadY + 2 * vars.cardBorder;
   // Where the message's bubble starts inside its row: below its attachments, which sit above the bubble.
   const bubbleTop = body ? attachStripHeight(item.attachments?.length ?? 0, available, vars) : 0;
-  return { text, vars, conversation, hug: isDoubleColumnLayout(layout), height, clipped: lines > 2, bubbleTop, available };
+  // A message the transcript folds is too tall to push along: it pins only once it has gone (ChatRoot placeRow).
+  const folds = conversation ? userMessageFolds(item, conversationContext(ctx, item), conversationVars(item, baseVars)) : userMessageFolds(item, ctx, baseVars);
+  return { text, vars, conversation, hug: isDoubleColumnLayout(layout), height, clipped: lines > 2, bubbleTop, available, folds };
 }
 
 /** Clicking it scrolls back to the message (ChatRoot reads `data-pin-summary`). */
