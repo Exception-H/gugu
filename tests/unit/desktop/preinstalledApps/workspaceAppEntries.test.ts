@@ -89,7 +89,6 @@ const upload = async () => {
   })
   await menu.pick('上传')
 }
-const pressEscape = () => document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }))
 
 beforeAll(async () => {
   vi.spyOn(Date, 'now').mockReturnValue(now)

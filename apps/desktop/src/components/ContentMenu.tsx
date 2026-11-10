@@ -19,11 +19,11 @@ export function ContentMenu({ menu, onClose, onAction }: {
   onClose: () => void
   onAction: (id: string) => void
 }) {
+  const mobile = useMobileShell()
   const copy = menu.items.find(item => item.type !== 'separator' && item.id === 'copy')
   if (menu.selectionRange && copy && copy.type !== 'separator') {
     return <SelectedTextMenu range={menu.selectionRange} item={copy} onClose={onClose} onCopy={() => onAction(copy.id)} />
   }
-  const mobile = useMobileShell()
   return <Menu x={menu.x} y={menu.y} onClose={onClose}>
     {mobile ? <PhoneRows items={menu.items} onAction={onAction} /> : <Rows items={menu.items} onAction={onAction} />}
   </Menu>
