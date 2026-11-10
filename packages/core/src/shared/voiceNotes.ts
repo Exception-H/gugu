@@ -281,7 +281,7 @@ export function formatClock(ms: number): string {
   return `${two(Math.floor(total / 3600))}:${two(Math.floor((total % 3600) / 60))}:${two(total % 60)}`
 }
 
-const LINE = /^\s*\[(\d{1,2}):(\d{2})(?::(\d{2}))?\]\s*([^：:\n]{1,40}?)\s*[：:]\s*(.*)$/
+const LINE = /^\s*\[(\d+):(\d{2})(?::(\d{2}))?\]\s*([^：:\n]{1,40}?)\s*[：:]\s*(.*)$/
 
 function stampMs(a: string, b: string, c: string | undefined): number {
   return c === undefined ? (Number(a) * 60 + Number(b)) * 1000 : (Number(a) * 3600 + Number(b) * 60 + Number(c)) * 1000
