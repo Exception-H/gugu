@@ -83,7 +83,7 @@ function compareMessageOrder(a: MessageItem, b: MessageItem): number {
 
 export function mergeMessagesById(prev: MessageItem[], fresh: MessageItem[], chatId: string): MessageItem[] {
   const prevById = new Map<string, MessageItem>()
-  for (const p of prev) prevById.set(p.id, p)
+  for (const p of prev) if (p.chat_id === chatId) prevById.set(p.id, p)
 
   const out: MessageItem[] = []
   const seen = new Set<string>()
