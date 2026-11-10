@@ -53,8 +53,9 @@ type Picture = { chars: number; fill: string };
 type Turn = {
   prompt: string; reply: string; tool?: { id: string; picture?: Picture; text?: string }; done: boolean;
   /** A subagent this turn starts (its own record); `later` = it finishes in a later turn (Claude: a background agent,
-   * else a foreground one whose result is its finish). */
-  sub?: { id: string; later: boolean };
+   * else a foreground one whose result is its finish). Codex: `path` reuses the path of a child that already ended (one
+   * live agent per path); an id ending `-f` is a child whose own turn fails. */
+  sub?: { id: string; later: boolean; path?: string };
   /** The later turn a subagent finishes in. */
   subDone?: string;
 };
@@ -72,11 +73,17 @@ function randomTurns(r: ReturnType<typeof random>, harness: Harness, count: numb
     const picture = harness !== 'hermes' && r.chance(0.35)
       ? { chars: r.chance(0.5) ? r.int(70, 110) * 1024 : r.int(1, 8) * 512, fill: r.pick(['QUJD', 'WFla', 'MTIz', 'cXdl']) } : undefined;
     const tool = r.chance(0.5) ? { id: `t${tag}${n}`, ...(picture ? { picture } : { text: r.pick(REPLIES) }) } : undefined;
-    const sub = harness !== 'hermes' && r.chance(0.15) ? { id: `child-${tag}-${n}`, later: r.chance(0.5) } : undefined;
+    const sub = harness !== 'hermes' && r.chance(0.15)
+      ? { id: `child-${tag}-${n}${harness === 'codex' && r.chance(0.2) ? '-f' : ''}`, later: r.chance(0.5) } : undefined;
     return {
       prompt: envelopes && r.chance(0.15) ? envelope(r.pick(DELIVERED)) : r.pick(PROMPTS),
       reply: r.pick(REPLIES), ...(tool ? { tool } : {}), ...(sub ? { sub } : {}), done: true,
     };
+  });
+  // A Codex child that finishes in its own turn may take the path of an earlier one that did too.
+  if (harness === 'codex') turns.forEach((turn, n) => {
+    const earlier = turns.slice(0, n).filter((before) => before.sub && !before.sub.later);
+    if (turn.sub && !turn.sub.later && earlier.length && r.chance(0.4)) { const first = r.pick(earlier).sub!; turn.sub.path = first.path ?? first.id; }
   });
   // A subagent that finishes later does so in a later turn of the batch, if there is one (else it never finishes).
   turns.forEach((turn, n) => {
@@ -117,10 +124,10 @@ const pictureData = (p: Picture) => p.fill.repeat(Math.ceil(p.chars / p.fill.len
 
 const codexLine = (type: string, payload: object) => JSON.stringify({ timestamp: '2026-06-18T07:03:21Z', type, payload });
 /** The parent's record noting a subagent finished, then the child's final answer handed to the parent (as Codex writes them). */
-const subFinished = (id: string) => [
-  codexLine('event_msg', { type: 'item_completed', item: { type: 'SubAgentActivity', id: `done-${id}`, kind: 'completed', agent_thread_id: id, agent_path: `/root/${id}` } }),
-  codexLine('response_item', { type: 'agent_message', author: `/root/${id}`, recipient: '/root',
-    content: [{ type: 'input_text', text: `Message Type: FINAL_ANSWER\nTask name: /root\nSender: /root/${id}\nPayload:\nresult of ${id}` }] }),
+const subFinished = (id: string, path = id) => [
+  codexLine('event_msg', { type: 'item_completed', item: { type: 'SubAgentActivity', id: `done-${id}`, kind: 'completed', agent_thread_id: id, agent_path: `/root/${path}` } }),
+  codexLine('response_item', { type: 'agent_message', author: `/root/${path}`, recipient: '/root',
+    content: [{ type: 'input_text', text: `Message Type: FINAL_ANSWER\nTask name: /root\nSender: /root/${path}\nPayload:\nresult of ${id}` }] }),
 ];
 /** A subagent's own record: written when it starts, finished when the parent records it finishing. */
 const childLines = (id: string, finished: boolean) => [
@@ -130,7 +137,7 @@ const childLines = (id: string, finished: boolean) => [
   codexLine('response_item', { type: 'function_call_output', call_id: `step-${id}`, output: `step of ${id}` }),
   ...(finished ? [
     codexLine('response_item', { type: 'message', role: 'assistant', content: [{ type: 'output_text', text: `result of ${id}` }] }),
-    codexLine('event_msg', { type: 'task_complete' }),
+    codexLine('event_msg', { type: 'task_complete', ...(id.endsWith('-f') ? { error: { message: 'failed' } } : {}) }),
   ] : []),
 ];
 
@@ -157,9 +164,9 @@ function codexLines(turns: Turn[], from: number): string[] {
       line('response_item', { type: 'message', role: 'user', content: [{ type: 'input_text', text: turn.prompt }] }),
       ...(turn.sub ? [
         line('response_item', { type: 'function_call', namespace: 'collaboration', name: 'spawn_agent', call_id: `spawn-${turn.sub.id}`, arguments: JSON.stringify({ task_name: turn.sub.id, message: `task ${turn.sub.id}` }) }),
-        line('event_msg', { type: 'item_completed', item: { type: 'SubAgentActivity', id: `spawn-${turn.sub.id}`, kind: 'started', agent_thread_id: turn.sub.id, agent_path: `/root/${turn.sub.id}` } }),
+        line('event_msg', { type: 'item_completed', item: { type: 'SubAgentActivity', id: `spawn-${turn.sub.id}`, kind: 'started', agent_thread_id: turn.sub.id, agent_path: `/root/${turn.sub.path ?? turn.sub.id}` } }),
         line('response_item', { type: 'function_call_output', call_id: `spawn-${turn.sub.id}`, output: JSON.stringify({ task_name: `/root/${turn.sub.id}` }) }),
-        ...(turn.sub.later ? [] : subFinished(turn.sub.id)),
+        ...(turn.sub.later ? [] : subFinished(turn.sub.id, turn.sub.path)),
       ] : []),
       ...(turn.subDone ? subFinished(turn.subDone) : []),
       ...(turn.tool ? [
@@ -473,6 +480,12 @@ async function comparable(fixture: Fixture, sessionId: string): Promise<unknown[
       }
     };
     await visit(turn.items);
+    // Each finished row carries its own child's reply (a reused Codex path must not send it to an earlier child).
+    for (const item of turn.items) {
+      const row = item as { kind: string; launchToolCallId?: string; outputText?: string };
+      if (row.kind === 'subagent-done-tool-call' && row.outputText !== undefined && row.outputText !== `result of ${row.launchToolCallId}`)
+        throw new Error(`finished row of ${row.launchToolCallId} carries "${row.outputText}"`);
+    }
     out.push({ turn, pictures });
   }
   return out;
@@ -574,6 +587,9 @@ it('fills the same store and answers the same deliveries as a whole-record fill,
       if (test.fork) counts.fork = (counts.fork ?? 0) + 1;
       const subagents = test.ops.flatMap((op) => 'turns' in op ? op.turns : []).filter((turn) => turn.sub).length;
       if (subagents) { counts.withSubagents = (counts.withSubagents ?? 0) + 1; counts.subagents = (counts.subagents ?? 0) + subagents; }
+      const subs = test.ops.flatMap((op) => 'turns' in op ? op.turns : []).flatMap((turn) => turn.sub ? [turn.sub] : []);
+      counts.reusedPaths = (counts.reusedPaths ?? 0) + subs.filter((sub) => sub.path).length;
+      counts.failingChildren = (counts.failingChildren ?? 0) + subs.filter((sub) => sub.id.endsWith('-f')).length;
       for (const op of test.ops) counts[op.kind] = (counts[op.kind] ?? 0) + 1;
       continue;
     }

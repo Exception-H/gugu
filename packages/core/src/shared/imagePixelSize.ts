@@ -19,14 +19,32 @@ export function imagePixelSize(b: Uint8Array): { width: number; height: number }
     return null
   }
   if (b.length >= 4 && b[0] === 0xff && b[1] === 0xd8 && b[2] === 0xff) {
-    // Walk the segments to the frame header (SOF0–SOF15 except DHT C4, JPG C8, DAC CC).
+    // Walk the segments to the frame header (SOF0–SOF15 except DHT C4, JPG C8, DAC CC). An EXIF orientation of 5–8 (APP1,
+    // IFD0 tag 0x0112) turns the image a quarter: it is shown, and laid out, with width and height swapped.
+    let turned = false
     for (let i = 2; i + 9 < b.length; ) {
       if (b[i] !== 0xff) return null
       const marker = b[i + 1]!
       if (marker === 0xd8 || marker === 0x01 || (marker >= 0xd0 && marker <= 0xd7)) { i += 2; continue }
-      if (marker >= 0xc0 && marker <= 0xcf && marker !== 0xc4 && marker !== 0xc8 && marker !== 0xcc) return size(u16be(i + 7), u16be(i + 5))
+      if (marker === 0xe1) {
+        // An XMP packet is APP1 too, often right after the EXIF one: only the EXIF segment names the orientation.
+        const o = exifOrientation(b, i + 4, i + 2 + u16be(i + 2))
+        if (o !== null) turned = o >= 5 && o <= 8
+      }
+      if (marker >= 0xc0 && marker <= 0xcf && marker !== 0xc4 && marker !== 0xc8 && marker !== 0xcc) return turned ? size(u16be(i + 5), u16be(i + 7)) : size(u16be(i + 7), u16be(i + 5))
       i += 2 + u16be(i + 2)
     }
   }
   return null
+}
+
+/** EXIF orientation of an APP1 segment whose payload is b[at, end): null when the segment is not EXIF, 1 when it names none. */
+function exifOrientation(b: Uint8Array, at: number, end: number): number | null {
+  if (end > b.length || String.fromCharCode(...b.subarray(at, at + 6)) !== 'Exif\0\0') return null
+  const t = at + 6, le = b[t] === 0x49 && b[t + 1] === 0x49
+  const u16 = (i: number) => (i + 2 > end ? -1 : le ? b[i]! | (b[i + 1]! << 8) : (b[i]! << 8) | b[i + 1]!)
+  const u32 = (i: number) => (le ? (b[i]! | (b[i + 1]! << 8) | (b[i + 2]! << 16) | (b[i + 3]! << 24)) >>> 0 : ((b[i]! << 24) | (b[i + 1]! << 16) | (b[i + 2]! << 8) | b[i + 3]!) >>> 0)
+  const ifd = t + u32(t + 4)
+  for (let k = 0, n = u16(ifd); k < n; k++) if (u16(ifd + 2 + 12 * k) === 0x0112) return u16(ifd + 2 + 12 * k + 8)
+  return 1
 }

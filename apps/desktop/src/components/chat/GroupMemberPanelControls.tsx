@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState, type CSSProperties, type ReactNode } from 'react'
+import { useCallback, useEffect, useState, type CSSProperties, type ReactNode } from 'react'
 import { useTranslation } from 'react-i18next'
 import type { AgentDisplayStatus, GroupChatSettings, GroupCollabSnapshot, GroupMemberRole, ListenMode } from '@gugu/core/shared/types/chat'
 import { MoreHorizontal, UserPlus } from '@/lib/icons'
@@ -7,12 +7,13 @@ import { groupAgentDisplayStatus } from '../../lib/groupAgentStatus'
 import { useShownAgentStatus } from './useAgentsOnCloudComputer'
 import { canEditAgentListenMode, groupInviteAccess } from '../../lib/groupMemberPermissions'
 import type { DisplayIdentity } from '../../lib/displayIdentity'
-import { MemberProfilePopover } from '../MemberProfilePopover'
+import { MemberProfilePopover, MemberProfileRoot } from '../MemberProfilePopover'
+import { Popover } from '../ui/Popover'
 import type { MemberProfileCardModel, MemberProfileChatTarget, MemberProfileEditControls } from '../MemberProfileCard'
-import { type ActiveMemberProfile, agentOwnerDisplayName, toAgentProfile, toHumanProfile } from '../memberProfileModels'
+import { type ActiveMemberProfile, type MemberProfileHandle, agentOwnerDisplayName, toAgentProfile, toHumanProfile } from '../memberProfileModels'
 import { IconButton } from '../ui/IconButton'
 import { Hint } from '../ui/Tooltip'
-import { Menu, MenuItem } from '../ui/Menu'
+import { DropdownMenu, MenuItem } from '../ui/Menu'
 import { AddGroupMembers } from './AddGroupMembers'
 import { useMobileShell } from '../../hooks/useMobileShell'
 import { closeInfoTab } from '../../session/renderer/features/chats/chat-tabs/chat-layouts'
@@ -41,12 +42,15 @@ export function useGroupMemberPanelControls({ chatId, chatKind, settings, snapsh
   const viewerIsManager = settings?.can_manage === true
   const isGroup = chatKind === 'group'
   const [pickerOpen, setPickerOpen] = useState(false)
-  const [activeProfile, setActiveProfile] = useState<ActiveMemberProfile | null>(null)
-  const [menu, setMenu] = useState<{ memberId: string; anchor: Element } | null>(null)
+  // 资料卡:每一行是它的 Trigger(payload = 那一行的资料),再点同一行就关。开着时错误显示在卡里。
+  const [profileCard] = useState(() => Popover.createHandle<ActiveMemberProfile>())
+  const [profileOpen, setProfileOpen] = useState(false)
+  // 每行的 ⋯ 都是这一个菜单的 Trigger(payload = 成员 id):再点同一颗钮就关,点另一行的 ⋯ 菜单挪过去。
+  const [manageMenu] = useState(() => DropdownMenu.createHandle<string>())
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
-  useEffect(() => { setActiveProfile(null); setMenu(null) }, [chatId])
+  useEffect(() => { profileCard.close(); manageMenu.close() }, [chatId, manageMenu, profileCard])
 
   const openPicker = useCallback(() => setPickerOpen(true), [])
 
@@ -104,8 +108,8 @@ export function useGroupMemberPanelControls({ chatId, chatKind, settings, snapsh
     runMutation(() => chatService.setAgentListenMode(chatId, profile.id, mode))
   ), [chatId, runMutation])
   const remove = useCallback(async (profile: MemberProfileCardModel) => {
-    if (await runMutation(() => chatService.removeGroupMember(chatId, profile.id))) setActiveProfile(null)
-  }, [chatId, runMutation])
+    if (await runMutation(() => chatService.removeGroupMember(chatId, profile.id))) profileCard.close()
+  }, [chatId, profileCard, runMutation])
 
   const editControlsFor = useCallback((profile: MemberProfileCardModel): MemberProfileEditControls | undefined => {
     const manageable = canManage(profile)
@@ -125,21 +129,11 @@ export function useGroupMemberPanelControls({ chatId, chatKind, settings, snapsh
     }
   }, [busy, canEditListenMode, canManage, error, isGroup, isSelfLeaving, ownsAgent, remove, setListenMode, setRole, topicRemovalHint, topicRemovalLabel])
 
-  const openProfile = useCallback((memberId: string, anchor: Element) => {
+  const profileTrigger = useCallback((memberId: string): { handle: MemberProfileHandle; payload: ActiveMemberProfile } | null => {
     const profile = profileOf(memberId)
-    if (!profile) return
-    setError(null)
-    setMenu(null)
-    setActiveProfile({ member: profile, anchor, preferredSide: 'left', openedFrom: 'aside' })
-  }, [profileOf])
+    return profile ? { handle: profileCard, payload: { member: profile, preferredSide: 'left', openedFrom: 'aside' } } : null
+  }, [profileCard, profileOf])
 
-  // 名册变了(改角色 / 改档位)要让已打开的卡跟着变:每次渲染按最新名册重建卡片模型。
-  const renderedProfile = useMemo(() => {
-    if (!activeProfile) return null
-    const member = profileOf(activeProfile.member.id)
-    return member ? { ...activeProfile, member } : null
-  }, [activeProfile, profileOf])
-  const menuProfile = menu ? profileOf(menu.memberId) : null
 
   // 项目群不拉人类进来:「邀请」还在(加自己的 agent),人类那一页换成原因。
   const { projectGroup, canInviteHumans: canInvite, showInvite } = groupInviteAccess(chatId, chatKind, settings)
@@ -160,57 +154,69 @@ export function useGroupMemberPanelControls({ chatId, chatKind, settings, snapsh
       // 有 hover 的设备:行悬停/聚焦时才显形,隐藏时连点击一起关掉(看不见的钮不许点得到)。
       // 没有 hover 的触屏:一直显示 —— 否则管理者在手机上永远找不到它。
       <span
-        className="pointer-events-none opacity-0 group-hover/member-row:pointer-events-auto group-hover/member-row:opacity-100 focus-within:pointer-events-auto focus-within:opacity-100 data-[open]:pointer-events-auto data-[open]:opacity-100 [@media(hover:none)]:pointer-events-auto [@media(hover:none)]:opacity-100"
-        data-open={menu?.memberId === memberId || undefined}
+        className="pointer-events-none opacity-0 group-hover/member-row:pointer-events-auto group-hover/member-row:opacity-100 focus-within:pointer-events-auto focus-within:opacity-100 has-[[data-popup-open]]:pointer-events-auto has-[[data-popup-open]]:opacity-100 [@media(hover:none)]:pointer-events-auto [@media(hover:none)]:opacity-100"
       >
-        <IconButton size="sm" aria-label={t('group.memberList.manage', { name: profile.displayName })} on={menu?.memberId === memberId}
-          onClick={(event) => { event.stopPropagation(); setMenu({ memberId, anchor: event.currentTarget }) }}>
-          <MoreHorizontal />
-        </IconButton>
+        <DropdownMenu.Trigger handle={manageMenu} payload={memberId} onClick={(event) => event.stopPropagation()}
+          render={<IconButton size="sm" aria-label={t('group.memberList.manage', { name: profile.displayName })}><MoreHorizontal /></IconButton>} />
       </span>
     )
-  }, [canEditListenMode, canManage, isSelfLeaving, menu?.memberId, ownsAgent, profileOf, t])
+  }, [canEditListenMode, canManage, isSelfLeaving, manageMenu, ownsAgent, profileOf, t])
 
-  const errorLine: ReactNode = error && !activeProfile
+  const errorLine: ReactNode = error && !profileOpen
     ? <div role="alert" style={errorStyle}>{error}</div>
     : null
 
   const overlays: ReactNode = (
     <>
-      {menu && menuProfile ? (
-        <Menu anchor={menu.anchor} minWidth={160} onClose={() => setMenu(null)} ariaLabel={t('group.memberList.manage', { name: menuProfile.displayName })}>
-          {isGroup && canManage(menuProfile) ? (
-            <MenuItem onClick={() => { setMenu(null); void setRole(menuProfile, menuProfile.role === 'admin' ? 'member' : 'admin') }}>
-              {menuProfile.role === 'admin' ? t('group.memberList.revokeAdmin') : t('group.memberList.makeAdmin')}
-            </MenuItem>
-          ) : null}
-          {canEditListenMode(menuProfile) ? (
-            <MenuItem onClick={() => { setMenu(null); void setListenMode(menuProfile, menuProfile.listenMode === 'active' ? 'passive' : 'active') }}>
-              {menuProfile.listenMode === 'active' ? t('group.memberList.setPassive') : t('group.memberList.setActive')}
-            </MenuItem>
-          ) : null}
-          {canManage(menuProfile) || ownsAgent(menuProfile) || isSelfLeaving(menuProfile) ? (
-            <MenuItem danger onClick={() => { setMenu(null); void remove(menuProfile) }}>
-              {!isGroup ? <span className="flex flex-col gap-1">{topicRemovalLabel(menuProfile)}<small className="text-[length:var(--font-caption)] text-[var(--faint-fg)]">{topicRemovalHint(menuProfile)}</small></span>
-                : ownsAgent(menuProfile) ? t('group.memberList.agentLeave') : t('group.settings.removeMemberTitle')}
-            </MenuItem>
-          ) : null}
-        </Menu>
-      ) : null}
-      {renderedProfile ? (
-        <MemberProfilePopover
-          profile={renderedProfile}
-          onClose={() => setActiveProfile(null)}
-          onOpenChat={renderedProfile.member.id !== currentUserId && onOpenUserChat ? (target) => {
-            setActiveProfile(null)
-            if (mobile) closeInfoTab(chatId)
-            onOpenUserChat(target)
-          } : undefined}
-          onWhisper={renderedProfile.member.id !== currentUserId && onWhisper ? (target) => { setActiveProfile(null); onWhisper(target) } : undefined}
-          searchChatId={chatId}
-          editControls={editControlsFor(renderedProfile.member)}
-        />
-      ) : null}
+      <DropdownMenu.Root handle={manageMenu} modal={false}>
+        {({ payload }) => {
+          const menuProfile = payload ? profileOf(payload) : null
+          return menuProfile ? (
+            <DropdownMenu.Content className="min-w-[160px]" aria-label={t('group.memberList.manage', { name: menuProfile.displayName })}>
+              {isGroup && canManage(menuProfile) ? (
+                <MenuItem onClick={() => { void setRole(menuProfile, menuProfile.role === 'admin' ? 'member' : 'admin') }}>
+                  {menuProfile.role === 'admin' ? t('group.memberList.revokeAdmin') : t('group.memberList.makeAdmin')}
+                </MenuItem>
+              ) : null}
+              {canEditListenMode(menuProfile) ? (
+                <MenuItem onClick={() => { void setListenMode(menuProfile, menuProfile.listenMode === 'active' ? 'passive' : 'active') }}>
+                  {menuProfile.listenMode === 'active' ? t('group.memberList.setPassive') : t('group.memberList.setActive')}
+                </MenuItem>
+              ) : null}
+              {canManage(menuProfile) || ownsAgent(menuProfile) || isSelfLeaving(menuProfile) ? (
+                <MenuItem danger onClick={() => { void remove(menuProfile) }}>
+                  {!isGroup ? <span className="flex flex-col gap-1">{topicRemovalLabel(menuProfile)}<small className="text-[length:var(--font-caption)] text-[var(--faint-fg)]">{topicRemovalHint(menuProfile)}</small></span>
+                    : ownsAgent(menuProfile) ? t('group.memberList.agentLeave') : t('group.settings.removeMemberTitle')}
+                </MenuItem>
+              ) : null}
+            </DropdownMenu.Content>
+          ) : null
+        }}
+      </DropdownMenu.Root>
+      <MemberProfileRoot handle={profileCard} onOpenChange={(open) => {
+        setProfileOpen(open)
+        if (open) { setError(null); manageMenu.close() }
+      }}>
+        {(opened) => {
+          // 名册变了(改角色 / 改档位)要让已打开的卡跟着变:每次渲染按最新名册重建卡片模型。
+          const member = profileOf(opened.member.id)
+          if (!member) return null
+          return (
+            <MemberProfilePopover
+              profile={{ ...opened, member }}
+              onClose={() => profileCard.close()}
+              onOpenChat={member.id !== currentUserId && onOpenUserChat ? (target) => {
+                profileCard.close()
+                if (mobile) closeInfoTab(chatId)
+                onOpenUserChat(target)
+              } : undefined}
+              onWhisper={member.id !== currentUserId && onWhisper ? (target) => { profileCard.close(); onWhisper(target) } : undefined}
+              searchChatId={chatId}
+              editControls={editControlsFor(member)}
+            />
+          )
+        }}
+      </MemberProfileRoot>
       {pickerOpen && snapshot ? (
         <AddGroupMembers
           chatId={chatId}
@@ -224,5 +230,5 @@ export function useGroupMemberPanelControls({ chatId, chatKind, settings, snapsh
     </>
   )
 
-  return { inviteAction, rowActions, openProfile, overlays, errorLine, activeMemberId: renderedProfile?.member.id ?? null }
+  return { inviteAction, rowActions, profileTrigger, overlays, errorLine }
 }

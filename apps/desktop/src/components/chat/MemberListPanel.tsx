@@ -27,6 +27,8 @@ import { SearchField } from '../ui/SearchField'
 import { HeaderSearch } from '../ui/HeaderSearch'
 import { useMobileShell } from '../../hooks/useMobileShell'
 import type { MemberProfileChatTarget } from '../MemberProfileCard'
+import type { ActiveMemberProfile, MemberProfileHandle } from '../memberProfileModels'
+import { Popover } from '../ui/Popover'
 import { useGroupMemberPanelControls } from './GroupMemberPanelControls'
 import { groupRoleRevision, useGroupChatSettings, type GroupChatSettingsState } from './useGroupChatSettings'
 import { useCallback, useEffect, useMemo, useState } from 'react'
@@ -166,9 +168,8 @@ function MemberRow({
   statusBadge,
   metaCells,
   trailing,
-  onOpen,
+  profile,
   actions,
-  selected,
 }: {
   memberId: string
   identity: DisplayIdentity | undefined
@@ -177,27 +178,16 @@ function MemberRow({
   statusBadge?: AgentDisplayStatus
   metaCells?: ReactNode
   trailing?: ReactNode
-  /** 群:点行打开资料卡(anchor = 这一行)。话题没有这一格。 */
-  onOpen?: (anchor: Element) => void
+  /** 群:这一行是资料卡的 Trigger(再点同一行就关;开着时行是选中色)。话题没有这一格。 */
+  profile?: { handle: MemberProfileHandle; payload: ActiveMemberProfile } | null
   actions?: ReactNode
-  selected?: boolean
 }) {
   // 名册里有这个 id、身份却没跟上来 —— 这是数据层该出而没出的值,照 GroupMemberAvatarRow 的做法喊出来,
   // ❌ 不静默补一个「未知用户」。
   const diagnostic = identity ? null : resolveOrLoud(undefined, `member list identity ${memberId}`)
   const shownName = useShownAgentName({ id: memberId, name: identity?.display_name ?? diagnostic ?? '', createdAt: isAgent ? identity?.created_at ?? undefined : undefined })
-  return (
-    <div
-      data-member-row={memberId}
-      data-member-kind={isAgent ? 'agent' : 'human'}
-      className={onOpen ? 'gg-row group/member-row' : undefined}
-      data-selected={selected || undefined}
-      role={onOpen ? 'button' : undefined}
-      tabIndex={onOpen ? 0 : undefined}
-      onClick={onOpen ? (event) => onOpen(event.currentTarget) : undefined}
-      onKeyDown={onOpen ? (event) => { if (event.target === event.currentTarget && (event.key === 'Enter' || event.key === ' ')) { event.preventDefault(); onOpen(event.currentTarget) } } : undefined}
-      style={onOpen ? MEMBER_ROW_INTERACTIVE_STYLE : MEMBER_ROW_STYLE}
-    >
+  const rowData = { 'data-member-row': memberId, 'data-member-kind': isAgent ? 'agent' : 'human' }
+  const content = <>
       <Avatar
         name={shownName}
         avatarUrl={identity?.avatar ?? null}
@@ -230,8 +220,11 @@ function MemberRow({
         {trailing ? <div style={MEMBER_ROW_TRAILING_STYLE}>{trailing}</div> : null}
       </div>
       {actions ? <div style={MEMBER_ROW_ACTIONS_STYLE}>{actions}</div> : null}
-    </div>
-  )
+  </>
+  return profile
+    ? <Popover.Trigger handle={profile.handle} payload={profile.payload} nativeButton={false}
+        render={<div {...rowData} className="gg-row group/member-row" style={MEMBER_ROW_INTERACTIVE_STYLE} />}>{content}</Popover.Trigger>
+    : <div {...rowData} style={MEMBER_ROW_STYLE}>{content}</div>
 }
 
 export type MemberListPanelProps = {
@@ -382,9 +375,8 @@ export function MemberListPanel({ chatId, chatKind, head, chatName, snapshot, se
         isAgent
         roleLabel={roleLabel(agent.role)}
         statusBadge={shownAgent.status(agent.id, groupAgentDisplayStatus(agent, agentStatuses))}
-        onOpen={(anchor) => group.openProfile(agent.id, anchor)}
+        profile={group.profileTrigger(agent.id)}
         actions={group.rowActions(agent.id)}
-        selected={group.activeMemberId === agent.id}
         metaCells={(
           <>
             {/* 自己的 agent 已在「我的 agent」组里,不再写一遍主人。 */}
@@ -492,9 +484,8 @@ export function MemberListPanel({ chatId, chatKind, head, chatName, snapshot, se
                   roleLabel={roleLabel((member.raw as GroupMemberItem).role)}
                   // 在线态:人这一侧产品里没有真值 ⇒ 不给角标(❌ 不编一个「在线」出来)。
                   statusBadge={undefined}
-                  onOpen={(anchor) => group.openProfile(member.id, anchor)}
+                  profile={group.profileTrigger(member.id)}
                   actions={group.rowActions(member.id)}
-                  selected={group.activeMemberId === member.id}
                 />
               ))}
             </div>
