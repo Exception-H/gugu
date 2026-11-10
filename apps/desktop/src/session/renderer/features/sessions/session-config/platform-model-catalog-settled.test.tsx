@@ -6,7 +6,7 @@ const invoke = vi.fn();
 vi.mock('@renderer/lib/ipc', () => ({ invokeOnMachine: (...args: unknown[]) => invoke(...args) }));
 vi.mock('@renderer/lib/machine-routing', () => ({ machineRegistry: { machineOf: () => null } }));
 vi.mock('@renderer/features/library/library-host', () => ({ useLibraryHost: () => ({ remote: null }) }));
-import { usePlatformModelCatalog, type PlatformModelCatalogState } from './platform-model-catalog';
+import { PLATFORM_MODEL_CATALOG_QUERY_KEY, SESSION_CATALOG_GC_MS, usePlatformModelCatalog, type PlatformModelCatalogState } from './platform-model-catalog';
 import { unavailablePlatformModelId } from './platform-model-selection';
 import { queryClient } from '@renderer/lib/query-client';
 import { notifyManager } from '@tanstack/react-query';
@@ -57,5 +57,23 @@ describe('the catalog is shared account-level data', () => {
     expect(current.models.map((model) => model.id)).toEqual(['glm-5.3-flash']);
     expect(current.settled).toBe(true);
     expect(invoke).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('cache lifetime', () => {
+  function SessionProbe() { current = usePlatformModelCatalog('claude', 'acp', 'session-gc'); return null; }
+  function NewTaskProbe() { current = usePlatformModelCatalog('claude', 'acp'); return null; }
+  it('drops a session entry once unread, and keeps the account-level entry', async () => {
+    queryClient.clear();
+    vi.useFakeTimers();
+    invoke.mockReset().mockResolvedValue({ models: [{ id: 'glm-5.3-flash', protocol: 'anthropic-messages' }] });
+    host = document.createElement('div'); document.body.appendChild(host); root = createRoot(host);
+    await act(async () => { root!.render(<><SessionProbe /><NewTaskProbe /></>); await vi.advanceTimersByTimeAsync(0); });
+    const entries = () => queryClient.getQueryCache().findAll({ queryKey: PLATFORM_MODEL_CATALOG_QUERY_KEY })
+      .map((query) => query.queryKey.at(-1));
+    expect(entries().sort()).toEqual([null, 'session-gc']);
+    act(() => root!.unmount());
+    await act(async () => { await vi.advanceTimersByTimeAsync(SESSION_CATALOG_GC_MS + 1); });
+    expect(entries()).toEqual([null]);
   });
 });

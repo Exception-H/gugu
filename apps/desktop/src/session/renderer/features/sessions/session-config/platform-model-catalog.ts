@@ -64,6 +64,8 @@ const CATALOG_TIMEOUT_MS = 8_000;
 const CATALOG_AUTH_RETRY_DELAY_MS = 250;
 /** 回到前台时重取目录的最短间隔:focus 与 visibilitychange 常常一前一后同时到,别为一次切窗取两遍。 */
 const FOREGROUND_REFRESH_MIN_MS = 5_000;
+/** A session's catalog entry (its preselection) is dropped this long after its last reader leaves. */
+export const SESSION_CATALOG_GC_MS = 5 * 60_000;
 /** 这一侧问宿主没问到(IPC 失败 / 超时)。 */
 export const PLATFORM_CATALOG_RETRY_ERROR = guguCatalogReasonCode('host-not-ready');
 
@@ -242,10 +244,11 @@ export function usePlatformModelCatalog(
     queryFn: () => loadPlatformModelCatalog(providerId!, surface, sessionId ?? null, machine),
     // 机器没连上就不问:问不到只会落一个「模型列表尚未就绪」,而原因是机器离线(那由机器的提示说)。
     enabled: online && providerId !== null,
-    // Loaded once and kept for the account: an unused entry is not dropped (react-query's default
-    // drops it after 5 minutes, and the next New task would start empty again).
+    // The account-level entry (no session: New task, settings) is loaded once and kept, or the next
+    // New task would start empty again. A session's entry carries only that session's preselection:
+    // dropped once nobody has read it for a while, so viewing sessions does not grow the cache forever.
     staleTime: Infinity,
-    gcTime: Infinity,
+    gcTime: sessionId ? SESSION_CATALOG_GC_MS : Infinity,
     retry: false,
     // Switching sessions keeps the list on screen and drops just the previous session's
     // preselection until this one's arrives. Another provider / surface / machine starts empty:
