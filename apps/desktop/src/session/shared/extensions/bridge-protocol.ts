@@ -97,7 +97,9 @@ export const EXTENSION_WIDGET_IDENTITY_API_VERSION = 33;
 // 37: account-bound, single-conversation unread grants. No content or Agent authority.
 // 38: `showContextMenu` rows say `checked`, `danger`, `title` and `person` (a member, drawn as one); long submenus are
 //     searchable and a phone opens a submenu in the menu's place. Presentation only: an older host draws plain rows.
-export const EXTENSION_API_VERSION = 38;
+// 39: `files.create(place, content, { ifExists: 'use' })` answers the file already at that name instead of making a " (2)";
+// an App declaring 39 can rely on it (an older host ignores the option).
+export const EXTENSION_API_VERSION = 39;
 
 /**
  * The page `app_check` runs is started with this argument (摩擦单 F5, F69): it says how often it wrote, set presence and
