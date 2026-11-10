@@ -23,7 +23,7 @@ afterEach(() => { harness.cleanup() })
 
 const settings = {
   max_members: 500, allow_member_invite: true, invite_link_enabled: true, agent_join_approval: false, join_mode: 'open',
-  name: 'Group', public_id: 9, join_token: '5f0c6a52-3a1e-4f6e-9a57-2d1b0c8e4f11',
+  name: 'Group', public_id: 9, join_token: '5f0c6a523a1e4f6e9a572d1b0c8e4f11',
 } as unknown as GroupChatSettings
 const REASON = '项目群只有你和你的 agent。要与其他人协作，请在对话中新建群聊。'
 const manage = (chatId: string) => createNode(GroupSettingsManagePage, {
