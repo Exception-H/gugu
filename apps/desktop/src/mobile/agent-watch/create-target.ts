@@ -1,5 +1,6 @@
 import type { Device } from '@gugu/core/shared/types/chat'
 import { isPhoneDevice } from '@gugu/core/cloud/devices'
+import { deviceAcceptsWork } from '@gugu/core/cloud/cloudComputer'
 import type { RunMachineCandidate } from '@renderer/features/projects/components/main-panel/project-device-scope'
 import { phoneProjectRows } from '../assistant/phoneProjectRows'
 import { taskFoldersOfChat } from '../chat/phoneTaskFolders'
@@ -29,6 +30,7 @@ export function accountProjects(devices: readonly Device[], cloudDeviceId: strin
 
 /**
  * 机器列表里的一行。`localProjectId` = 选了项目时那台上的本地项目;没有这个项目的文件夹 = null(手机上还不能就地绑文件夹,点不动)。
+ * `available` = 点得动:有文件夹(选了项目时)且此刻接活(在线,或可叫醒的云电脑;与桌面 machineAcceptsWork 同一条)。
  * `path` = 那台上这个项目的文件夹(行上写出来)。
  */
 export type CreateMachine = { device: Device; localProjectId: string | null; path: string | null; available: boolean }
@@ -40,7 +42,7 @@ export type CreateMachine = { device: Device; localProjectId: string | null; pat
 export function createMachines(project: CreateProject | null, machines: readonly Device[]): CreateMachine[] {
   const computers = machines.filter((device) => !isPhoneDevice(device))
   if (!project) {
-    return [...computers, ...machines.filter(isPhoneDevice)].map((device) => ({ device, localProjectId: null, path: null, available: true }))
+    return [...computers, ...machines.filter(isPhoneDevice)].map((device) => ({ device, localProjectId: null, path: null, available: deviceAcceptsWork(device) }))
   }
   const rows = computers.map((device) => {
     const localProjectId = project.homes.get(device.device_id) ?? null
@@ -48,16 +50,14 @@ export function createMachines(project: CreateProject | null, machines: readonly
     return { device, localProjectId, path }
   })
   const rank = (row: (typeof rows)[number]) => (row.localProjectId === null ? 2 : row.device.is_online ? 0 : 1)
-  return rows.sort((a, b) => rank(a) - rank(b)).map((row) => ({ ...row, available: row.localProjectId !== null }))
+  return rows.sort((a, b) => rank(a) - rank(b)).map((row) => ({ ...row, available: row.localProjectId !== null && deviceAcceptsWork(row.device) }))
 }
-
-/** 「上次用的机器」不选项目时记在这个键下(项目的键是项目群 chatId / 本地项目行 id,不会撞上)。 */
-export const NO_PROJECT_KEY = '\u0000no-project'
 
 /**
  * 默认在哪台跑的候选:与桌面同一条规则(useProjectRunMachine → defaultRunMachine),候选 = 能选的那几台,次序同列表。
- * 手机上没有「本机」那一步(手机不是项目的运行机器);不选项目时即 上次那台(在线)→ 第一台在线的 → 上次那台 → 第一台。
+ * 手机上没有「本机」那一步(手机不是项目的运行机器)。候选 = 有文件夹的(选了项目时)/ 全部(不选项目),离线的也在候选里 ——
+ * 与桌面同一条:离线的在列表里点不动,但选着的那台掉线了照样选着、发送挡住、草稿留着(❌ 整个新建框消失)。
  */
-export function runCandidates(rows: readonly CreateMachine[]): RunMachineCandidate[] {
-  return rows.filter((row) => row.available).map((row) => ({ key: row.device.device_id, online: row.device.is_online }))
+export function runCandidates(rows: readonly CreateMachine[], project: CreateProject | null): RunMachineCandidate[] {
+  return rows.filter((row) => !project || row.localProjectId !== null).map((row) => ({ key: row.device.device_id, online: deviceAcceptsWork(row.device) }))
 }

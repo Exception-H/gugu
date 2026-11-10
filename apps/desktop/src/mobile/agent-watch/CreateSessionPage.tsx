@@ -29,7 +29,7 @@ import { LiveGlyph } from './StatusGlyph'
 import { CreateOptionsPill } from './CreateOptionsPill'
 import { useMachineLabel } from './useMachineLabel'
 import { visibleMachines } from './machine-list'
-import { accountProjects, createMachines, NO_PROJECT_KEY, runCandidates } from './create-target'
+import { accountProjects, createMachines, runCandidates } from './create-target'
 import { CreateTarget } from './CreateTarget'
 import { ConnectionStatus } from '@/components/connection/ConnectionStatus'
 import { connectionStateOf } from '@/components/connection/connectionState'
@@ -103,8 +103,8 @@ export function CreateSessionPage({
   const [projectKey, setProjectKey] = useState<string | null>(null)
   const project = projects.find((one) => one.key === projectKey) ?? null
   const rows = useMemo(() => createMachines(project, machines), [project, machines])
-  const runKey = project?.key ?? NO_PROJECT_KEY
-  const { machine: machineId, pick } = useProjectRunMachine(runKey, runCandidates(rows), project?.groupId)
+  const runKey = project?.key ?? ''
+  const { machine: machineId, pick } = useProjectRunMachine(runKey, runCandidates(rows, project), project?.groupId)
   const machine = rows.find((row) => row.device.device_id === machineId)
   const target = (busy: boolean) => (
     <CreateTarget projects={projects} project={project} onProject={setProjectKey} machines={rows} machine={machine} onMachine={pick} machineLabel={machineLabel} busy={busy} />

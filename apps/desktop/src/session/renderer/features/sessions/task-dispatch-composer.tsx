@@ -65,7 +65,6 @@ export const TaskDispatchComposer = observer(function TaskDispatchComposer({
     if (remembered && selectedId === undefined) setSelectedId(remembered);
   }, [remembered, selectedId]);
   const implicitProjectId = useImplicitProjectId(!selectedId);
-  // 记着的项目若是并进某一行的(别的机器上同一个项目),按那一行选(与侧栏、项目块同一个身份)。
 
   const pickProject = (projectId: string | undefined) => {
     setSelectedId(projectId);
@@ -196,6 +195,7 @@ function useChatProjectMemory(chatId: string, deviceId: string | null): string |
     let live = true;
     void sessionpageMessageHost().rememberedTaskProject(chatId, deviceId).then(
       (id) => {
+        // 记着的若是并进某一行的(别的机器上同一个项目),按那一行选(与侧栏、项目块同一个身份)。
         const row = id ? sidebarStore.rowProjectIdOf(id) : null;
         if (live && row && accountProjects().some((project) => project.id === row)) setProjectId(row);
       },

@@ -14,6 +14,7 @@ import { NewSessionComposer, NewSessionPage } from './new-session-page';
 import { remoteInstallNote } from './remote-install-before-create';
 import { MachinePicker } from '@renderer/features/remote-hosts/machine-picker';
 import { machineRegistry } from '@renderer/lib/machine-routing';
+import { remoteHostsStore } from '@renderer/features/remote-hosts/remote-hosts-store';
 import { installRemoteHostsBridge, type RemoteHostsBridge } from '@shared/remote-hosts';
 import { ComposerProjectPicker } from './composer-context-tray';
 import { getSessionWorkspaceActionOrder, sessionWorkspaceActionBlocked } from './pane-empty-state';
@@ -195,6 +196,11 @@ vi.mock('@renderer/lib/stores/app-state', () => ({
   }
 }));
 
+const runMachineCloud = vi.hoisted(() => ({ remember: vi.fn(async () => ({})) }));
+vi.mock('@/lib/agentCreateDefaults', () => ({
+  readAgentCreateDefaults: async () => ({ deviceId: null, projectByDevice: {}, projectByChat: {}, machineByProject: {} }),
+  rememberAgentCreateRunMachine: runMachineCloud.remember,
+}));
 vi.mock('@renderer/lib/ui/dropdown-menu', () => ({
   DropdownMenuGroup: ({ children }: { children: React.ReactNode }) => children,
   DropdownMenuCheckboxItem: ({ children, checked, disabled, onCheckedChange }: { children: React.ReactNode; checked: boolean; disabled?: boolean; onCheckedChange: (checked: boolean) => void }) => React.createElement('button', { role: 'menuitemcheckbox', 'aria-checked': checked, disabled, onClick: () => onCheckedChange(!checked) }, children),
@@ -636,6 +642,56 @@ describe('NewSessionPage', () => {
     await renderProjectHome();
     expect(mocks.initialPrompt).toBe('继续实现这一段');
     expect(container.querySelector('[data-testid="project-folder-card"]')).not.toBeNull();
+  });
+
+  // #2412 review ①: picking a folder on a machine without one selects that machine only once the folder is attached.
+  it('keeps the current machine when attaching a folder on another machine fails', async () => {
+    const pickable = vi.spyOn(remoteHostsStore, 'pickableMachineIds').mockReturnValue(['device-9']);
+    const pickFolder = vi.spyOn(remoteHostsStore, 'pickFolder').mockResolvedValue('/srv/someone-elses-project');
+    const device = vi.spyOn(remoteHostsStore, 'device').mockImplementation((id) => (id === 'device-9' ? { id, label: 'd9', hostKind: 'server', isOnline: true, lastSeenAt: null } as never : undefined));
+    const connection = vi.spyOn(remoteHostsStore, 'connectionState').mockImplementation((id) => (id === 'device-9' ? 'connected' : 'offline') as never);
+    mocks.orderedProjects = [{ id: 'project-1', state: 'mounted' }];
+    try {
+      runMachineCloud.remember.mockClear();
+      await renderProjectHome();
+      const picker = () => container.querySelector('[data-testid="composer-device-picker"]');
+      expect(picker()?.getAttribute('data-selected-id')).toBe('local');
+      const elsewhere = container.querySelector('[data-testid="composer-device-picker-elsewhere"] [data-device-id="device-9"]') as HTMLButtonElement;
+      expect(elsewhere).not.toBeNull();
+      // That machine cannot say what the folder is (no connection here): the attach plan fails, nothing is attached.
+      await act(async () => { elsewhere.click(); await new Promise((resolve) => setTimeout(resolve, 0)); });
+      expect(pickFolder).toHaveBeenCalledWith('device-9', '~');
+      expect(picker()?.getAttribute('data-selected-id')).toBe('local');
+      expect(runMachineCloud.remember).not.toHaveBeenCalled();
+    } finally {
+      pickable.mockRestore();
+      pickFolder.mockRestore();
+      device.mockRestore();
+      connection.mockRestore();
+    }
+  });
+
+  // #2412 review ②: a machine picked on New task is remembered for the project only when it holds that project's folder.
+  it('remembers the machine picked first only for a project that has a folder there', async () => {
+    const { projectGroupsStore } = await import('@renderer/features/projects/stores/project-groups-store');
+    const chatOf = vi.spyOn(projectGroupsStore, 'chatIdOf').mockImplementation((id) => `chat-${id}`);
+    machineRegistry.register('device-9', ['project-remote']);
+    mocks.orderedProjects = [{ id: 'project-1', state: 'mounted' }, { id: 'project-remote', state: 'mounted' }];
+    remoteHostsStore.requestNewSession('device-9');
+    try {
+      runMachineCloud.remember.mockClear();
+      await renderPage();
+      const pick = (name: string) => Array.from(container.querySelectorAll('[role="menuitem"]')).find((item) => item.textContent?.trim() === name) as HTMLButtonElement;
+      await act(async () => pick('project-1').click());
+      await new Promise((resolve) => setTimeout(resolve, 0));
+      expect(runMachineCloud.remember).not.toHaveBeenCalled();
+      await renderPage();
+      await act(async () => pick('project-remote').click());
+      await vi.waitFor(() => expect(runMachineCloud.remember).toHaveBeenCalledWith('chat-project-remote', 'device-9'));
+    } finally {
+      chatOf.mockRestore();
+      machineRegistry.forgetMachine('device-9');
+    }
   });
 
   // 项目与机器解耦:账号上一个文件夹都没有的项目也列出来(identity.list_my_projects),› 里是给它挂第一个文件夹的机器。

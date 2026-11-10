@@ -119,7 +119,7 @@ export function digestMatches(
     .every((term) => haystack.includes(term));
 }
 
-type Item = Sortable & { name: string; ref: SectionRef; online?: { machine: string; row: SessionHistoryDirectoryRow }; offline?: HistoryEntry };
+type Item = Sortable & { ref: SectionRef; online?: { machine: string; row: SessionHistoryDirectoryRow }; offline?: HistoryEntry };
 
 /**
  * 各台的目录页 + 离线行 → 一节一个项目。节的先后 = 归并后它第一次出现的位置;节内的行按同一排序归并。
@@ -139,13 +139,16 @@ export function buildSections({
   sectionOfEntry: (entry: HistoryEntry) => SectionRef;
 }): HistorySection[] {
   const compareRows = compareBy<HistoryEntry>(sort, (row) => row.title);
-  const compareItems = compareBy<Item>(sort, (item) => item.name);
+  // 节的先后:在线的是目录、离线的是单条,两种东西只有「它归哪一节」是同一种 —— 按标题排时就按节名(项目名)比,
+  // ❌ 拿目录路径与会话标题互相比(归并的前提「各路同一把尺子、各自有序」就不成立了)。各路先按这把尺子排好再归并。
+  const compareItems = compareBy<Item>(sort, (item) => item.ref.label);
   const onlineItems = pages.map(({ machine, rows }) =>
-    rows.map((row): Item => ({ ...pickSortable(row), name: row.directory ?? '', ref: sectionOfDirectory(machine, row), online: { machine, row } }))
+    rows.map((row): Item => ({ ...pickSortable(row), ref: sectionOfDirectory(machine, row), online: { machine, row } }))
+      .sort(compareItems)
   );
-  const offlineItems = [...offline]
-    .sort(compareRows)
-    .map((entry): Item => ({ ...pickSortable(entry), name: entry.title, ref: sectionOfEntry(entry), offline: entry }));
+  const offlineItems = offline
+    .map((entry): Item => ({ ...pickSortable(entry), ref: sectionOfEntry(entry), offline: entry }))
+    .sort(compareItems);
 
   const sections = new Map<string, HistorySection & { previews: HistoryEntry[][] }>();
   for (const item of mergeSorted([...onlineItems, offlineItems], compareItems)) {

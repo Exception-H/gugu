@@ -11,8 +11,19 @@ import type { ProjectFoldersState } from './project-folders';
 export const scopeKey = (deviceId: string | null) => deviceId ?? 'local';
 export const machineOfKey = (key: string): string | null => (key === 'local' ? null : key);
 
-/** 账号上那份「每个项目上次在哪台」,换成这一端的写法(这台电脑 = 'local')。读一次,之后本端的选择写穿。 */
-const memory = { byProject: {} as Record<string, string>, localDeviceId: null as string | null, loading: false };
+/**
+ * 账号上那份「每个项目上次在哪台」,换成这一端的写法(这台电脑 = 'local')。
+ * 有选择器挂上就去读(距上次读到超过 REREAD_MS 才再读):开着的桌面也看得到手机 / 别的桌面后来的选择;读失败下次再读。
+ * 这一端选了、账号上还没写好的那几个(pending)以这一端为准,❌ 被刚读回来的旧值盖掉。
+ */
+const REREAD_MS = 15_000;
+const memory = {
+  byProject: {} as Record<string, string>,
+  pending: new Map<string, string>(),
+  localDeviceId: null as string | null,
+  reading: false,
+  readAt: 0,
+};
 const listeners = new Set<() => void>();
 let snapshot: Readonly<Record<string, string>> = {};
 
@@ -22,26 +33,38 @@ function publish(): void {
   for (const listener of listeners) listener();
 }
 
-function loadOnce(): void {
-  if (memory.loading) return;
-  memory.loading = true;
+/** 这台电脑的设备 id;没读到过就再问一次(开机那一刻可能还没有)。 */
+async function localDeviceId(): Promise<string | null> {
+  if (!memory.localDeviceId) {
+    const self = await Promise.resolve(platform.getLocalDeviceSelfSnapshot?.()).catch(() => null);
+    memory.localDeviceId = self?.device_id ?? null;
+  }
+  return memory.localDeviceId;
+}
+
+function read(): void {
+  if (memory.reading || Date.now() - memory.readAt < REREAD_MS) return;
+  memory.reading = true;
   // 按需取账号那一层(它带着云端客户端,不在模块加载时拉进来)。
   const defaults = import('@/lib/agentCreateDefaults').then((cloud) => cloud.readAgentCreateDefaults());
-  void Promise.all([defaults, Promise.resolve(platform.getLocalDeviceSelfSnapshot?.()).catch(() => null)])
-    .then(([defaults, self]) => {
-      memory.localDeviceId = self?.device_id ?? null;
-      // 这一端在读回来之前已经选过的,以这一端为准。
-      memory.byProject = { ...defaults.machineByProject, ...memory.byProject };
+  void Promise.all([defaults, localDeviceId()])
+    .then(([defaults]) => {
+      memory.byProject = { ...defaults.machineByProject, ...Object.fromEntries(memory.pending) };
+      memory.readAt = Date.now();
       publish();
     })
-    .catch((error: unknown) => log.warn('[projects] read the machine each project last ran on failed', error));
+    .catch((error: unknown) => log.warn('[projects] read the machine each project last ran on failed', error))
+    .finally(() => { memory.reading = false; });
 }
 
 function subscribe(listener: () => void): () => void {
-  loadOnce();
+  read();
   listeners.add(listener);
   return () => { listeners.delete(listener); };
 }
+
+/** 选择器读的那一份(useSyncExternalStore 的两端);单独导出给测试。 */
+export const runMachineMemory = { subscribe, current: (): Readonly<Record<string, string>> => snapshot };
 
 /**
  * 记下这个项目这次选在哪台(null = 这台电脑):这一端立刻生效,账号上那份随后写上。
@@ -50,15 +73,29 @@ function subscribe(listener: () => void): () => void {
 export function rememberRunMachine(groupId: string | undefined, deviceId: string | null): void {
   if (!groupId) return;
   const projectKey = groupId;
-  const device = deviceId ?? memory.localDeviceId;
-  if (!device) {
-    log.warn('[projects] this computer has no device id yet; the machine choice is not remembered', { projectKey });
-    return;
-  }
-  memory.byProject = { ...memory.byProject, [projectKey]: device };
-  publish();
-  void import('@/lib/agentCreateDefaults').then((cloud) => cloud.rememberAgentCreateRunMachine(projectKey, device))
-    .catch((error: unknown) => log.warn('[projects] remember the machine a project ran on failed', error));
+  void (deviceId ? Promise.resolve(deviceId) : localDeviceId()).then((device) => {
+    if (!device) {
+      log.warn('[projects] this computer has no device id; the machine choice is not remembered', { projectKey });
+      return;
+    }
+    memory.pending.set(projectKey, device);
+    memory.byProject = { ...memory.byProject, [projectKey]: device };
+    publish();
+    return import('@/lib/agentCreateDefaults')
+      .then((cloud) => cloud.rememberAgentCreateRunMachine(projectKey, device))
+      .catch((error: unknown) => log.warn('[projects] remember the machine a project ran on failed', error))
+      .finally(() => { if (memory.pending.get(projectKey) === device) memory.pending.delete(projectKey); });
+  });
+}
+
+/** 测试用:清掉这一端的记忆与读数时间。 */
+export function resetRunMachineMemoryForTest(): void {
+  memory.byProject = {};
+  memory.pending.clear();
+  memory.localDeviceId = null;
+  memory.reading = false;
+  memory.readAt = 0;
+  snapshot = {};
 }
 
 /** 有这个项目文件夹的一台机器(`key` 同 scopeKey;顺序 = 侧栏的代表顺序:本机 → 连着的 → 最早建的)。 */
@@ -82,7 +119,7 @@ export function defaultRunMachine(candidates: readonly RunMachineCandidate[], sa
  * 那是人刚在那台机器上挂了文件夹、文件夹清单还没读回来。
  */
 export function useProjectRunMachine(projectKey: string, candidates: readonly RunMachineCandidate[], groupId: string | undefined) {
-  const saved = useSyncExternalStore(subscribe, () => snapshot);
+  const saved = useSyncExternalStore(runMachineMemory.subscribe, runMachineMemory.current);
   const [picked, setPicked] = useState<{ projectKey: string; key: string } | null>(null);
   const chosen = picked && picked.projectKey === projectKey ? picked.key : defaultRunMachine(candidates, groupId ? saved[groupId] : undefined);
   const pick = (deviceId: string | null) => {

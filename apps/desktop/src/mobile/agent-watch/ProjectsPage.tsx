@@ -192,7 +192,11 @@ export const ProjectsPage = observer(function ProjectsPage({
   // ── 行与标记 ────────────────────────────────────────────────────────
   const projectOf = (deviceId: string, projectId: string) =>
     sectionMachines.find((machine) => machine.deviceId === deviceId)?.projects.find((project) => project.id === projectId && project.kind !== 'workspace')
-  const projectName = (deviceId: string, projectId: string): string | undefined => projectOf(deviceId, projectId)?.name
+  // 个人助理住的那台(云端宿主)上的项目不标名(它的会话归「它派出的任务」那一组),与改之前同一条。
+  const projectName = (deviceId: string, projectId: string): string | undefined => {
+    const device = deviceOf.get(deviceId)
+    return device && !isHome(device) ? projectOf(deviceId, projectId)?.name : undefined
+  }
   const sectionKeyOf = (deviceId: string, projectId: string): string =>
     projectSectionKey(deviceId, projectId, projectOf(deviceId, projectId)?.chatId)
   const launchedBy = translateSessionMessage('sidebar.launchedByAssistant', { name: assistant?.name ?? assistantName })

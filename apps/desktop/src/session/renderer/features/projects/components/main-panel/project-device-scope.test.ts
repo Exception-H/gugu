@@ -1,11 +1,14 @@
-import { describe, expect, it, vi } from 'vitest';
-import { defaultRunMachine, foldersInScope, rememberRunMachine } from './project-device-scope';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { defaultRunMachine, foldersInScope, rememberRunMachine, resetRunMachineMemoryForTest, runMachineMemory } from './project-device-scope';
 
-const cloud = vi.hoisted(() => ({ remember: vi.fn(async () => ({})) }));
-vi.mock('@/lib/agentCreateDefaults', () => ({
-  readAgentCreateDefaults: async () => ({ deviceId: null, projectByDevice: {}, projectByChat: {}, machineByProject: {} }),
-  rememberAgentCreateRunMachine: cloud.remember,
+const cloud = vi.hoisted(() => ({
+  remember: vi.fn(async () => ({})),
+  read: vi.fn(async () => ({ deviceId: null, projectByDevice: {}, projectByChat: {}, machineByProject: {} as Record<string, string> })),
+  self: vi.fn(async () => ({ device_id: 'this-desktop' }) as { device_id: string } | null),
 }));
+vi.mock('@/lib/agentCreateDefaults', () => ({ readAgentCreateDefaults: cloud.read, rememberAgentCreateRunMachine: cloud.remember }));
+vi.mock('@/platform', () => ({ platform: { getLocalDeviceSelfSnapshot: cloud.self } }));
+const defaults = (machineByProject: Record<string, string>) => ({ deviceId: null, projectByDevice: {}, projectByChat: {}, machineByProject });
 import type { ProjectFoldersState, ShownFolder } from './project-folders';
 
 const folder = (projectId: string): ShownFolder => ({ projectId, workspaceId: projectId, path: '/same/path', kind: 'root', branch: null, attachedAt: null, sessionIds: [], offline: projectId === 'remote', deviceId: projectId === 'remote' ? 'device-b' : null });
@@ -16,6 +19,48 @@ const deviceOf = (id: string) => id === 'remote' ? 'device-b' : null;
 
 describe('remembered run machine (account-wide)', () => {
   // Round-2 A/B R4-b: keys other devices cannot read (a local project id, the phone's no-project key) were stored forever.
+  beforeEach(() => {
+    resetRunMachineMemoryForTest();
+    cloud.remember.mockClear();
+    vi.useRealTimers();
+  });
+
+  // #2412 review ③: a failed read must not leave the memory empty for good.
+  it('reads again after a failed read', async () => {
+    cloud.read.mockRejectedValueOnce(new Error('offline')).mockResolvedValueOnce(defaults({ 'chat-work': 'gpu' }));
+    runMachineMemory.subscribe(() => {})();
+    await vi.waitFor(() => expect(cloud.read).toHaveBeenCalledTimes(1));
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    runMachineMemory.subscribe(() => {})();
+    await vi.waitFor(() => expect(runMachineMemory.current()).toEqual({ 'chat-work': 'gpu' }));
+  });
+
+  // #2412 review ③: a running desktop sees a choice made on the phone later; this computer reads back as 'local'.
+  it('re-reads after a while, and shows this computer as local', async () => {
+    cloud.read.mockReset();
+    cloud.read.mockResolvedValueOnce(defaults({ 'chat-work': 'gpu' })).mockResolvedValueOnce(defaults({ 'chat-work': 'this-desktop' }));
+    const now = vi.spyOn(Date, 'now');
+    now.mockReturnValue(1_000_000);
+    runMachineMemory.subscribe(() => {})();
+    await vi.waitFor(() => expect(runMachineMemory.current()).toEqual({ 'chat-work': 'gpu' }));
+    runMachineMemory.subscribe(() => {})();
+    expect(cloud.read).toHaveBeenCalledTimes(1);
+    now.mockReturnValue(1_000_000 + 16_000);
+    runMachineMemory.subscribe(() => {})();
+    await vi.waitFor(() => expect(runMachineMemory.current()).toEqual({ 'chat-work': 'local' }));
+    now.mockRestore();
+  });
+
+  // #2412 review ③: no device id at the first read must not stop "this computer" from being remembered later.
+  it('remembers this computer once its device id is known, even if it was not at first', async () => {
+    cloud.self.mockResolvedValueOnce(null);
+    runMachineMemory.subscribe(() => {})();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    rememberRunMachine('chat-site', null);
+    await vi.waitFor(() => expect(cloud.remember).toHaveBeenCalledWith('chat-site', 'this-desktop'));
+    expect(runMachineMemory.current()['chat-site']).toBe('local');
+  });
+
   it('remembers only under a project group id, and writes it to the account', async () => {
     rememberRunMachine(undefined, 'gpu');
     rememberRunMachine('chat-work', 'gpu');

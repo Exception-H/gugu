@@ -14,7 +14,7 @@ const machine = (id: string, online: boolean, projects: DeviceProject[] = [], ph
   capabilities: phone ? { terminals: [], runtimes: ['pi'], host_kind: 'phone', host_runtime_capability: 1 } : { terminals: [], runtimes: ['codex'] },
 })
 const defaultOf = (project: ReturnType<typeof accountProjects>[number] | null, machines: Device[], saved?: string) =>
-  defaultRunMachine(runCandidates(createMachines(project, machines)), saved)
+  defaultRunMachine(runCandidates(createMachines(project, machines), project), saved)
 
 describe('手机新建页的「项目 · 机器」(DESIGN 点击路径 4a)', () => {
   const gpu = machine('gpu', true, [record('gpu-work', 'chat-work', '/root/work')])
@@ -31,12 +31,13 @@ describe('手机新建页的「项目 · 机器」(DESIGN 点击路径 4a)', () 
     expect([...work!.homes]).toEqual(expect.arrayContaining([['gpu', 'gpu-work'], ['juma', 'juma-work'], ['wen', 'wen-work']]))
   })
 
-  it('选了项目:有文件夹的在线机器在前、离线的在后,没有文件夹的电脑在下且点不动;手机不列', () => {
+  // #2412 review ④: an offline machine is listed but not selectable, the same rule as the desktop picker (machineAcceptsWork).
+  it('选了项目:有文件夹的在线机器在前、离线的在后(点不动),没有文件夹的电脑在下且点不动;手机不列', () => {
     const rows = createMachines(work!, machines)
     expect(rows.map((row) => [row.device.device_id, row.available, row.localProjectId, row.path])).toEqual([
       ['juma', true, 'juma-work', '~/work'],
       ['gpu', true, 'gpu-work', '/root/work'],
-      ['wen', true, 'wen-work', '~/work'],
+      ['wen', false, 'wen-work', '~/work'],
       ['mac', false, null, null],
     ])
   })
@@ -45,17 +46,18 @@ describe('手机新建页的「项目 · 机器」(DESIGN 点击路径 4a)', () 
     expect(defaultOf(work!, machines, 'gpu')).toBe('gpu')
     expect(defaultOf(work!, machines, 'wen'), 'last used is offline').toBe('juma')
     expect(defaultOf(work!, machines, 'mac'), 'last used has no folder').toBe('juma')
-    expect(defaultOf(work!, [mac, wen], 'wen'), 'every folder machine is offline').toBe('wen')
-    expect(defaultOf(work!, [mac, wen]), 'never a machine without a folder').toBe('wen')
+    // Every folder machine is offline: the offline one stays chosen (send blocked, draft kept), never a machine without a folder.
+    expect(defaultOf(work!, [mac, wen], 'wen')).toBe('wen')
+    expect(defaultOf(work!, [mac, wen])).toBe('wen')
+    expect(defaultOf(work!, [mac]), 'no machine has a folder').toBeNull()
   })
 
-  it('不选项目:全部机器,电脑在前、手机任务宿主在最后;默认 = 上次那台(在线)→ 第一台在线的', () => {
+  it('不选项目:全部机器,电脑在前、手机任务宿主在最后;离线的点不动;默认 = 第一台能用的', () => {
     const rows = createMachines(null, [phone, ...machines.filter((one) => one !== phone)])
-    expect(rows.map((row) => row.device.device_id)).toEqual(['mac', 'wen', 'juma', 'gpu', 'phone'])
-    expect(rows.every((row) => row.available && row.localProjectId === null)).toBe(true)
+    expect(rows.map((row) => [row.device.device_id, row.available])).toEqual([['mac', true], ['wen', false], ['juma', true], ['gpu', true], ['phone', true]])
+    expect(rows.every((row) => row.localProjectId === null)).toBe(true)
     expect(defaultOf(null, machines)).toBe('mac')
-    expect(defaultOf(null, machines, 'gpu')).toBe('gpu')
-    expect(defaultOf(null, machines, 'wen'), 'last used is offline').toBe('mac')
+    expect(defaultOf(null, machines, 'wen'), 'offline is never the default').toBe('mac')
   })
 
   it('还没绑项目群的本地项目只在它自己那台上', () => {

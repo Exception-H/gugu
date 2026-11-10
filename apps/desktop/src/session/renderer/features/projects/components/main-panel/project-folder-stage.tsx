@@ -99,16 +99,16 @@ export function useProjectFolderStage(projectId: string, { floating = false, onC
   };
 
   // 挂到这个项目在那台机器上已有的本地项目下(与第一步同一条路)。
-  const attachToMember = async (memberId: string, machine: string | null, path: string) => {
+  // 挂上了 = true(各条路同一个回答,托盘的机器选择器据此才选中那台)。
+  const attachToMember = async (memberId: string, machine: string | null, path: string): Promise<boolean> => {
     const result = await folders.attach(memberId, path);
     if (!result.ok) {
       // 那个文件夹本身就是那台机器上的另一个项目 ⇒ 不是「挂不上」,是「要不要把那个项目并进来」。
       if (result.error.type === 'is-project-root' && !memberIds.includes(result.error.projectId)) {
-        confirmMerge(machine, result.error.projectId, result.error.projectName, path);
-        return;
+        return confirmMerge(machine, result.error.projectId, result.error.projectName, path);
       }
       toast({ tier: 'error', title: attachErrorText(result.error) });
-      return;
+      return false;
     }
     const attached = result.folder;
     toast({
@@ -127,18 +127,22 @@ export function useProjectFolderStage(projectId: string, { floating = false, onC
       },
       duration: 8000,
     });
+    return true;
   };
 
   // 那台机器上还没有这个项目:在那台把文件夹认成项目(并进来的就用那一个),绑到这个项目的群上(product spec,owner 选 A)。
   const linkDeps = projectLinkDeps(displayName, sessionCountOf);
-  const linkOnMachine = async (machine: string | null, path: string, existingProjectId?: string) => {
+  const linkOnMachine = async (machine: string | null, path: string, existingProjectId?: string): Promise<boolean> => {
     try {
       const linked = await linkFolderOnMachine(linkDeps, { rowId, machine, path, existingProjectId });
       projectGroupsStore.refreshAll();
       // 那台机器的项目清单变了(多了一个 / 绑了群):重读一遍,下次它离线时侧栏照样列着(❌ 只在连上那一刻读过)。
       const resyncMachine = () => (machine ? void remoteHostsStore.syncProjects(machine) : undefined);
       resyncMachine();
-      if (!linked.ok) return failLinking(linked.error);
+      if (!linked.ok) {
+        failLinking(linked.error);
+        return false;
+      }
       toast({
         title: translate('projects.folders.attachedOn', { machine: machineLabel(machine), path: shortHome(path), projectName: displayName }),
         action: {
@@ -156,26 +160,27 @@ export function useProjectFolderStage(projectId: string, { floating = false, onC
         },
         duration: 8000,
       });
+      return true;
     } catch (error) {
       failLinking(error);
+      return false;
     }
   };
 
   // 那台机器上的这个文件夹已经是一个有会话的项目:先说清会发生什么,确认了才并(owner 2026-10-17 选 A)。
-  const confirmMerge = (machine: string | null, existingProjectId: string, name: string, path: string) => {
+  const confirmMerge = (machine: string | null, existingProjectId: string, name: string, path: string): Promise<boolean> => {
     const count = sessionCountOf(existingProjectId);
-    if (count === 0) {
-      void linkOnMachine(machine, path, existingProjectId);
-      return;
-    }
-    showConfirm({
+    if (count === 0) return linkOnMachine(machine, path, existingProjectId);
+    return new Promise<boolean>((resolve) => showConfirm({
       title: translate('projects.folders.mergeTitle', { name, projectName: displayName }),
       description: translate('projects.folders.mergeDescription', { machine: machineLabel(machine), name, count, projectName: displayName }),
       confirmLabel: translate('projects.folders.mergeConfirm'),
       // 并进来不删任何东西(原来的群留作历史):❌ 删除那种红按钮。
       variant: 'default',
-      onSuccess: () => void linkOnMachine(machine, path, existingProjectId),
-    });
+      onSuccess: () => resolve(linkOnMachine(machine, path, existingProjectId)),
+      // 取消 / Esc:没并,❌ 当成挂上了。
+      onClose: () => resolve(false),
+    }));
   };
 
   // 挂满了就当场说,❌ 先弹目录框、挑完才拒(各台机器上的合计;列表还没读到时数不出来,不拦)。
@@ -185,8 +190,8 @@ export function useProjectFolderStage(projectId: string, { floating = false, onC
     return true;
   };
 
-  const attachOn = async (machine: string | null, path: string) => {
-    if (refuseWhenFull()) return;
+  const attachOn = async (machine: string | null, path: string): Promise<boolean> => {
+    if (refuseWhenFull()) return false;
     const plan = await planAttach({
       machine,
       path,
@@ -198,7 +203,7 @@ export function useProjectFolderStage(projectId: string, { floating = false, onC
       failLinking(error);
       return null;
     });
-    if (!plan) return;
+    if (!plan) return false;
     switch (plan.kind) {
       case 'member':
         return attachToMember(plan.memberId, machine, path);
@@ -206,7 +211,7 @@ export function useProjectFolderStage(projectId: string, { floating = false, onC
         return confirmMerge(machine, plan.projectId, plan.name, path);
       case 'taken':
         toast({ tier: 'error', title: translate('projects.folders.errorOtherProject', { projectName: plan.projectName }) });
-        return;
+        return false;
       case 'link':
         return linkOnMachine(machine, path);
     }
@@ -225,11 +230,8 @@ export function useProjectFolderStage(projectId: string, { floating = false, onC
           message: translate('projects.folders.attachDialogMessage'),
         });
     return picked
-      .then(async (path) => {
-        if (!path) return false;
-        await attachOn(machine, path);
-        return true;
-      })
+      // 挑了路径不等于挂上了(那是别的项目的文件夹、并入被取消、接进来失败):只有挂上了才算。
+      .then((path) => (path ? attachOn(machine, path) : false))
       .catch((error: unknown) => {
         log.error('[project-home] 挂文件夹失败', { projectId, error });
         return false;

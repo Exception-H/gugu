@@ -102,11 +102,11 @@ export function MachineRow({ machine, meta, trailing }: { machine: MachineChoice
     <>
       <MachineKindIcon machine={machine} className="size-3.5" />
       {!machine.isLocal ? <MachineDot machine={machine} /> : null}
-      <span title={machine.label} className="min-w-0 shrink-0 max-w-[45%] truncate">
+      <span title={machine.label} className="min-w-0 truncate">
         {machine.label}
       </span>
-      {/* 淡色字可能是一整条文件夹路径(项目里在哪台跑):它让位、截断,❌ 把机器名挤没。 */}
-      {meta ? <small title={meta} className="ml-auto min-w-0 truncate pl-3 text-foreground-muted">{meta}</small> : null}
+      {/* 淡色字可能是一整条文件夹路径(项目里在哪台跑):它至多占一半多一点、截断,❌ 把机器名挤没;短的淡色字照旧不截。 */}
+      {meta ? <small title={meta} className="ml-auto min-w-0 max-w-[55%] shrink-0 truncate pl-3 text-foreground-muted">{meta}</small> : null}
       {trailing ? <span className={cn('flex shrink-0', meta ? 'pl-2' : 'ml-auto pl-3')}>{trailing}</span> : null}
     </>
   );
