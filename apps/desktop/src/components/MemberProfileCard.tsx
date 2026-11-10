@@ -29,17 +29,18 @@ const profileCardClass = 'gg-pop w-[284px] overflow-hidden rounded-xl bg-[var(--
 // 放进底部面板(手机,#6836)时铺满宽度,圆角、底色归面板,卡片不再叠第二层外框。
 const profileFillClass = 'gg-pop w-full text-[var(--text-primary)]'
 const profileSingleClass = 'gg-pop--single'
-const profileHeaderClass = 'gg-pop-ph flex items-center gap-3.5 border-b border-[var(--border-color)] px-[22px] pb-4 pt-[22px]'
+// @@@panel-chrome 名片内一条左边线 16,头与正文之间只留白;只有管理区上方一条线(与全 app 同一个灰)。
+const profileHeaderClass = 'gg-pop-ph flex items-center gap-3.5 px-4 pb-1 pt-4'
 const profileHeaderTextClass = 'gg-pop-ph-text flex min-w-0 flex-col'
 const profileNameClass = 'gg-pop-pn min-w-0 overflow-hidden text-ellipsis whitespace-nowrap text-base font-semibold text-[var(--text-primary)]'
-const profileActionsClass = 'gg-pop-pacts flex flex-wrap gap-2 px-[18px] pb-3 pt-3.5'
+const profileActionsClass = 'gg-pop-pacts flex flex-wrap gap-2 px-4 pb-3 pt-3'
 const profileButtonClass = 'gg-pop-pbtn flex-[1_1_auto] text-[length:var(--font-body)] [&_svg]:shrink-0'
-const profileFieldsClass = 'gg-pop-fields gap-x-2 gap-y-1.5 px-[18px] pb-3.5'
+const profileFieldsClass = 'gg-pop-fields gap-x-2 gap-y-1.5 px-4 pb-3.5'
 const profileFieldRowClass = 'gg-pop-field-row col-span-2 grid grid-cols-subgrid items-start text-[length:var(--font-caption)] leading-[var(--lh-caption)]'
 const profileFieldLabelClass = 'gg-pop-field-label whitespace-nowrap text-[var(--text-tertiary)]'
 const profileFieldValueClass = 'gg-pop-field-value min-w-0 [overflow-wrap:anywhere] text-[var(--text-secondary)]'
 const profileAgentMetaClass = 'mt-[3px] flex flex-wrap gap-x-2.5 gap-y-0.5 text-[length:var(--font-caption)] leading-[var(--lh-caption)] text-[var(--text-tertiary)] [&>*]:max-w-full [&>*]:truncate'
-const profileListenClass = 'gg-pop-lm px-[18px] pb-[18px] pt-1'
+const profileListenClass = 'gg-pop-lm px-4 pb-4 pt-1'
 const profileListenLabelClass = 'gg-pop-lml mb-[7px] text-[length:var(--font-body)] text-[var(--text-secondary)]'
 // @@@1344(b) — 倾听模式分段壳:椭圆/胶囊(rounded-full)→圆角矩形(rounded-lg=8px,对齐 SSOT 基础圆角 `--r`)。
 const profileListenSegmentClass = 'gg-pop-lmseg flex gap-1.5 rounded-lg bg-[var(--listen-mode-bg)] p-[3px]'
@@ -51,7 +52,7 @@ const profileListenButtonInactiveClass = 'bg-transparent text-[var(--listen-mode
 // 设计稿的 .pop 资料卡本身没有管理表单（管理控件在群设置抽屉里），故这里借用设置抽屉的
 // aset-row / aset-sel / .tgl / aset-danger 习语，但按资料卡 popover 的紧凑尺度落地（标签/选择走
 // --font-body，而非照抄抽屉的 13px）。色值复用代码库既有组件（asClass.profileDanger）。
-const profileManageClass = 'gg-pop-manage flex flex-col gap-2.5 border-t border-[var(--border-subtle)] px-[18px] pb-[18px] pt-3'
+const profileManageClass = 'gg-pop-manage flex flex-col gap-2.5 border-t border-[var(--border-color)] px-4 pb-4 pt-3'
 const profileManageRowClass = 'gg-pop-manage-row flex items-center justify-between gap-3'
 // 双行（标签+描述）行用 flex-start 顶对齐开关，对齐 .aset-row 与群设置抽屉 通知/邀请链接 行的既有写法。
 const profileManageLabelClass = 'gg-pop-manage-label text-[length:var(--font-body)] font-medium text-[var(--text-primary)]'

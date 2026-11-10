@@ -653,7 +653,9 @@
     --background-quaternary: var(--background);
     --background-quaternary-1: var(--background-1);
     --background-quaternary-2: var(--background-2);
-    --border: var(--neutral-5);
+    /* @@@panel-chrome 线与咕咕同一个灰(--border-color = --border,8%),与 .emdark 同源。原来是 --neutral-5
+       (bg 82% + fg ≈ 18% 不透明):会话页里的线比全 app 深一档,和分栏缝(--border-subtle)在 ├ 处是两种灰。 */
+    --border: var(--neutral-6);
     --border-2: var(--neutral-9);
     --status-done: var(--neutral-9);
     --status-todo: var(--neutral-9);

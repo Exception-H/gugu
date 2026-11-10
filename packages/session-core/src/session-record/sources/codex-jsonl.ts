@@ -72,10 +72,12 @@ export function createCodexJsonlSource(locator: SessionRecordLocator, options?: 
         const first = !ordinals.children[item.threadId];
         ordinals.children = { ...ordinals.children, [item.threadId]: child };
         const at = parseTimestamp(codex.timestamp);
-        // The child's own record updates its card; the root's `completed` activity is the row saying it finished,
-        // in the root turn that was running when it did (its text arrives with the child's FINAL_ANSWER, below).
-        const done: RecordEntry[] = item.activity === 'completed'
-          ? [{ key, at, event: { kind: 'subagent_done', parentRecord: true, toolCallId: child.id, agentId: child.id, status: 'completed' } }] : [];
+        // The child's own record updates its card; the root's `completed` / `interrupted` activity is the row saying it
+        // ended, in the root turn that was running when it did (a completed child's text arrives with its FINAL_ANSWER,
+        // below). Codex notes no other ending in the parent's record: a child whose turn failed shows that on its card.
+        const ended = item.activity === 'completed' ? 'completed' : item.activity === 'interrupted' ? 'stopped' : null;
+        const done: RecordEntry[] = ended
+          ? [{ key, at, event: { kind: 'subagent_done', parentRecord: true, toolCallId: child.id, agentId: child.id, status: ended } }] : [];
         if (!first) return done;
         return [{ key: `${key}#0`, at, event: {
           kind: 'subagent', toolCallId: child.id, subagentSessionId: child.id,
@@ -115,7 +117,8 @@ export function createCodexJsonlSource(locator: SessionRecordLocator, options?: 
 function finalAnswer(record: Record<string, unknown>, children: Record<string, Child>): { child: Child; text: string } | null {
   const payload = asRecord(record.payload);
   if (record.type !== 'response_item' || payload?.type !== 'agent_message' || typeof payload.author !== 'string') return null;
-  const child = Object.values(children).find((candidate) => candidate.name === payload.author);
+  // A path names one live agent at a time (Codex refuses a second live one), so the latest child with it is the sender.
+  const child = Object.values(children).findLast((candidate) => candidate.name === payload.author);
   if (!child || !Array.isArray(payload.content)) return null;
   const text = payload.content.map((part) => asRecord(part)?.text).filter((part): part is string => typeof part === 'string').join('');
   const reply = /^Message Type: FINAL_ANSWER\n[\s\S]*?\nPayload:\n([\s\S]*)$/.exec(text)?.[1];

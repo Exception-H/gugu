@@ -1,6 +1,7 @@
 import type { ExtensionFileChangeBatch } from '@shared/extensions/bridge-protocol';
 import { chatForCapabilities } from '@shared/extensions/bridge-protocol';
 import { appStateOf } from '@shared/extensions/app-state';
+import { sameWidgetIdentity, widgetContext } from '@shared/extensions/widget-context';
 import { groupFileLink } from '@gugu/core/shared/ui/guguLink';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
@@ -885,7 +886,11 @@ export async function retargetExtensionSurface(input: {
 } & Partial<AppWhere>): Promise<void> {
   const binding = bindings.get(input.webContentsId);
   if (!binding) throw new Error('That surface is not bound yet');
-  if (binding.widget || input.widget) throw new Error('A message view cannot be retargeted');
+  if ((binding.widget || input.widget) && (!sameWidgetIdentity(binding.widget, input.widget)
+    || input.workspace !== binding.workspace
+    || input.tabId !== binding.tabId || (input.itemId ?? null) !== binding.itemId)) {
+    throw new Error('A message view cannot be retargeted to another widget');
+  }
   const contents = webContents.fromId(input.webContentsId);
   if (!contents || contents.isDestroyed()) throw new Error(`No such webContents: ${input.webContentsId}`);
   // Moved to another place: a project's folder only stays its workspace for a file of it (G1).
@@ -901,6 +906,7 @@ export async function retargetExtensionSurface(input: {
   const recover = (error: unknown) => restoreBindingChange(input.webContentsId, binding, change, error);
   const filePath = await workspaceRelativeFile(workspace ? { workspace } : null, input.filePath).catch(recover);
   const conversation = await surfaceResourceChat(input.conversation ?? undefined, binding.operator, input.resourceChat).catch(recover);
+  if (binding.widget && conversation !== binding.conversation) throw new Error('A widget cannot move to another conversation');
   if (bindings.get(input.webContentsId) !== binding || bindingChanges.get(input.webContentsId) !== change) throw new Error('That surface binding changed');
   // Another handed-over file: the one it could open without a capability was the old one, so its open files go (it is
   // told, and reopens what it may). Its other files were never the place's to give.
@@ -919,6 +925,7 @@ export async function retargetExtensionSurface(input: {
   Object.assign(binding, personOpened(filePath, input.byHost, binding.operator));
   binding.itemId = input.itemId ?? null;
   binding.opening = input.opening;
+  if (binding.widget && input.widget) binding.widget = structuredClone(input.widget);
   if (folderChanged) {
     openingFolders.delete(binding);
     preloadFolder(binding, input.webContentsId);
@@ -948,6 +955,20 @@ export function unbindExtensionSurface(webContentsId: number): void {
   stopPageWatches(webContentsId);
   // 面没了,还在等它绑定的调用就别再等满那 5 秒了 —— 醒来发现没有绑定,照旧被拒。
   resolveBindingWaiters(webContentsId);
+}
+
+/** Only the visible person's bound widget can enter the local picture cache.
+ * Hidden app_check pages have an agent operator and are excluded. */
+export async function captureWidgetSurface(webContentsId: number, widgetId: string): Promise<string> {
+  const binding = bindings.get(webContentsId);
+  if (!binding?.widget || binding.widget.id !== widgetId || binding.operator?.kind === 'agent' || !binding.metrics.visible) {
+    throw new Error('This widget is not visible in your conversation');
+  }
+  const contents = webContents.fromId(webContentsId);
+  if (!contents || contents.isDestroyed()) throw new Error('This widget is no longer open');
+  const image = await contents.capturePage(undefined, { stayHidden: true });
+  if (bindings.get(webContentsId) !== binding || image.isEmpty()) throw new Error('This widget changed during capture');
+  return image.toDataURL();
 }
 
 /**
@@ -1085,6 +1106,7 @@ export function updateExtensionSurfaceLayout(
   }
   const unchanged =
     binding.metrics.visible === metrics.visible &&
+    binding.metrics.occluded === metrics.occluded &&
     binding.metrics.width === metrics.width &&
     binding.metrics.height === metrics.height &&
     binding.metrics.x === metrics.x && binding.metrics.y === metrics.y &&
@@ -1095,6 +1117,10 @@ export function updateExtensionSurfaceLayout(
   binding.metrics = metrics;
   layoutAppPageResources(webContentsId);
   pushContext(webContentsId);
+}
+
+function withoutOcclusion({ occluded: _occluded, ...metrics }: ExtensionSurfaceMetrics): ExtensionSurfaceMetrics {
+  return metrics;
 }
 
 /** Native embedding uses only the host's live binding and host-measured surface bounds. */
@@ -1412,14 +1438,15 @@ function contextFor(binding: SurfaceBinding, workspace: ExtensionWorkspace | und
     ...(workspace ? { workspace } : {}),
     // Absent stays absent: a tab opened from the entry rail has no file.
     ...(file ? { file } : {}),
-    ...(binding.widget ? { widget: { messageId: binding.widget.messageId, data: binding.widget.data, sender: binding.widget.senderId } } : {}),
+    ...(binding.widget ? { widget: widgetContext(binding.widget, extensionsService().get(binding.extensionId).manifest.apiVersion) } : {}),
     operator: binding.operator.kind === 'person' ? personOperator() : binding.operator,
     locale,
     themeMode: binding.themeMode ?? themeMode,
     // A page shown in a theme of its own (`showAgentPageInTheme`) is a picture of that palette, not of the person's.
     ...(themeColors && !binding.themeMode ? { themeColors } : {}),
     capabilities,
-    layout: { ...binding.metrics, fullscreen },
+    // `occluded` only tells native views to step aside; to the App a page partly under a toast is still on screen.
+    layout: { ...withoutOcclusion(binding.metrics), fullscreen },
   };
 }
 

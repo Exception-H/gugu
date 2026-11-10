@@ -201,7 +201,7 @@ describe('#969 leaving the group info page', () => {
 })
 
 describe('gugu-dev#181 我的 agent 收成一组', () => {
-  it('「我的 agent · N」与「其他人的 agent · N」是两组同级的:我的默认展开,收起后别人的 agent 仍在自己那一组里', async () => {
+  it('「我的 agent」与「其他人的 agent」是两组同级的分区(计数在分区标签右端):我的默认展开,收起后别人的 agent 仍在自己那一组里', async () => {
     revisionListeners = []
     await renderWithAppProviders(
       harness,
@@ -217,7 +217,7 @@ describe('gugu-dev#181 我的 agent 收成一组', () => {
     expect(toggle?.textContent).toContain('1')
     expect(rowIds()).toContain('claude')
     const others = q('[data-member-group="others"]')
-    expect(others?.textContent).toContain('其他人的 agent · 1')
+    expect(others?.querySelector('[data-slot="section-label"]')?.textContent).toBe('其他人的 agent1')
     expect(others?.querySelector('[data-member-row="codex"]')).not.toBeNull()
     await click(toggle)
     expect(rowIds()).not.toContain('claude')
@@ -513,8 +513,10 @@ describe('source-group listen-mode authority boundaries', () => {
     await renderWithAppProviders(harness, createNode(ControlledMemberListPanel, {
       chatId: 'chat-1', chatKind: kind, head, snapshot: SNAPSHOT, onReload: vi.fn(async () => {}),
     }), { auth: { id: 'member-2' }, chat: { identitiesById: Object.fromEntries(IDENTITIES.map((identity) => [identity.id, identity])) }, contacts: { contacts: [] } })
+    // Without authority the listen toggle is inert: its press is the row's, which opens the card (the row is its Trigger;
+    // pressing the row again would close it).
     await click(q('[data-member-row="claude"] [data-listen-mode-toggle]'))
-    await click(q('[data-member-row="claude"]'))
+    expect(setListenMode).not.toHaveBeenCalled()
     const active = [...document.querySelectorAll<HTMLElement>('.gg-pop-lmseg-btn')].find((element) => element.textContent === '主动')
     expect(active).toBeDefined()
     await click(active!)

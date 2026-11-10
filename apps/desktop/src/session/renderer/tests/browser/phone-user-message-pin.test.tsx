@@ -10,6 +10,7 @@ import { createRoot } from 'react-dom/client';
 import { afterEach, expect, it, vi } from 'vitest';
 import { page } from 'vitest/browser';
 import { until, untilStable } from '../../../../../../../tests/support/awaitCondition';
+import { pinnedSummaryShown } from '../../../../../../../tests/support/pinnedSummaryShown';
 import '@/styles/tokens.css';
 import '@renderer/index.css';
 import '@/mobile/phone-look.css';
@@ -62,7 +63,7 @@ async function mount(kind: typeof platform.kind, width: number) {
   const lane = () => card()?.closest<HTMLElement>('[data-index]') ?? null;
   // The message scrolls like any row; its lane sticks the two-line summary below it (@@@sticky-user-lanes).
   const summary = () => lane()?.querySelector<HTMLElement>('[data-pin-summary="own-message"]') ?? null;
-  const pinned = () => summary() != null && getComputedStyle(summary()!.closest('[data-index] > *')!).position === 'sticky';
+  const pinned = () => summary() != null && getComputedStyle(lane()!.querySelector('[data-chat-pin-backdrop]')!.parentElement!).position === 'sticky';
   const top = () => card()!.getBoundingClientRect().top - scroller.getBoundingClientRect().top;
   const summaryTop = () => summary()!.getBoundingClientRect().top - scroller.getBoundingClientRect().top;
   const reply = async () => {
@@ -81,7 +82,7 @@ async function mount(kind: typeof platform.kind, width: number) {
     scroller.scrollTop = value;
     await untilStable('transcript scroll settles', () => [scroller.scrollTop, scroller.scrollHeight]);
   };
-  return { host, card, lane, pinned, top, summaryTop, reply, scrollTo, scroller, composer: view.composerSlot!, mounts: () => mounts };
+  return { host, card, lane, summary, pinned, top, summaryTop, reply, scrollTo, scroller, composer: view.composerSlot!, mounts: () => mounts };
 }
 
 it.each([
@@ -110,7 +111,7 @@ it.each([
   expect(t.pinned()).toBe(pins);
   expect(t.top()).toBeCloseTo(initialTop - 200, 0);
   if (pins) {
-    expect(t.lane()!.dataset.pinStuck).toBe('true');
+    expect(pinnedSummaryShown(t.summary()!)).toBe(true);
     const pinnedTop = t.summaryTop();
     expect(pinnedTop).toBeGreaterThanOrEqual(0);
     await t.scrollTo(300);

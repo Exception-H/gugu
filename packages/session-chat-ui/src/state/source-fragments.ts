@@ -46,24 +46,28 @@ export function projectSourceFragments(
     }
   }
   const result = canonical.filter(row => !claimed.has(row));
-  const resultIds = new Set(result.map(row => row.id));
-  const previousSlot = new Map<string, number>();
-  previous.forEach((row, index) => {
-    const key = row.sourceFragment?.key;
-    if (key !== undefined && !previousSlot.has(key)) previousSlot.set(key, index);
-  });
-  for (const [key, rows] of replacements) {
-    // Keep the old source slot relative to its next surviving row, even when
-    // canonical history arrives in a different order or prepends older turns.
-    const oldIndex = previousSlot.get(key) ?? -1;
-    let at = result.length;
-    if (oldIndex >= 0) {
-      let next: RenderUnit | undefined;
-      for (let i = oldIndex + 1; i < previous.length && !next; i++) if (resultIds.has(previous[i].id)) next = previous[i];
-      if (next) at = result.findIndex(row => row.id === next.id);
+  if (window.beforeLive) {
+    result.unshift(...[...replacements.values()].flat());
+  } else {
+    const resultIds = new Set(result.map(row => row.id));
+    const previousSlot = new Map<string, number>();
+    previous.forEach((row, index) => {
+      const key = row.sourceFragment?.key;
+      if (key !== undefined && !previousSlot.has(key)) previousSlot.set(key, index);
+    });
+    for (const [key, rows] of replacements) {
+      // Keep the old source slot relative to its next surviving row, even when
+      // canonical history arrives in a different order or prepends older turns.
+      const oldIndex = previousSlot.get(key) ?? -1;
+      let at = result.length;
+      if (oldIndex >= 0) {
+        let next: RenderUnit | undefined;
+        for (let i = oldIndex + 1; i < previous.length && !next; i++) if (resultIds.has(previous[i].id)) next = previous[i];
+        if (next) at = result.findIndex(row => row.id === next.id);
+      }
+      result.splice(at, 0, ...rows);
+      for (const row of rows) resultIds.add(row.id);
     }
-    result.splice(at, 0, ...rows);
-    for (const row of rows) resultIds.add(row.id);
   }
   if (!aliases.size) return result;
   const canonicalIdByItem = new Map<string, string>();

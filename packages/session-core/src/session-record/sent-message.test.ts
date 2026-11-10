@@ -21,6 +21,10 @@ describe('the chat message a send put into a chat', () => {
     expect(message).toMatchObject({ id, chat_id: chat, sender_user_id: null, content_type: 'widget', is_mine: false, created_at: '2026-11-08T00:00:00.000Z' });
     expect(parseWidgetMessage(message.content)).toEqual({ v: 2, text: 'Sales', app: 'data-lens', view: 'card', height: 320, data: { file: 'gugu-file://x?v=1' } });
   });
+  it('carries the widget identity the receipt names, as the message in the chat does', () => {
+    const output = { ...(JSON.parse(widget.outputText!) as Record<string, unknown>), widget_id: 'stable-widget' };
+    expect(parseWidgetMessage(sentMessageOf({ ...widget, outputText: JSON.stringify(output) })!.content)?.wid).toBe('stable-widget');
+  });
   it('rebuilds a file card with the pinned folder revision', () => {
     const message = sentMessageOf(file)!;
     expect(message).toMatchObject({ id, chat_id: chat, content_type: 'attachment', file_item_id: item, file_version: 3 });

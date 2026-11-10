@@ -13,7 +13,7 @@ import type { GroupRosterCandidate } from '@/lib/mention'
 import type { AgentStatusById } from './agentMentionStatusModels'
 import type { MemberProfileCardModel } from '../MemberProfileCard'
 import type { ParsedAttachment } from '@gugu/core/shared/ui/attachmentModels'
-import type { MemberProfileSide } from '../memberProfileModels'
+import type { MemberProfileOpener } from '../memberProfileModels'
 import { IconButton } from '../ui/IconButton'
 import { useBackLayer } from '../ui/sheetStack'
 import { ChatMessageComposer } from './ChatMessageComposer'
@@ -130,9 +130,9 @@ export type TopicSplitPaneProps = {
   /**
    * 点头像开成员卡片。不接 = 分栏里点头像**什么都不发生**,而主线点了会开卡片 ——
    * 同一个气泡组件在两栏里行为不一样,用户只会觉得「这边坏了」。
-   * 弹层本身由 ChatAreaPanel 那一份统一渲染(分栏就长在它的树里),所以这里只透传 handler。
+   * 弹层本身由 ChatAreaPanel 那一份统一渲染(分栏就长在它的树里),所以这里只透传它的 handle(openedFrom: 'aside')。
    */
-  onOpenMemberProfile?: (member: MemberProfileCardModel, anchor: HTMLElement, preferredSide: MemberProfileSide) => void
+  memberProfileOpener?: MemberProfileOpener
   /** 气泡里的文件卡点开 —— 与主线同一个处理器。不接 = 分栏里的文件卡点了什么都不发生(#6375)。 */
   onOpenAttachment?: (meta: ParsedAttachment, message?: MessageItem) => void
   onReaction?: (messageId: string, emoji: string) => void
@@ -161,6 +161,8 @@ const TOPIC_SPLIT_PANE_STYLE: React.CSSProperties = {
   background: 'var(--bg-primary)',
   borderLeft: '1px solid var(--border-subtle)',
 }
+// @@@panel-chrome 嵌在页签分栏里时,分栏缝(1px 拖拽柄)已经是那条竖线;自己再画左边线 = 两根 1px 并排。
+const TOPIC_SPLIT_PANE_EMBEDDED_STYLE: React.CSSProperties = { ...TOPIC_SPLIT_PANE_STYLE, borderLeft: 'none' }
 // 手机上放不下两栏 ⇒ 整页盖住来源线(同 ChatSettingsPanel 的手机页)。来源线在下面不被挤窄,返回后停在原处。
 const TOPIC_PAGE_PANE_MOBILE_STYLE: React.CSSProperties = { ...TOPIC_SPLIT_PANE_STYLE, borderLeft: 'none', background: 'transparent' }
 const TOPIC_TAB_STYLE: React.CSSProperties = { position: 'absolute', inset: 0, zIndex: 1, background: 'transparent' }
@@ -169,8 +171,8 @@ const TOPIC_SPLIT_HEADER_STYLE: React.CSSProperties = {
   alignItems: 'flex-start',
   justifyContent: 'space-between',
   gap: 8,
-  padding: '12px 14px',
-  borderBottom: '1px solid var(--border-subtle)',
+  // 头与消息区之间只留白(面板外壳规则:线只留给分栏缝);左边线与消息列同为 12。
+  padding: '12px 12px 0',
   flexShrink: 0,
 }
 const TOPIC_SPLIT_HEADER_ACTIONS_STYLE: React.CSSProperties = { display: 'flex', alignItems: 'center', gap: 2, flexShrink: 0, marginTop: 'calc((var(--lh-title) - var(--control-h-sm)) / 2)' }
@@ -212,7 +214,7 @@ export function TopicSplitPane({ viewportKey = 'topic', navigationTarget = false
   onClose,
   currentUserId,
   mobile = false,
-  onOpenMemberProfile,
+  memberProfileOpener,
   onOpenAttachment,
   onReaction,
   onForward, visible,
@@ -230,7 +232,7 @@ export function TopicSplitPane({ viewportKey = 'topic', navigationTarget = false
     [mentionMembers, participantIds],
   )
   const [mentionToInsert, setMentionToInsert] = useState<{ id: string; name: string } | null>(null)
-  const { readReceiptPanel, onShowReadReceipt, onCloseReadReceipt } = useReadReceiptPanel({
+  const { readReceiptHandle, receiptOf } = useReadReceiptPanel({
     chatId: topic.chatId, messages, memberReadSeqs, memberProfiles,
   })
   // 宽度记在本机:拖过一次之后下次打开还是那个宽度(与会话列表同口径)。
@@ -312,9 +314,9 @@ export function TopicSplitPane({ viewportKey = 'topic', navigationTarget = false
     // 话题是多人线 ⇒ 与群同口径,收到的气泡上方显发送者名。
     isGroupChat: true,
     memberProfiles,
-    onOpenMemberProfile,
+    memberProfileOpener,
     onOpenFile: onOpenAttachment,
-    onShowReadReceipt,
+    readReceiptHandle,
     onReaction: onReaction ?? noop,
     onShowMessage: showMessage,
     onQuote,
@@ -334,7 +336,7 @@ export function TopicSplitPane({ viewportKey = 'topic', navigationTarget = false
     onToggleSelect: noop,
     onEnterSelectMode: undefined,
     flashMessageId,
-  }), [showMessage, rows, messages, mobile, memberReadSeqs, deliveryWaits, memberProfiles, onOpenMemberProfile, onOpenAttachment, onShowReadReceipt, onReaction, onForward, onDelete, onQuote, flashMessageId, history, visible])
+  }), [showMessage, rows, messages, mobile, memberReadSeqs, deliveryWaits, memberProfiles, memberProfileOpener, onOpenAttachment, readReceiptHandle, onReaction, onForward, onDelete, onQuote, flashMessageId, history, visible])
 
   // 手机上话题是来源页的一枚页签:在前面时,返回先回到来源那一枚。
   useBackLayer(onClose, mobile && visible !== false)
@@ -354,7 +356,7 @@ export function TopicSplitPane({ viewportKey = 'topic', navigationTarget = false
         data-testid="topic-split-pane"
         data-topic-id={topic.chatId}
         data-chat-surface={topic.chatId}
-        style={mobile ? TOPIC_PAGE_PANE_MOBILE_STYLE : TOPIC_SPLIT_PANE_STYLE}
+        style={mobile ? TOPIC_PAGE_PANE_MOBILE_STYLE : embedded ? TOPIC_SPLIT_PANE_EMBEDDED_STYLE : TOPIC_SPLIT_PANE_STYLE}
       >
         {/* 这一条**常驻**:面板开着时它也在。曾经开面板就把它收起来,代价是
             ①「收起分栏」与另一颗切换键一起消失,②这一栏里再没有一个字说明你在哪条话题上
@@ -461,13 +463,7 @@ export function TopicSplitPane({ viewportKey = 'topic', navigationTarget = false
         />
         </div>
         </ChatBottomDock>
-        {readReceiptPanel ? (
-          <ReadReceiptPopover
-            {...readReceiptPanel}
-            testId="message-read-receipt-panel"
-            onClose={onCloseReadReceipt}
-          />
-        ) : null}
+        <ReadReceiptPopover handle={readReceiptHandle} receiptOf={receiptOf} testId="message-read-receipt-panel" />
       </div>
     </motion.div>
   )

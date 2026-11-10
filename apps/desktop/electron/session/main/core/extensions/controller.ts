@@ -14,6 +14,7 @@ import {
   chatMembersChanged,
   chatsWithPages,
   bindExtensionSurface,
+  captureWidgetSurface,
   retargetExtensionSurface,
   notifyGroupWorkspaceChanged,
   notifyWatchedChatsChanged,
@@ -508,9 +509,11 @@ export const extensionsController = createRPCController({
     x?: number;
     y?: number;
     clip?: { x: number; y: number; width: number; height: number };
+    occluded?: boolean;
   }) => {
     updateExtensionSurfaceLayout(args.webContentsId, {
       visible: args.visible,
+      occluded: args.occluded === true,
       width: args.width,
       height: args.height,
       x: args.x,
@@ -518,6 +521,11 @@ export const extensionsController = createRPCController({
       clip: args.clip,
     });
     return { success: true };
+  },
+
+  captureWidget: async (args: { webContentsId: number; widgetId: string }) => {
+    try { return { success: true as const, data: await captureWidgetSurface(args.webContentsId, args.widgetId) }; }
+    catch (error) { return { success: false as const, error: error instanceof Error ? error.message : String(error) }; }
   },
 
   /**

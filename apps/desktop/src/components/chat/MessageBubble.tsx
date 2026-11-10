@@ -3,6 +3,8 @@ import { useShownAgentName } from '@/hooks/useShownAgentName'
 import { useAvatarIdentity } from '@/lib/avatarIdentity'
 import { MESSAGE_BUBBLE_LAYOUT as layout } from '@gugu/core/shared/ui/messageBubbleLayout'
 import { memo, useEffect, useRef, useState } from 'react'
+import type { ReadReceiptHandle } from '@/hooks/useReadReceiptPanel'
+import { Popover } from '../ui/Popover'
 import { useTranslation } from 'react-i18next'
 import { useToast } from '../toastContext'; import { downloadAttachment } from '../../lib/attachmentBytes'
 import { motion, AnimatePresence } from 'framer-motion'; import { GroupAvatarSlot } from './StickyGroupAvatar'
@@ -16,7 +18,7 @@ import { parseVoiceAttachmentContent } from '@gugu/core/shared/ui/voiceAttachmen
 import { parseAttachmentContent } from '@gugu/core/shared/ui/attachmentModels'; import { reactionLabel } from '@gugu/core/shared/ui/reactionCatalog'; import { i18n } from '../../i18n/runtime'; import type { MessageItem, MessageSendState, ReactionGroup } from '@gugu/core/shared/types/chat'
 import { MemberProfileAvatarButton } from '../MemberProfileAvatarButton'
 import type { MemberProfileCardModel } from '../MemberProfileCard'
-import type { MemberProfileSide } from '../memberProfileModels'
+import type { MemberProfileOpener } from '../memberProfileModels'
 import { COLOR_MUTED, readReceiptLabel } from './chatPresentation'
 import { MessageSendStatus } from './MessageSendStatus'; import { safeFailureLine } from '@/session/renderer/features/sessions/gugu-reason'; import { keepAction } from './messageKeep'
 import { buildBubbleStyle } from './messageBubbleStyle'
@@ -41,22 +43,19 @@ interface BubbleProps {
   // 全群可视气泡重渲。上移计算后，只有本消息状态真翻转时该 prop 才变，气泡才重渲。
   sendState?: MessageSendState; /** Comma-joined agent ids: a primitive keeps this row's memo. */ undeliveredTo?: string
   // @@@1345 已读回执做成进度圆环(替文字)：父层预算好的「已读数 / 收件总数」两个 primitive(memo 安全——
-  // 传整个 memberReadSeqs map 会破 memo)。环填充比例=read/total；点击展开「谁已读/谁未读」名单(onShowReadReceipt)。
+  // 传整个 memberReadSeqs map 会破 memo)。环填充比例=read/total；点击展开「谁已读/谁未读」名单(readReceiptHandle)。
   // total===1 → 私聊(满环=已读/空环=未读)；total>1 → 群聊(部分填充)。仅本人已发(非撤回/非发送中)显示。
   readReceiptRead?: number
   readReceiptTotal?: number
-  // @@@1313 点开已读名单（谁读谁没读）：稳定回调，父层（持 roster+profiles）弹名单，避免把 reader 列表作对象 prop 传进破 memo。
-  onShowReadReceipt?: (messageId: string, anchor: HTMLElement) => void
+  // @@@1313 点开已读名单（谁读谁没读）：环是父层（持 roster+profiles）那张名单浮层的 Trigger，稳定 handle，避免把 reader 列表作对象 prop 传进破 memo。
+  readReceiptHandle?: ReadReceiptHandle
   onQuote: (msg: MessageItem, selection?: QuoteSelection) => void; onShowMessage?: (id: string) => void
   onForward: (msg: MessageItem) => void
   onDelete: (messageId: string) => void
   isAgent?: boolean; hideAvatar?: boolean; streaming?: boolean // Live IM text shares the settled bubble's layout.
   memberProfile?: MemberProfileCardModel | null
-  onOpenMemberProfile?: (
-    member: MemberProfileCardModel,
-    anchor: HTMLElement,
-    preferredSide: MemberProfileSide,
-  ) => void
+  /** 头像是这一栏资料卡的 Trigger(再点同一个头像就关);openedFrom 记卡是从主线还是话题分栏点开的。 */
+  memberProfileOpener?: MemberProfileOpener
   compactMobile?: boolean
   // @@@1484 是否群聊(group/channel)。仅群聊在 received 气泡上方显发送者名;DM/ai 1:1 头部已知对方,显名冗余。
   isGroup?: boolean
@@ -85,13 +84,13 @@ export const MessageBubble = memo(function MessageBubble({
   sendState, undeliveredTo,
   readReceiptRead,
   readReceiptTotal,
-  onShowReadReceipt,
+  readReceiptHandle,
   onQuote, onShowMessage,
   onForward,
   onDelete,
   isAgent = false, hideAvatar = false, streaming = false,
   memberProfile = null,
-  onOpenMemberProfile,
+  memberProfileOpener,
   compactMobile = false,
   isGroup = false,
   onOpenTopic, onOpenTopicAnchor,
@@ -118,8 +117,6 @@ export const MessageBubble = memo(function MessageBubble({
   const phone = usePhoneMessageMenu(compactMobile && showMenu)
   const [showMoreMenu, setShowMoreMenu] = useState(false)
   const [showEmojiPicker, setShowEmojiPicker] = useState(false)
-  const moreButtonRef = useRef<HTMLButtonElement>(null)
-  const reactButtonRef = useRef<HTMLButtonElement>(null)
   const bubbleRef = useRef<HTMLDivElement>(null)
   const [menuLink, setMenuLink] = useState<HTMLAnchorElement | null>(null)
   const [menuSelection, setMenuSelection] = useState('')
@@ -170,16 +167,19 @@ export const MessageBubble = memo(function MessageBubble({
     setShowMenu(true)
   }
 
-  const openMoreMenuFromButton = () => {
-    captureMenuSelection()
-    setMenuLink(null)
-    document.dispatchEvent(new CustomEvent(UI_EVENTS.closeContextMenus))
-    setShowMoreMenu(true)
+  // 工具条的 ⋯ / 🙂 是各自浮层的 Trigger:开关由 Base UI 判(再点同一颗钮 = 关),这里只在打开前收好选区、关掉别处的菜单。
+  const setMoreMenuOpen = (open: boolean) => {
+    if (open) {
+      captureMenuSelection()
+      setMenuLink(null)
+      document.dispatchEvent(new CustomEvent(UI_EVENTS.closeContextMenus))
+    }
+    setShowMoreMenu(open)
   }
 
-  const openEmojiPickerFromButton = () => {
-    document.dispatchEvent(new CustomEvent(UI_EVENTS.closeContextMenus))
-    setShowEmojiPicker(true)
+  const setEmojiPickerOpen = (open: boolean) => {
+    if (open) document.dispatchEvent(new CustomEvent(UI_EVENTS.closeContextMenus))
+    setShowEmojiPicker(open)
   }
 
   // @@@mobile-message-menu - Android users need the same message menu without a desktop right-click.
@@ -210,7 +210,7 @@ export const MessageBubble = memo(function MessageBubble({
   // @@@1355 sender avatars are projected only from the canonical sender URL.
   // Display-only naming never changes the sender id or profile actions.
   const avatar = <MessageSenderAvatar senderUserId={msg.sender_user_id} name={avatarName} avatarUrl={avatarUrl} seed={msg.is_mine ? user?.id : (msg.sender_user_id ?? undefined)} size="sm" isAgent={avatarIsAgent} harnessBadge={!compactMobile} agentStatus={avatarIsAgent ? memberProfile?.agentStatus : undefined} still />
-  const canOpenProfile = !!memberProfile && !!onOpenMemberProfile
+  const canOpenProfile = !!memberProfile && !!memberProfileOpener
 
   if (msg.content_type === 'system') return <SystemMessageNotice message={msg} senderName={avatarName} onOpenTopic={onOpenTopicAnchor} />
   const showSender = isGroup && !msg.is_mine && !groupedWithPrev && !card && !!avatarName
@@ -224,11 +224,11 @@ export const MessageBubble = memo(function MessageBubble({
       actions={<HoverActionBar
         isMine={msg.is_mine} anchorRef={bubbleRef}
         isRetracted={isRetracted}
-        reactButtonRef={reactButtonRef}
-        moreButtonRef={moreButtonRef}
-        onReact={openEmojiPickerFromButton}
+        react={{ open: showEmojiPicker, onOpenChange: setEmojiPickerOpen, content: showEmojiPicker && (
+          <DeferredEmojiQuickPicker popover onPick={(emoji) => { onReaction(msg.id, emoji); setShowEmojiPicker(false) }} onClose={() => setShowEmojiPicker(false)} />
+        ) }}
+        more={{ open: showMoreMenu, onOpenChange: setMoreMenuOpen, content: showMoreMenu && <MsgMoreMenu {...messageActions(() => setShowMoreMenu(false))} /> }}
         onReply={() => { onQuote(msg) }}
-        onMore={openMoreMenuFromButton}
       />}
       style={{
         display: 'flex',
@@ -248,9 +248,7 @@ export const MessageBubble = memo(function MessageBubble({
           avatarSize="sm"
           buttonSize={compactMobile ? 44 : 32}
           messageSenderId={msg.sender_user_id ?? undefined}
-          onOpen={(event) => {
-            onOpenMemberProfile!(memberProfile!, event.currentTarget, msg.is_mine ? 'left' : 'right')
-          }}
+          profile={{ handle: memberProfileOpener!.handle, payload: { member: memberProfile!, preferredSide: msg.is_mine ? 'left' : 'right', openedFrom: memberProfileOpener!.openedFrom } }}
         />
       ) : avatar}</GroupAvatarSlot>}
 
@@ -307,32 +305,34 @@ export const MessageBubble = memo(function MessageBubble({
           )}
 
           {/* @@@1345 逐成员读回执做成进度圆环(替文字)：本人已发消息显示 ○ 环(填充比例=已读%)，
-              点击展开「谁已读/谁未读」名单(onShowReadReceipt)。语义文案进 aria-label/title(a11y+可测)。
+              点击展开「谁已读/谁未读」名单(readReceiptHandle)。语义文案进 aria-label/title(a11y+可测)。
               @@@1460 与 MessageStatus 互斥：传输瞬态(sending/failed)只显 MessageStatus 小图标、不显环;
               有已读进度时只显环(MessageStatus 已 return null)→ 永远单一指示,无新老双勾。
               showReadReceipt：每条本人消息各自挂环（#2098 owner 要逐条，撤 #1779 只挂末条的降噪）。
               read=0 的空环 = 「已发出、还没人读」(#5649 owner 拍板四态:发送中/已发出/已读/失败;发送中已改成虚线流动环,与空环可区分)。
               任务卡不挂环:它是交给一个 agent 的事件(gugu-dev#181),接没接、做到哪看卡行尾的状态,❌ 再问谁读了。 */}
-          {showReadReceipt && msg.is_mine && !card && !msg.retracted_at && sendState !== 'sending' && sendState !== 'undelivered' && sendState !== 'failed' && readReceiptTotal != null && readReceiptTotal > 0 && readReceiptRead != null && (
-            <button
-              type="button"
-              data-testid="message-read-receipt"
-              aria-label={readReceiptLabel(readReceiptRead, readReceiptTotal, t)}
-              title={readReceiptLabel(readReceiptRead, readReceiptTotal, t)}
-              onClick={onShowReadReceipt ? (e) => onShowReadReceipt(msg.id, e.currentTarget) : undefined}
-              style={{
-                border: 0, background: 'transparent',
-                width: compactMobile ? 44 : 15, height: compactMobile ? 44 : 15,
-                padding: 0, display: 'inline-flex',
-                alignItems: 'center',
-                cursor: onShowReadReceipt ? 'pointer' : 'default',
-                flexShrink: 0,
-                position: 'absolute', right: '100%', bottom: compactMobile ? -14 : 0, marginRight: compactMobile ? -8 : 4, justifyContent: 'center', zIndex: 1, // 回执晚到不挤窄正文;仍锚在气泡左侧,手机保留44px点击区。
-              }}
-            >
-              <ReadReceiptRing read={readReceiptRead} total={readReceiptTotal} />
-            </button>
-          )}
+          {showReadReceipt && msg.is_mine && !card && !msg.retracted_at && sendState !== 'sending' && sendState !== 'undelivered' && sendState !== 'failed' && readReceiptTotal != null && readReceiptTotal > 0 && readReceiptRead != null && (() => {
+            const ring = (
+              <button
+                type="button"
+                data-testid="message-read-receipt"
+                aria-label={readReceiptLabel(readReceiptRead, readReceiptTotal, t)}
+                title={readReceiptLabel(readReceiptRead, readReceiptTotal, t)}
+                style={{
+                  border: 0, background: 'transparent',
+                  width: compactMobile ? 44 : 15, height: compactMobile ? 44 : 15,
+                  padding: 0, display: 'inline-flex',
+                  alignItems: 'center',
+                  cursor: readReceiptHandle ? 'pointer' : 'default',
+                  flexShrink: 0,
+                  position: 'absolute', right: '100%', bottom: compactMobile ? -14 : 0, marginRight: compactMobile ? -8 : 4, justifyContent: 'center', zIndex: 1, // 回执晚到不挤窄正文;仍锚在气泡左侧,手机保留44px点击区。
+                }}
+              >
+                <ReadReceiptRing read={readReceiptRead} total={readReceiptTotal} />
+              </button>
+            )
+            return readReceiptHandle ? <Popover.Trigger handle={readReceiptHandle} payload={msg.id} render={ring} /> : ring
+          })()}
 
           <div
             ref={bubbleRef}
@@ -367,7 +367,6 @@ export const MessageBubble = memo(function MessageBubble({
       </div>
 
       {/* ── More menu (hover-bar "More" button) — design #msgmenu, portalled ── */}
-      {showMoreMenu && <MsgMoreMenu anchor={moreButtonRef} {...messageActions(() => setShowMoreMenu(false))} />}
 
       {/* ── 右键:指针处的同一份菜单。手机长按:同一份动作,气泡浮起、菜单贴在它上下(owner 11-05 方案 A;返回键先关它) ── */}
       {compactMobile
@@ -375,14 +374,6 @@ export const MessageBubble = memo(function MessageBubble({
         : showMenu && <MsgMoreMenu x={menuPos.x} y={menuPos.y} {...messageActions(() => setShowMenu(false))} />}
       {phone.selecting && <PhoneTextSelection bubble={bubbleRef} onCopy={(text) => { void handleCopyText(text || undefined); phone.setSelecting(false) }} onDone={() => phone.setSelecting(false)} />}
 
-      {/* ── Emoji quick-picker (hover-bar "Add emoji" button) ── */}
-      {showEmojiPicker && (
-        <DeferredEmojiQuickPicker
-          anchor={compactMobile ? bubbleRef : reactButtonRef}
-          onPick={(emoji) => { onReaction(msg.id, emoji); setShowEmojiPicker(false) }}
-          onClose={() => setShowEmojiPicker(false)}
-        />
-      )}
     </MessageHoverRegion>
   )
 })

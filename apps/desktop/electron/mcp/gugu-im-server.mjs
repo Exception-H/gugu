@@ -21,6 +21,7 @@ import { decodeIdentityAddress, decodeTypedId, encodeTypedId } from '../../../..
 import { workspaceUploadKind } from '../../../../packages/core/src/shared/workspaceUpload.mjs'
 import { parseAttachmentContent } from '../../../../packages/core/src/shared/ui/attachmentModels'
 import { parseWidgetMessage } from '../../../../packages/core/src/shared/ui/widgetModels'
+import { messageReferenceBlocks } from '@gugu/session-shared/markdown/dialect'
 import { attachmentFolderLine } from '../../../../packages/core/src/shared/attachmentFolderLine'
 import { AttachmentsError, commitAttachment, sendFileAsOwner, shareAttachment, uploadAttachmentBytes } from '../../../../packages/core/src/cloud/attachmentsApi'
 import { createGroupWithInvitations } from '../../../../packages/core/src/cloud/groupChat'
@@ -355,9 +356,14 @@ export function restWriteError(what, status, body) {
  * 发送者自己没权限仍是 RLS 的 42501,不会走到这里。把这种拒绝还原成给 agent 看得懂的一句,其余原样抛。
  */
 function recipientRefusal(error, chatId) {
+  // 附件走 attachments 函数:同一个拒绝变成 HTTP 400 { error: 'recipient_not_member', details } (gugu-supabase#242),
+  // 悄悄话的变成 400 invalid、原文照带。
+  const viaAttachments = error instanceof AttachmentsError
   // 悄悄话的收件人由 chat.enforce_whisper_rule 判,仍是 23514「A whisper goes to a member of this chat: <id> is not a member of <chat>」。
-  const whisper = error?.code === '23514' ? /A whisper goes to a member of this chat: (\S+) is not a member of/.exec(error.message) : null
-  if (error?.hint !== 'recipient_not_member' && !whisper) return error
+  const whisper = error?.code === '23514' || (viaAttachments && error.code === 'invalid')
+    ? /A whisper goes to a member of this chat: (\S+) is not a member of/.exec(error.message) : null
+  const notMember = error?.hint === 'recipient_not_member' || (viaAttachments && error.code === 'recipient_not_member')
+  if (!notMember && !whisper) return error
   const ids = whisper ? [whisper[1]] : String(error.details ?? '').split(',').map((id) => id.trim()).filter(Boolean)
   return new Error(`收件人不在本 chat（${chatId}）成员里：${ids.join(', ')}。用 message_members 查有效成员后重发。`)
 }
@@ -737,12 +743,6 @@ function summarizeWorkspaceItem(item) {
   }
 }
 
-// #849：whisper 的 to_user_ids 必须都是该 chat 的成员，否则拒绝——不假装投递成功（fail-loud）。
-// 纯函数（无 I/O）：返回不在成员集里的收件人列表，便于单测。
-export function recipientsNotInMembers(memberIds, toUserIds) {
-  const members = new Set(memberIds)
-  return (toUserIds || []).filter((uid) => !members.has(uid))
-}
 /**
  * 「我自己在的那条线」的成员名单只有一个诚实的形态:**非空数组**——我自己就在里面。
  * 所以「不是数组」(restRpc 对 void/空 body 回 null,见 #1216)与「零行」都只可能是**读不到**,
@@ -902,34 +902,85 @@ export async function extensionAttachmentOf(context, messageId, injected = {}) {
   return { message_id: String(message.id) }
 }
 
-/** A widget is one readable message in a chat this agent belongs to, just like an App attachment. */
-export async function widgetCheckScopeOf(context, messageId, injected = {}) {
+/** Registry identity is authoritative; the owner JWT still passes the original agent visibility check. */
+async function readableWidgetOf(deps, widgetId) {
+  const [origin] = await deps.restRpc('widget_origin', { p_widget_id: widgetId })
+  if (!origin || origin.is_retracted) return null
+  const [message] = await deps.restGet(`messages?id=eq.${enc(origin.origin_message_id)}&select=id,chat_id,content,content_type,sender_user_id,retracted_at,deleted_for_user_ids`)
+  if (!message || message.content_type !== 'widget'
+    || message.retracted_at || message.deleted_for_user_ids?.includes(deps.context.agentId)
+    || !(await agentCanSee(deps, message))) return null
+  const spec = parseWidgetMessage(message.content)
+  if (!spec) return null
+  const widget = { id: origin.widget_id, message_id: message.id, chat_id: message.chat_id,
+    app: spec.app, view: spec.view, text: spec.text, data: spec.data ?? {}, created_by: message.sender_user_id }
+  return { widget, message }
+}
+
+/** A checked widget resolves its original message through the same registry as references. */
+export async function widgetCheckScopeOf(context, target, injected = {}) {
   const deps = createDeps(context, injected)
-  const unreadable = () => new Error(`app_check: there is no widget message ${messageId} you can read`)
-  if (typeof messageId !== 'string' || !UUID_RE.test(messageId)) throw unreadable()
-  const [message] = await deps.restGet(`messages?id=eq.${enc(messageId)}&select=id,chat_id,content,content_type,sender_user_id`)
-  if (!message || !(await agentCanSee(deps, message))) throw unreadable()
-  const members = await memberRowsOfMyChat(message.chat_id, deps)
+  const messageId = typeof target === 'object' && target !== null ? target.messageId : undefined
+  const id = typeof target === 'object' && target !== null ? messageId ?? target.widgetId : target
+  const unreadable = () => new Error(`app_check: there is no widget message ${id} you can read`)
+  if (typeof id !== 'string' || !id.length || id.includes('\0')) throw unreadable()
+  // Both public entries resolve through the registry, then share the original agent checks below. A message's widget is
+  // registered under its body's wid (new sends) or its own id (history); widget_origin must name this very message, so a
+  // forged historical wid cannot point the check at another widget.
+  let widgetId = messageId === undefined ? id : undefined
+  if (messageId !== undefined) {
+    const [row] = await deps.restGet(`messages?id=eq.${enc(id)}&select=content`)
+    for (const candidate of new Set([parseWidgetMessage(row?.content)?.wid, id].filter(Boolean))) {
+      const [origin] = await deps.restRpc('widget_origin', { p_widget_id: candidate })
+      if (origin?.origin_message_id === id) { widgetId = candidate; break }
+    }
+  }
+  const found = widgetId ? await readableWidgetOf(deps, widgetId) : null
+  if (found && messageId !== undefined && found.message.id !== id) throw unreadable()
+  if (!found) {
+    // Explain a reference-message id only after checking that agent's access;
+    // never recover a widget identity from untrusted historical body.wid.
+    const [message] = await deps.restGet(`messages?id=eq.${enc(id)}&select=id,chat_id,content`)
+    if (message && await agentCanSee(deps, message)) {
+      const members = await memberRowsOfMyChat(message.chat_id, deps)
+      if (members.some(row => String(row.user_id) === context.agentId)
+        && messageReferenceBlocks(message.content ?? '').blocks.some(block => block.target.kind === 'widget')) {
+        throw new Error('app_check: this message is a widget reference; pass its widget_id')
+      }
+    }
+    throw unreadable()
+  }
+  const { widget, message } = found
+  const members = await memberRowsOfMyChat(widget.chat_id, deps)
   if (!members.some((row) => String(row.user_id) === context.agentId)) throw unreadable()
-  const references = (message.content ?? '').split(/\r?\n/).map(line => line.trim()).filter(Boolean)
-  if (references.length > 0 && references.length <= 4 && references.every(line => /^gugu-widget:\/\/\S+$/.test(line))) throw new Error('app_check: this message is a widget reference; pass its widget_id')
-  const widget = message.content_type === 'widget' ? parseWidgetMessage(message.content) : null
-  if (!widget) throw unreadable()
-  const { wid } = JSON.parse(message.content)
-  if (wid !== undefined && (typeof wid !== 'string' || !wid.length)) throw unreadable()
+  const height = parseWidgetMessage(message.content)?.height
   return {
-    tabKind: `${widget.app}.${widget.view}`, chatId: String(message.chat_id),
-    widget: { id: wid ?? String(message.id), messageId: String(message.id), senderId: String(message.sender_user_id), text: widget.text, data: widget.data ?? {}, ...(widget.height === undefined ? {} : { height: widget.height }) },
+    tabKind: `${widget.app}.${widget.view}`, chatId: String(widget.chat_id),
+    widget: { id: String(widget.id), originMessageId: String(widget.message_id), messageId: String(widget.message_id), senderId: widget.created_by ?? null, text: widget.text, data: widget.data ?? {}, ...(height === undefined ? {} : { height }) },
   }
 }
-async function assertRecipientsAreMembers(chatId, toUserIds, deps) {
-  if (!toUserIds || !toUserIds.length) return
-  const rows = await memberRowsOfMyChat(chatId, deps)
-  const invalid = recipientsNotInMembers(rows.map((r) => r.user_id), toUserIds)
-  if (invalid.length) {
-    throw new Error(
-      `收件人不在本 chat（${chatId}）成员里：${invalid.join(', ')}。用 message_members 查有效成员后重发。`
-    )
+
+/** widget_get: a widget's spec by its id, read as this agent through the same registry and checks as references. */
+export async function widgetGetOf(context, widgetId, injected = {}) {
+  const deps = createDeps(context, injected)
+  const unreadable = () => new Error(`widget_get: there is no widget ${widgetId} you can read`)
+  if (typeof widgetId !== 'string' || !widgetId.length || widgetId.includes('\0')) throw unreadable()
+  const found = await readableWidgetOf(deps, widgetId)
+  if (!found) throw unreadable()
+  const { widget, message } = found
+  const height = parseWidgetMessage(message.content)?.height
+  return JSON.stringify({ widget_id: widget.id, chat_id: widget.chat_id, message_id: widget.message_id, app: widget.app, view: widget.view,
+    text: widget.text, ...(height === undefined ? {} : { height }), data: widget.data, sender: widget.created_by })
+}
+
+async function assertReadableMessageReferences(deps, content) {
+  for (const { target } of messageReferenceBlocks(content).blocks) {
+    const id = target.kind === 'widget' ? target.widgetId : target.messageId
+    const message = target.kind === 'widget' ? (await readableWidgetOf(deps, id))?.message
+      : (await deps.restGet(`messages?id=eq.${enc(id)}&chat_id=eq.${enc(target.chatId)}&select=id`))[0]
+    if (!message || (target.kind === 'message' && !(await agentCanSee(deps, message)))) {
+      throw new Error(`message_send: cannot reference ${id}: not readable by you`)
+    }
   }
 }
 
@@ -1513,6 +1564,7 @@ async function handleMessage(args, deps) {
         sendText = rec.content
       }
       row.content = String(sendText ?? '')
+      await assertReadableMessageReferences(deps, row.content)
       await postCommandMessageRow(deps, row).catch((error) => { throw recipientRefusal(error, chatId) })
       sentKind = kind
     }
@@ -2342,7 +2394,8 @@ async function handleFile(args, deps) {
     }
     // #3641 附件也是往群里说话:与 message_send 同一道群规闸,在上传任何字节之前判。
     await assertGroupRulesSeen(deps, chatId, 'message_send_file')
-    await assertRecipientsAreMembers(chatId, toUserIds, deps)
+    // #2383 收件人合不合格由库判(与 message_send 同一条规则);被拒时 recipientRefusal 说清是谁。
+    const refused = (error) => { throw recipientRefusal(error, chatId) }
     const messageId = randomUUID()
     const thread = { thread_root_id: deps.context.threadRootId ?? null }
     let message
@@ -2355,14 +2408,14 @@ async function handleFile(args, deps) {
       message = await shareAttachment(await deps.attachmentsEndpoint(), {
         item_id: folderFile.itemId, version: folderFile.version ?? null, message_id: messageId, chat_id: chatId,
         sender_user_id: deps.context.agentId, to_user_ids: toUserIds ?? [], ...thread,
-      })
+      }).catch(refused)
       fileName = attachmentNameOf(message)
     } else if (!(documentBytes = folderFile ? null : await documentUploadBytes(args)) && (message = await publishHere(args, deps, chatId, { message_id: messageId, chat_id: chatId,
       sender_user_id: deps.context.agentId, to_user_ids: toUserIds ?? [], ...thread },
       folderFile ? { itemId: folderFile.itemId, expectedVersion: folderFile.version } : undefined).catch(async (error) => {
       const said = String(error?.message ?? error)
       if (folderFile && /File revision conflict/.test(said)) throw new Error(newerVersionRefusal(args.file, folderFile.version))
-      throw error
+      refused(error)
     }))) {
       fileName = resolveUploadName(args)
     } else {
@@ -2384,7 +2437,7 @@ async function handleFile(args, deps) {
         ...(args.temporary === true ? { keep: 'temporary' } : {}),
       }
       message = await commitWithReplay(() => commitAttachment(endpoint, commit)).catch(async (error) => {
-        if (!(error instanceof AttachmentsError && error.code === 'version_conflict')) throw error
+        if (!(error instanceof AttachmentsError && error.code === 'version_conflict')) refused(error)
         throw new Error(newerVersionRefusal(args.file, folderFile.version))
       })
     }
@@ -2926,10 +2979,19 @@ export async function sendWidgetOf(context, args, content, injected = {}, state 
   }
   const members = await memberRowsOfMyChat(chatId, deps)
   if (!members.some(member => String(member.user_id) === context.agentId)) throw new Error('widget_send: the agent must be a member of this chat')
-  const row = buildMessageRow(context, { id: randomUUID(), chatId, content, contentType: 'widget', replyToMessageId, threadRootId: context.threadRootId ?? null })
-  await postCommandMessageRow(deps, row)
-  // The task timeline draws this send from its arguments and this receipt (sentMessageOf): the chat it landed in rides here.
-  return JSON.stringify({ status: 'sent', message_id: row.id, source_link: conversationLink(chatId, row.id) })
+  const widget = parseWidgetMessage(content)
+  if (!widget) throw new Error('widget_send: a valid v2 widget is required')
+  const result = await deps.restRpc('send_widget', {
+    p_message_id: randomUUID(), p_chat_id: chatId, p_sender_user_id: context.agentId,
+    p_text: widget.text, p_app: widget.app, p_view: widget.view, p_data: widget.data ?? null,
+    p_reply_to_message_id: replyToMessageId, p_thread_root_id: context.threadRootId ?? null,
+    ...(widget.height === undefined ? {} : { p_height: widget.height }),
+  })
+  const row = Array.isArray(result) ? result[0] : result
+  if (!row?.message_id || !row?.widget_id) throw new Error('widget_send: the server did not confirm the widget identity')
+  // The task timeline draws this send from its arguments and this receipt (sentMessageOf): the chat it landed in and the
+  // widget's identity ride here.
+  return JSON.stringify({ status: 'sent', message_id: row.message_id, widget_id: row.widget_id, source_link: conversationLink(chatId, row.message_id) })
 }
 
 // ── MCP server（官方 SDK） ─────────────────────────────────────────

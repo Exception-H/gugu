@@ -556,8 +556,8 @@ export default {
       "notParticipant": "No members of this topic are visible right now",
       "sectionAgents": "Agents",
       "sectionPeople": "People",
-      "myAgents": "My agents · {{count}}",
-      "otherAgents": "Others' agents · {{count}}",
+      "myAgents": "My agents",
+      "otherAgents": "Others' agents",
       "listen": {
         "all": "Hears all messages",
         "allHint": "Also receives group messages that don't mention it. Its owner can click to switch to mentions only.",
@@ -859,6 +859,7 @@ export default {
     "whisperOnlyYou": "Whisper · only visible to you",
     "whisperTo": "Whisper to {{name}} · only visible to you both",
     "widget": "[Widget]",
+    "reference": { "loading": "Loading…", "unreadable": "A message you cannot see", "widgetUnreadable": "A widget you cannot see", "widgetRetracted": "This widget was retracted", "widgetElsewhere": "This widget is in another conversation", "locate": "Go to original", "locateActive": "Go to active widget", "previewQuote": "[Quote]", "previewMessage": "[Quoted message]" },
     "widgetUnavailable": { "missing": "App is not installed.", "disabled": "App is switched off.", "view": "This App view is unavailable.", "platform": "This App cannot run here." }
   },
   "searchTrail": {"position": "“{{query}}” {{index}}/{{total}}", "positionNoWords": "{{index}}/{{total}}", "previous": "Previous", "next": "Next (⌘G)", "results": "Results", "close": "Close search"},
