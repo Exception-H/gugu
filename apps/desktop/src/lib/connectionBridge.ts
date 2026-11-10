@@ -25,6 +25,8 @@ export function connectionBridge(): ConnectionBridge {
   return bridge
 }
 const accountId = () => typeof window === 'undefined' ? null : (window as ConnectionWindow)[KEY]?.accountId() ?? null
+/** The routing layer's last answer for the signed-in owner: a remount draws the right page at once instead of waiting a read. */
+const peekRoute = () => typeof window === 'undefined' ? undefined : (window as ConnectionWindow)[KEY]?.routing.peek()
 const subscribeAccount = (listener: () => void) => typeof window === 'undefined' ? () => {} : (window as ConnectionWindow)[KEY]?.subscribeAccount(listener) ?? (() => {})
 
 export function useConnectionAuthority() {
@@ -45,7 +47,8 @@ export function useConnectionAuthority() {
     }
   },[owner])
   const current = result?.owner === owner ? result : undefined
-  useConnectionReadNotice(`authority:${owner}`,!!current?.route,current?.failures ?? 0)
+  const route = current?.route ?? (owner ? peekRoute() : undefined)
+  useConnectionReadNotice(`authority:${owner}`,!!route,current?.failures ?? 0)
   useEffect(() => {
     if (!owner) return
     let stopped = false,timer: ReturnType<typeof setTimeout> | undefined,failures = 0,running = false
@@ -66,7 +69,7 @@ export function useConnectionAuthority() {
     window.addEventListener('focus',focus); void refresh()
     return () => { stopped = true; invalidate(); stop(); clearTimeout(timer); window.removeEventListener('focus',focus) }
   },[owner,reload,invalidate])
-  return { owner,route: current?.route,error: current?.error,reload,loading: !current }
+  return { owner,route,error: current?.error,reload,loading: !current && !route }
 }
 
 export function useOwnerConnectionStore(deviceId: string | null = null,route?: ConnectionRoute,enabled = true) {
