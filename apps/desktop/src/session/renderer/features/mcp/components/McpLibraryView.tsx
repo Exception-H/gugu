@@ -23,8 +23,13 @@ import { McpLibraryRow } from './mcp-library-row';
 import { useHarnessMcpServers, useMcpLibrary } from './use-mcp-library';
 import type { AgentPayload } from '@shared/core/agents/agent-payload';
 
-/** 卡片面与资源库其它格同一套(`border-border bg-background-1`),组与组之间的距离大于组内标题到卡片。 */
-const CARD = 'divide-y divide-foreground/10 overflow-hidden rounded-lg border border-border bg-background-1';
+/**
+ * 整页一种行(owner 11-10「层级关系视觉上很乱, 有很多奇怪的框啊缩进啊」):无框、无分隔线,左边对齐,展开箭头同一列;
+ * 一组展开后的那几行缩进一个箭头宽,箭头对齐组名。
+ */
+const NESTED = 'flex flex-col pl-6';
+/** 空、读取中:一行灰字,和行里的名字对齐。 */
+const QUIET = 'py-2 pl-6 text-sm text-foreground-muted';
 
 /**
  * 资源库 → MCP(owner 10-18「仿照 aionui 的那种管理机制」+「用户全局配置直接和咕咕的共存」):
@@ -80,13 +85,11 @@ export const McpLibraryView: React.FC<{ onOpenIntegrations: () => void }> = ({ o
           <PageLoading />
         ) : notice && !library.hasData ? null : (
           <div className="flex flex-col gap-6 py-8">
-            <section data-slot="mcp-library-gugu" className="flex flex-col gap-3">
+            <section data-slot="mcp-library-gugu" className="flex flex-col">
               <SectionLabel className="!px-0">{translate('mcpLibrary.ownGroup')}</SectionLabel>
-              <FoldGroup slot="mcp-library-builtin" title={translate('mcpLibrary.builtInGroup')} fixed>
-                {library.provided?.builtIn.map((name) => (
-                  <BuiltInRow key={name} name={name} library={library} disabled={disabled} onFail={fail} />
-                ))}
-              </FoldGroup>
+              {library.provided?.builtIn.map((name) => (
+                <BuiltInRow key={name} name={name} library={library} disabled={disabled} onFail={fail} />
+              ))}
               <ProvidedGroup
                 slot="mcp-library-integrations"
                 title={translate('mcpLibrary.integrationsGroup')}
@@ -115,7 +118,7 @@ export const McpLibraryView: React.FC<{ onOpenIntegrations: () => void }> = ({ o
                 onFail={fail}
               />
             </section>
-            <section data-slot="mcp-library-own" className="flex flex-col gap-3">
+            <section data-slot="mcp-library-own" className="flex flex-col">
               <SectionLabel
                 className="!px-0"
                 trailing={
@@ -127,31 +130,29 @@ export const McpLibraryView: React.FC<{ onOpenIntegrations: () => void }> = ({ o
               >
                 {translate('mcpLibrary.ownServers')}
               </SectionLabel>
-              <div className={CARD}>
-                {library.servers.length === 0 ? (
-                  <div data-slot="mcp-library-own-empty" className="px-3 py-3 text-sm text-foreground-muted">
-                    {translate('mcpLibrary.ownEmpty')}
-                  </div>
-                ) : (
-                  library.servers.map((server) => (
-                    <McpLibraryRow
-                      key={server.name}
-                      server={server}
-                      check={server.check}
-                      checking={library.checking.has(`gugu:${server.name}`)}
-                      disabled={disabled}
-                      enabledByDefault={server.enabledByDefault}
-                      onCheck={() => void library.check(server.name).catch(fail)}
-                      onToggleDefault={(enabled) => library.setEnabledByDefault(server.name, enabled)}
-                      onEdit={() => void openEdit(server)}
-                      onDelete={() => confirmDelete(server)}
-                    />
-                  ))
-                )}
-              </div>
+              {library.servers.length === 0 ? (
+                <div data-slot="mcp-library-own-empty" className={QUIET}>
+                  {translate('mcpLibrary.ownEmpty')}
+                </div>
+              ) : (
+                library.servers.map((server) => (
+                  <McpLibraryRow
+                    key={server.name}
+                    server={server}
+                    check={server.check}
+                    checking={library.checking.has(`gugu:${server.name}`)}
+                    disabled={disabled}
+                    enabledByDefault={server.enabledByDefault}
+                    onCheck={() => void library.check(server.name).catch(fail)}
+                    onToggleDefault={(enabled) => library.setEnabledByDefault(server.name, enabled)}
+                    onEdit={() => void openEdit(server)}
+                    onDelete={() => confirmDelete(server)}
+                  />
+                ))
+              )}
             </section>
             {library.installed.length > 0 && (
-              <section data-slot="mcp-library-harnesses" className="flex flex-col gap-3">
+              <section data-slot="mcp-library-harnesses" className="flex flex-col">
                 <SectionLabel className="!px-0">{translate('mcpLibrary.harnessesGroup')}</SectionLabel>
                 {library.installed.map((agent) => (
                   <HarnessGroup key={agent.id} agent={agent} library={library} disabled={disabled} onFail={fail} />
@@ -198,9 +199,9 @@ function HarnessGroup({
       onOpenChange={setOpen}
     >
       {servers.isLoading ? (
-        <div className="px-3 py-3 text-sm text-foreground-muted">{translate('mcpLibrary.harnessReading')}</div>
+        <div className={QUIET}>{translate('mcpLibrary.harnessReading')}</div>
       ) : servers.error ? (
-        <div data-slot="mcp-library-harness-error" className="flex items-center gap-3 px-3 py-2">
+        <div data-slot="mcp-library-harness-error" className="flex items-center gap-3 py-2 pl-6">
           <span className="min-w-0 flex-1 text-sm text-foreground-destructive">
             {translate('mcpLibrary.harnessReadFailed', { agent: agent.name })}
           </span>
@@ -209,7 +210,7 @@ function HarnessGroup({
           </Button>
         </div>
       ) : (servers.data ?? []).length === 0 ? (
-        <div className="px-3 py-3 text-sm text-foreground-muted">{translate('mcpLibrary.harnessEmpty', { agent: agent.name })}</div>
+        <div className={QUIET}>{translate('mcpLibrary.harnessEmpty', { agent: agent.name })}</div>
       ) : (
         (servers.data ?? []).map((server) => (
           <McpLibraryRow
@@ -228,7 +229,7 @@ function HarnessGroup({
 }
 
 /**
- * MCP 页上每一组的外壳:段头(箭头 + 可选图标 + 标题 + 台数 + 可选的「去管理」)和卡片。默认折叠,`defaultOpen` 的除外;
+ * MCP 页上每一组:段头(箭头 + 可选图标 + 标题 + 台数 + 可选的「去管理」)和展开后缩进一格的那几行。默认折叠;
  * 受控用法(`open` / `onOpenChange`)给展开才读的那几组。
  */
 function FoldGroup({
@@ -238,7 +239,6 @@ function FoldGroup({
   title,
   count,
   action,
-  fixed,
   open,
   onOpenChange,
   children,
@@ -248,9 +248,8 @@ function FoldGroup({
   icon?: React.ReactNode;
   title: string;
   count?: number;
+  /** `count` 为 0 的组只剩段头(和它的「去管理」)。 */
   action?: { label: string; onClick: () => void };
-  /** 只有一两行、不值得折叠的组(内置):常开,没有箭头。`count` 为 0 的组只剩段头(和它的「去管理」)。 */
-  fixed?: boolean;
   open?: boolean;
   onOpenChange?: (open: boolean) => void;
   children: React.ReactNode;
@@ -259,14 +258,12 @@ function FoldGroup({
     <Collapsible
       data-slot={slot}
       {...(providerId ? { 'data-provider-id': providerId } : {})}
-      {...(fixed ? { open: true } : open === undefined ? {} : { open })}
+      {...(open === undefined ? {} : { open })}
       {...(onOpenChange ? { onOpenChange } : {})}
-      className="flex flex-col gap-2"
+      className="flex flex-col"
     >
-      <div className="flex min-h-7 items-center gap-2">
-        {fixed ? (
-          <span className="truncate text-sm text-foreground">{title}</span>
-        ) : count === 0 ? (
+      <div className="flex min-h-10 items-center gap-2">
+        {count === 0 ? (
           // 没有可展开的:箭头的位置空着,标题和能展开的那几组对齐。
           <span className="flex min-w-0 items-center gap-2">
             <span className="size-4 shrink-0" />
@@ -289,7 +286,7 @@ function FoldGroup({
       </div>
       {count !== 0 && (
         <CollapsibleContent>
-          <div className={CARD}>{children}</div>
+          <div className={NESTED}>{children}</div>
         </CollapsibleContent>
       )}
     </Collapsible>
@@ -331,9 +328,9 @@ function BuiltInRow({
             onChange={(off) => void library.setGuguToolsOff(off).catch(onFail)}
           />
         ) : library.checking.has(name) ? (
-          <div className="px-3 pb-3 pl-9 text-sm text-foreground-muted">{translate('mcpLibrary.harnessReading')}</div>
+          <div className={QUIET}>{translate('mcpLibrary.harnessReading')}</div>
         ) : (
-          <div className="px-3 pb-3 pl-9">
+          <div className="pb-2 pl-6">
             <Button variant="outline" size="sm" onClick={load}>
               {translate('common.retry')}
             </Button>

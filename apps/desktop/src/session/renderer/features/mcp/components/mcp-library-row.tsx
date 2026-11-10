@@ -132,7 +132,7 @@ export function McpLibraryRow({
   const body =
     details ??
     (check?.status === 'ok' && check.tools.length > 0 ? (
-      <div className="pr-3 pb-2 pl-9">
+      <div className="pb-2 pl-6">
         <McpToolList tools={check.tools} />
       </div>
     ) : null);
@@ -154,7 +154,7 @@ export function McpLibraryRow({
       data-source={harnessName ? 'harness' : onEdit ? 'gugu' : 'provided'}
       {...(onOpenChange ? { onOpenChange } : {})}
     >
-      <div className="group flex min-h-12 items-center gap-3 px-3 py-2">
+      <div className="group flex min-h-10 items-center gap-3 py-1">
         {/* 名字和命令行排成一行,放不下时省略命令行的尾部;名字不让(哪怕缩 0.1px 也会出省略号),只在超过七成宽时省略。悬停看全文。 */}
         {body ? (
           <CollapsibleTrigger

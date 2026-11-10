@@ -32,7 +32,7 @@ export function GuguToolGroups({
         const on = group.locked || !off?.includes(group.id as GuguToolsOff[number]);
         return (
           <Collapsible key={group.id} data-slot="gugu-tool-group" data-group={group.id} data-on={on}>
-            <div className="flex min-h-9 items-center gap-2 pr-3 pl-3">
+            <div className="flex min-h-9 items-center gap-2 pl-6">
               <CollapsibleTrigger className="group/trigger flex min-w-0 flex-1 items-center gap-2 rounded-md text-left">
                 <ChevronRight className="size-4 shrink-0 text-foreground-muted transition-transform group-data-[panel-open]/trigger:rotate-90" />
                 <span className={on ? 'truncate text-sm text-foreground' : 'truncate text-sm text-foreground-muted'}>{label}</span>
@@ -48,7 +48,7 @@ export function GuguToolGroups({
                 }
               />
             </div>
-            <CollapsibleContent className="pr-3 pl-9">
+            <CollapsibleContent className="pl-12">
               <McpToolList tools={members} />
             </CollapsibleContent>
           </Collapsible>
