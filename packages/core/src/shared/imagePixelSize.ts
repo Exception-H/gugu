@@ -44,10 +44,16 @@ export function imagePixelSize(b: Uint8Array): { width: number; height: number }
 /** EXIF orientation of an APP1 segment whose payload is b[at, end): null when the segment is not EXIF, 1 when it names none. */
 function exifOrientation(b: Uint8Array, at: number, end: number): number | null {
   if (end > b.length || String.fromCharCode(...b.subarray(at, at + 6)) !== 'Exif\0\0') return null
+  if (at + 14 > end) return null
   const t = at + 6, le = b[t] === 0x49 && b[t + 1] === 0x49
   const u16 = (i: number) => (i + 2 > end ? -1 : le ? b[i]! | (b[i + 1]! << 8) : (b[i]! << 8) | b[i + 1]!)
   const u32 = (i: number) => (le ? (b[i]! | (b[i + 1]! << 8) | (b[i + 2]! << 16) | (b[i + 3]! << 24)) >>> 0 : ((b[i]! << 24) | (b[i + 1]! << 16) | (b[i + 2]! << 8) | b[i + 3]!) >>> 0)
-  const ifd = t + u32(t + 4)
-  for (let k = 0, n = u16(ifd); k < n; k++) if (u16(ifd + 2 + 12 * k) === 0x0112) return u16(ifd + 2 + 12 * k + 8)
+  const offset = u32(t + 4), ifd = t + offset
+  if (offset < 8 || ifd + 2 > end) return null
+  for (let k = 0, n = u16(ifd); k < n; k++) {
+    const entry = ifd + 2 + 12 * k
+    if (entry + 12 > end) return null
+    if (u16(entry) === 0x0112) return u16(entry + 8)
+  }
   return 1
 }

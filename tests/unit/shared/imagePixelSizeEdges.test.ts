@@ -5,8 +5,25 @@ const lossless = Buffer.from('UklGRh4AAABXRUJQVlA4TBEAAAAvJIACAAdQhSJXof+BiOh/AA
 const png = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAACUAAAALCAIAAAB3WtMSAAAAHElEQVR4nGM8wcXFQEfARE/LRu0btW/UvhFlHwBbwgDymT3VBQAAAABJRU5ErkJggg==', 'base64')
 const lossy = Buffer.from('UklGRkgAAABXRUJQVlA4IDwAAAAQAwCdASolAAsAPm0wlEckIyIhKqgAgA2JYwB2AACspoAA/vIiX//sWctgSg//+5wP+5wP+5wP4rHJAAA=', 'base64')
 const frame = Buffer.from([0xff, 0xc0, 0, 11, 8, 0, 11, 0, 37, 1, 1, 0x11, 0])
+const exifPayload = () => {
+  const payload = Buffer.alloc(32)
+  payload.write('Exif\0\0', 0, 'ascii'); payload.write('II', 6, 'ascii')
+  payload.writeUInt16LE(42, 8); payload.writeUInt32LE(8, 10)
+  payload.writeUInt16LE(1, 14); payload.writeUInt16LE(0x0112, 16)
+  payload.writeUInt16LE(3, 18); payload.writeUInt32LE(1, 20); payload.writeUInt16LE(6, 24)
+  return payload
+}
+const exifJpeg = (payload: Buffer) => {
+  const header = Buffer.from([0xff, 0xd8, 0xff, 0xe1, 0, 0])
+  header.writeUInt16BE(payload.length + 2, 4)
+  return Buffer.concat([header, payload, frame])
+}
 
 describe('image header boundaries', () => {
+  it('ignores an EXIF directory entry cut by its APP1 segment boundary', () => {
+    expect(imagePixelSize(exifJpeg(exifPayload().subarray(0, 26)))).toEqual({ width: 37, height: 11 })
+    expect(imagePixelSize(exifJpeg(exifPayload()))).toEqual({ width: 11, height: 37 })
+  })
   it('does not interpret bytes beyond the JPEG scan or end marker as frame headers', () => {
     for (const marker of [0xda, 0xd9]) {
       expect(imagePixelSize(Buffer.concat([Buffer.from([0xff, 0xd8, 0xff, marker, 0, 2]), frame]))).toBeNull()
