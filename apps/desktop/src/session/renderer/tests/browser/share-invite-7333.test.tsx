@@ -117,7 +117,7 @@ describe('share and invite surfaces use the approved roles without changing acti
     await act(async () => settings.resolve({
       my_role: 'member', can_manage: false, can_dissolve: false, can_archive_topic: false,
       id: group.id, public_id: 7333, creator_user_id: 'user-1', name: group.name, status: 'active', group_prompt: null, default_agent_type: null,
-      join_token: 'invite-fixture-token', description: null, max_members: 100, allow_member_invite: true, invite_link_enabled: true,
+      join_token: '0123456789abcdef0123456789abcdef', description: null, max_members: 100, allow_member_invite: true, invite_link_enabled: true,
       agent_join_approval: false, join_mode: 'approval', hide_history: false, avatar_url: null, is_discoverable: false,
       agent_flood_threshold: null, agent_flood_threshold_effective: 5,
     }));
@@ -129,7 +129,7 @@ describe('share and invite surfaces use the approved roles without changing acti
     expect(image.naturalWidth).toBe(132);
     expect(tier(textElement(harness.container, t('groupInvite.groupNumber', { number: 7333 })))).toEqual([12, 18]);
     const payload = copyQr.dataset.qrPayload!;
-    expect(payload).toContain('gugu_qr=');
+    expect(payload).toBe('https://gugu.nextmind.space/j/?7333.ASNFZ4mrze8BI0VniavN7w');
     await page.getByRole('button', { name: t('groupInvite.copyLink'), exact: true }).click();
     expect(writeText).toHaveBeenCalledExactlyOnceWith(payload);
   });
