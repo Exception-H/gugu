@@ -119,7 +119,7 @@ export function optimisticReplyFields(
   replyToMessageId: string | null,
 ): Pick<MessageItem, 'reply_to_message_id' | 'reply_to_sender_user_id' | 'reply_to_content'> {
   const target = replyToMessageId ? window.find((m) => m.id === replyToMessageId) : undefined
-  if (!target || target.is_whisper) {
+  if (!target || target.is_whisper || target.retracted_at) {
     return { reply_to_message_id: replyToMessageId, reply_to_sender_user_id: null, reply_to_content: null }
   }
   return {

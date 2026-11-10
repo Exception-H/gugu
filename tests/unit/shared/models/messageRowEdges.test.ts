@@ -3,6 +3,10 @@ import { mergeMessagesById, optimisticReplyFields, shallowEqualMessage } from '@
 import { message } from '../../../support/testHarness'
 
 describe('message row identity boundaries', () => {
+  it('omits a retracted message body from the optimistic reply preview', () => {
+    const target = message({ retracted_at: '2026-11-10T00:00:00Z', content: 'removed text' })
+    expect(optimisticReplyFields([target], target.id).reply_to_content).toBeNull()
+  })
   it('keeps one final row per id when a fresh page repeats it', () => {
     const first = message({ content: 'old' }), latest = message({ content: 'latest' })
     expect(mergeMessagesById([], [first, latest], first.chat_id)).toEqual([latest])
