@@ -14,7 +14,8 @@ import { useChatMentionRoster, useGroupMentionProvider } from './useGroupMention
 
 /**
  * A forward's note: the group composer's editor and @, over the members of the chat being forwarded into. @ needs one
- * chat: with several picked, a name means a different member in each, so the note offers no one and says so.
+ * chat: with several picked, a name means a different member in each, so the note offers no one, and an @ already written
+ * is flagged as notifying no one.
  */
 export function ForwardNoteEditor({ chat, several, onChange }: {
   /** The one chat picked; null with none or several. */
@@ -40,7 +41,7 @@ export function ForwardNoteEditor({ chat, several, onChange }: {
     <SessionUiTheme theme={theme} skin>
       <MessageProvider locale={resolvedLocale} translate={translateSessionMessage}>
         <div className="mt-2 rounded-[var(--radius-control)] border border-[var(--border-strong)] px-[10px] py-[7px] text-[length:var(--font-body)]" data-forward-note="">
-          <PromptEditor inputTestId="forward-note" enterBehavior="newline" placeholder={several ? t('forward.noteSeveral') : t('forward.note')}
+          <PromptEditor inputTestId="forward-note" enterBehavior="newline" placeholder={t('forward.note')}
             onChange={setText} onMentionInsert={onMentionInsert} mentionProvider={mentionProvider} renderMentionIcon={renderMentionIcon} />
         </div>
         {several && picks.length > 0 && text.includes('@') && (

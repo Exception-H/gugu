@@ -487,11 +487,10 @@ export default {
     "filesPreview_one": "Forward {{count}} file",
     "filesPreview_other": "Forward {{count}} files",
     "forwarding": "Forwarding…",
-    "mentionNeedsOneChat": "Several chats picked: the @ notifies no one",
+    "mentionNeedsOneChat": "@ notifies no one in several chats",
     "noResults": "No chats found",
     "noTargets": "No chats available for forwarding",
     "note": "Add a note",
-    "noteSeveral": "Add a note · @ needs a single chat",
     "preview": {
       "attachment": "[Attachment]",
       "card": "[Card]",

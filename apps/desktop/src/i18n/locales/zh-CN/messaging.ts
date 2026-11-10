@@ -485,11 +485,10 @@ export default {
     "filesPreview_one": "转发 {{count}} 个文件",
     "filesPreview_other": "转发 {{count}} 个文件",
     "forwarding": "转发中…",
-    "mentionNeedsOneChat": "选了多个对话，@ 不会通知任何人",
+    "mentionNeedsOneChat": "多个对话时 @ 不通知",
     "noResults": "未找到对话",
     "noTargets": "暂无可转发的对话",
     "note": "留言",
-    "noteSeveral": "留言 · 选一个对话时才能 @",
     "preview": {
       "attachment": "[附件]",
       "card": "[卡片]",
