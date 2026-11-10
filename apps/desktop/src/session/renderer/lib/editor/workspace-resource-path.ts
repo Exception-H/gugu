@@ -37,7 +37,7 @@ export function resolveWorkspaceResourcePath(args: WorkspaceResourcePathArgs): s
   const containing = splitAbsolutePath(containingFilePath);
   if (!containing) return null;
 
-  const root = splitAbsolutePath(workspacePath.replace(/\/+$/, ''));
+  const root = splitAbsolutePath(workspacePath);
   if (!root) return null;
 
   // `file:` 写的永远是本机绝对路径,不是「工作区根相对」。
@@ -121,7 +121,7 @@ export function isOutsideWorkspace(
 ): boolean {
   const containing = splitAbsolutePath(filePath);
   if (!containing) return false;
-  const root = workspacePath ? splitAbsolutePath(workspacePath.replace(/\/+$/, '')) : null;
+  const root = workspacePath ? splitAbsolutePath(workspacePath) : null;
   // 判断不了就按「在圈里」处理,走那条更保守的读取路径。
   if (!root) return false;
   return !isUnderRoot(containing, root);
