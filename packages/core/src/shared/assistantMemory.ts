@@ -5,7 +5,7 @@ export function readFrontmatter(text: string): { fields: Record<string, string>;
   if (!normalized.startsWith('---\n')) return { fields: {}, body: normalized.trim() };
   const close = /^---[ \t]*(?:\n|$)/m.exec(normalized.slice(4));
   if (!close) return { fields: {}, body: normalized.trim() };
-  const fields: Record<string, string> = {};
+  const fields: Record<string, string> = Object.create(null) as Record<string, string>;
   for (const line of normalized.slice(4, 4 + close.index).split('\n')) {
     const match = /^\s*([A-Za-z_][\w-]*):\s*(.*)$/.exec(line);
     if (!match) continue;
