@@ -21,6 +21,11 @@ export const LEGACY_ASSISTANT_GUIDE_END = '<!-- /咕咕云电脑 -->'
 /** 运行位置:按需伸缩的云端 / 已连接的本机。身份说明与调度说明按位置区分。 */
 export type AssistantHomeKind = 'cloud' | 'computer'
 
+/** 这台是不是云电脑看身份(`GUGU_CLOUD_COMPUTER`),❌ 看启动方式:人自己的 Linux server 也是 server 模式,它上面的助理按「本机」布局住在工作目录里。 */
+export function assistantHomeKind(env: Readonly<Record<string, string | undefined>>): AssistantHomeKind {
+  return env.GUGU_CLOUD_COMPUTER === '1' ? 'cloud' : 'computer'
+}
+
 /** The host's values for the brief's and recovery notice's path slots. */
 function homeSlots(memoryDir: string): Record<string, string> {
   return { memoryIndex: join(memoryDir, 'MEMORY.md'), workingContext: join(memoryDir, 'working-context.md'), pendingWork: join(memoryDir, 'pending-work.json') }

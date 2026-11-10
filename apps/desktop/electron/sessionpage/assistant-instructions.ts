@@ -1,8 +1,9 @@
+import { lstat, mkdir, readdir, rename, rm } from 'node:fs/promises'
 import { dirname, join, resolve } from 'node:path'
 import { homedir } from 'node:os'
 import { AssistantFileError } from '@gugu/core/shared/assistantFileError'
 import {
-  ASSISTANT_COMPUTER_WORKDIR_NAME, assistantBrief, assistantGuide,
+  ASSISTANT_COMPUTER_WORKDIR_NAME, ASSISTANT_GUIDE_BEGIN, ASSISTANT_GUIDE_END, assistantBrief, assistantGuide,
   assistantHomePaths, upsertAssistantGuide, withDeniedTools, type AssistantHomeKind,
 } from '@gugu/core/shared/assistantPolicy'
 import type { AssistantProductRules } from '@gugu/core/shared/assistantRulesFormat'
@@ -42,6 +43,7 @@ async function writeAssistantContext(cwd: string, kind: AssistantHomeKind, home:
   const brief = assistantBrief(kind, reference, paths.memoryDir, rules)
   const instructions = paths.instructions
   const current = await readAssistantFile(instructions) ?? ''
+  if (kind === 'computer') await reclaimCloudLayout(home, paths.claudeMemoryDir, paths.memoryDir, engine)
   const settings = kind === 'computer' && engine === 'claude' ? [[paths.settings, await localAssistantSettings(paths.settings, cwd, rules.defaults.deniedTools)]] : []
   // Install the complete reference first, so the brief never points to an absent file.
   for (const [path, content] of [[reference, full], [instructions, upsertAssistantGuide(current, brief)], ...settings]) {
@@ -77,4 +79,37 @@ async function localAssistantSettings(path: string, cwd: string, deniedTools: re
     if (dirname(parent) === parent) break
   }
   return `${JSON.stringify({ ...settings, claudeMdExcludes: [...new Set([...existing, ...excluded])] }, null, 2)}\n`
+}
+
+/**
+ * @@@server-home-reclaim 旧版本在人自己的 Linux server 上按云电脑布局跑助理(判据是启动方式,不是 GUGU_CLOUD_COMPUTER):
+ * 说明段写进了 `~/.claude/CLAUDE.md`(这个 Linux 用户自己开的每个 Claude Code 会话都读),Codex 助理的笔记记在
+ * `~/.claude/projects/<目录名>/memory` 的真目录里。住本机时把两样收回:只删我们那一段(人写的照留,删空了就删文件),
+ * 笔记搬回它家里(Claude 助理那一夹本来就是链到家里的链接,不用搬)。
+ */
+async function reclaimCloudLayout(home: string, claudeMemoryDir: string, memoryDir: string, engine: AssistantEngine): Promise<void> {
+  const personal = join(home, '.claude', 'CLAUDE.md')
+  const current = await readAssistantFile(personal)
+  const start = current?.indexOf(ASSISTANT_GUIDE_BEGIN) ?? -1
+  const end = start < 0 ? -1 : current!.indexOf(ASSISTANT_GUIDE_END, start)
+  if (current !== null && start >= 0 && end >= 0) {
+    const rest = `${current.slice(0, start).replace(/\n+$/, '')}\n\n${current.slice(end + ASSISTANT_GUIDE_END.length).replace(/^\n+/, '')}`.trim()
+    if (rest) await writeAssistantFile(personal, `${rest}\n`)
+    else await rm(personal)
+  }
+  if (engine === 'codex' && (await lstat(claudeMemoryDir).catch((error: NodeJS.ErrnoException) => {
+    if (error.code === 'ENOENT') return null
+    throw error
+  }))?.isDirectory()) await adoptMemoryEntries(claudeMemoryDir, memoryDir)
+}
+
+/** 把一夹记忆搬进它家里(家里已有同名的保留家里那份),搬完删掉原夹。 */
+export async function adoptMemoryEntries(from: string, memoryDir: string): Promise<void> {
+  await mkdir(memoryDir, { recursive: true })
+  for (const name of await readdir(from)) {
+    const target = join(memoryDir, name)
+    if (await lstat(target).then(() => true, () => false)) continue
+    await rename(join(from, name), target)
+  }
+  await rm(from, { recursive: true })
 }

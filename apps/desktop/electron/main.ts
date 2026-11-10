@@ -241,6 +241,7 @@ import { createDesktopAssistantWorkReconciler } from './assistant-work-reconcili
 import { enqueueAssistantWorkReport } from '@gugu/core/cloud/assistantWorkReports'
 import {withAssistantWorkReply} from '@gugu/core/shared/assistantWorkReply'
 import { ASSISTANT_PROVISION_SELECT, pickAssistant, type AssistantProvisionRow } from '@gugu/core/shared/assistantProvision'
+import { assistantHomeKind } from '@gugu/core/shared/assistantPolicy'
 import { landTaskCardFirstTurn } from './sessionpage/task-card-first-turn'
 import { withQuestionCard } from './sessionpage/question-card'
 import {
@@ -5138,7 +5139,7 @@ app.whenReady().then(async () => {
       getAuth: getSessionpageAuth,
       instanceId: () => deviceRuntimeHost?.instanceId ?? null,
       deviceId: async () => { const id = await localDeviceId(); if (!id) throw new Error('PANEL_DEVICE_UNAVAILABLE'); return id },
-      local: emdash.assistantPanelLocal,guguHome: resolveGuguHome(process.env),kind: SERVER_MODE ? 'cloud' : 'computer',env: process.env,
+      local: emdash.assistantPanelLocal,guguHome: resolveGuguHome(process.env),kind: assistantHomeKind(process.env),env: process.env,
       failed: domain => createLogger('assistant-panel').warn({ domain },'Panel publication will retry during host activity'),
     })
     emdash.setSessionAdmissionPreparation((sessionId,text) => assistantPanel.prepare(sessionId,text))
@@ -5732,7 +5733,7 @@ app.whenReady().then(async () => {
         const readAssistantResources = assistantRole ? async () => {
           if (!assistantResourceOwner || (await getSessionpageAuth())?.userId !== assistantResourceOwner) throw new Error('Assistant resource owner changed')
           const { assistantLocalIndex } = await import('./sessionpage/assistant-local-index')
-          const resources = await assistantLocalIndex(info.cwd, SERVER_MODE ? 'cloud' : 'computer', undefined,
+          const resources = await assistantLocalIndex(info.cwd, assistantHomeKind(process.env), undefined,
             () => emdash.assistantPanelLocal.integrationIndex())
           if ((await getSessionpageAuth())?.userId !== assistantResourceOwner) throw new Error('Assistant resource owner changed')
           return resources
@@ -5787,7 +5788,7 @@ app.whenReady().then(async () => {
             grantKey: sessionpageSurfaceKey(info.sessionId),
             nativeSessionId: info.sessionId,
             ...(assistantRole ? { personalAssistant: true as const, assistantWork: {
-              ...assistantWorkBinding(persistedSessionId, info.cwd, SERVER_MODE ? 'cloud' : 'computer', provisioned.guguAgentUserId),
+              ...assistantWorkBinding(persistedSessionId, info.cwd, assistantHomeKind(process.env), provisioned.guguAgentUserId),
               currentInput: () => emdashBridge?.readCurrentActivityInput(persistedSessionId) ?? Promise.resolve(undefined),
             } } : {}),
             ...(readAssistantResources ? { readAssistantResources } : {}),
@@ -5810,7 +5811,7 @@ app.whenReady().then(async () => {
           sessionId: persistedSessionId,assistantId: provisioned.guguAgentUserId,ownerId: assistantResourceOwner,cwd: info.cwd,
         }) : undefined
         const capabilities = assistantRole && (info.providerId === 'claude' || info.providerId === 'codex') ? await preparePersonalAssistantContext(
-          loaded, info.cwd, resolveGuguHome(process.env), SERVER_MODE ? 'cloud' : 'computer', {
+          loaded, info.cwd, resolveGuguHome(process.env), assistantHomeKind(process.env), {
             accountId: async () => {
               const owner = (await getSessionpageAuth())?.userId
               return owner && owner === assistantResourceOwner ? owner : null
@@ -5822,7 +5823,7 @@ app.whenReady().then(async () => {
               return runAction(action, auth, signal)
             },
           }, undefined, info.providerId === 'codex' ? 'codex' : 'claude',
-        ) : info.providerId === 'claude' && !SERVER_MODE
+        ) : info.providerId === 'claude'
           ? await assistantHomeTaskContext(loaded, info.cwd, resolveGuguHome(process.env)) : loaded
         injectMark('capabilities-loaded')
         await applySessionMaterialization({
