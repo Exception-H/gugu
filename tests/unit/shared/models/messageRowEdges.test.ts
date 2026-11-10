@@ -3,6 +3,12 @@ import { mergeMessagesById, optimisticReplyFields, shallowEqualMessage } from '@
 import { message } from '../../../support/testHarness'
 
 describe('message row identity boundaries', () => {
+  it('updates attachment identity and dimensions when the message body is unchanged', () => {
+    const previous = message({ file_item_id: 'file', file_version: 1, image_dimensions: { width: 10, height: 10 } })
+    const incoming = { ...previous, file_version: 2, image_dimensions: { width: 20, height: 10 } }
+    expect(shallowEqualMessage(previous, incoming)).toBe(false)
+    expect(mergeMessagesById([previous], [incoming], previous.chat_id)[0]).toMatchObject(incoming)
+  })
   it('does not reuse a previous row from another chat with the same id', () => {
     const foreign = message({ chat_id: 'foreign', readers: ['foreign-reader'], delivery_status: 'read' })
     const fresh = message({ chat_id: 'target', readers: [], delivery_status: null })

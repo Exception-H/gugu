@@ -52,6 +52,9 @@ export function computeGroupedWithPrev(params: {
 export function shallowEqualMessage(a: MessageItem, b: MessageItem): boolean {
   return (
     a.id === b.id &&
+    a.chat_id === b.chat_id &&
+    a.file_item_id === b.file_item_id && a.file_version === b.file_version && a.file_blob_id === b.file_blob_id &&
+    a.session_file === b.session_file && a.file_metadata === b.file_metadata && a.image_dimensions === b.image_dimensions &&
     a.seq === b.seq &&
     a.content === b.content &&
     a.content_type === b.content_type &&
