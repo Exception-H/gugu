@@ -242,6 +242,10 @@ export class PaneStore<R extends TabRegistry = TabRegistry>
       (shown) => {
         // @@@carried-on-screen - a page moved here from another pane while on screen (a pair collapsing, 向右分, a
         // window) did not come on screen: the move says so (`adoptEntry` `shown`), this pane's history cannot.
+        // The mark lives until the next microtask, so this relies on MobX running this reaction synchronously when
+        // the move's batch ends: every move goes through actions (detachTab / adoptEntry / the layout's own), and the
+        // page must reach this pane's screen in that same synchronous run. A move split across an await (or done
+        // outside an action, its screen change landing after a microtask) would activate the page once more.
         for (const resource of shown) if (!this._lastShown.includes(resource) && !this._carriedShown.has(resource)) resource.onActivate?.();
         this._lastShown = shown;
       },
