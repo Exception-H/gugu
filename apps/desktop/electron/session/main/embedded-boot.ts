@@ -18,6 +18,7 @@ import { hasAgentInstallsInProgress } from './core/agents/install-progress-ledge
 // emdash-main-bridge.cjs with electron + native addons (better-sqlite3, node-pty, @parcel/watcher)
 // externalized (required at runtime).
 import { takeLastExit } from '../../lib/exit-reason'
+import { setGuguToolsOffReader } from '../../acp-engine-utils'
 import { resumeHostUpdate } from './core/agent-status/resume-host-update'
 import type { BirthGroup } from '@shared/core/sessions/create-session';
 export { readCurrentActivityInput,readCurrentAssistantWorkInput } from './core/sessions/session-activity-source'
@@ -780,6 +781,8 @@ export async function bootSessionHostCore(options: SessionHostBootOptions): Prom
   setSessionWake(ensureEmdashSession)
   // 手机端的「停止」= 桌面端删忙 agent 用的同一条取消口(ACP cancel / 终端腿中断键),❌ 不另写一份。
   setSessionCancel(cancelEmdashTurn)
+  // 资源库 → MCP 关掉的内置工具组:咕咕那台 server 每次有客户端连上都现读这一份。
+  setGuguToolsOffReader(() => mcpLibraryService.guguToolsOff())
 
   // 这里原先是旧账号体系的会话恢复 + 「OAuth 拿到的 GitHub token 落库」那条登记。
   // 整条链只有那套账号自己的登录服务能触发,咕咕里进不去 —— 2026-09-10 连同子系统一起拆。

@@ -65,6 +65,15 @@ describe('source message reveal', () => {
     expect(c.input.setFlashMessageId).not.toHaveBeenCalled()
   })
 
+  it('another conversation opened before it was shown: a cancellation, not 「not found」', async () => {
+    // The scroll memory rejects a pending reveal when its conversation changes; the reason travels with the rejection.
+    const c = await setup(() => Promise.reject(new DOMException('The conversation changed before the message was shown', 'AbortError')))
+    await c.show('m1')
+    await act(async () => {})
+    expect(c.input.onMissing).not.toHaveBeenCalled()
+    expect(c.input.setFlashMessageId).not.toHaveBeenCalled()
+  })
+
   it('a later request wins: an earlier one that settles late neither flashes nor complains', async () => {
     const pending: Array<{ resolve: () => void; reject: (e: Error) => void }> = []
     const c = await setup(() => new Promise<void>((resolve, reject) => { pending.push({ resolve, reject }) }))
