@@ -779,8 +779,11 @@ function parseNumstat(stdout: string): Numstat {
     const line = records[i];
     if (!line) continue;
     const [addStr, delStr, ...pathParts] = line.split('\t');
-    const filePath = nul && pathParts.length === 1 && pathParts[0] === ''
-      ? (i += 2, records[i]) : pathParts.join('\t');
+    let filePath = pathParts.join('\t');
+    if (nul && pathParts.length === 1 && pathParts[0] === '') {
+      i += 2;
+      filePath = records[i];
+    }
     if (!filePath) continue;
     const current = map.get(filePath) ?? { additions: 0, deletions: 0 };
     current.additions += addStr === '-' ? 0 : Number.parseInt(addStr ?? '0', 10) || 0;
@@ -808,7 +811,7 @@ function parseDecoratedTags(decorations: string): string[] {
 
 function imageMimeForPath(filePath: string): string | null {
   const ext = filePath.split('.').pop()?.toLowerCase();
-  return ext ? (IMAGE_MIME_BY_EXT[ext] ?? null) : null;
+  return ext && Object.hasOwn(IMAGE_MIME_BY_EXT, ext) ? IMAGE_MIME_BY_EXT[ext] : null;
 }
 
 function looksLikeLfsPointer(buffer: Buffer): boolean {
