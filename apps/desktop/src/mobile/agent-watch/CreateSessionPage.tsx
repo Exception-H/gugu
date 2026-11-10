@@ -447,7 +447,7 @@ function CreateOnMachine({
       bodyFill
     >
         <AssistantRuntimeProvider runtime={runtime}>
-          <div className="gg-aw-thread-host" data-testid="agent-watch-create-thread">
+          <div className="gg-aw-thread-host gg-aw-create-host" data-testid="agent-watch-create-thread">
             <ComposerExtrasProvider
               placeholder={t('agentWatch.create.placeholder')}
               extras={
