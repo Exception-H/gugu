@@ -28,7 +28,7 @@ export function resolveWorkspaceResourcePath(args: WorkspaceResourcePathArgs): s
   // `file:` 指的就是本机上的一个文件,和 https:/data: 不是一类,别一起拒掉。
   const fromFileUrl = parseFileUrl(trimmed);
   const cleanSrc = fromFileUrl ?? trimmed;
-  const driveAbsolute = /^[A-Za-z]:\//.test(trimmed);
+  const driveAbsolute = /^[A-Za-z]:[\\/]/.test(trimmed);
   if (fromFileUrl === null && !driveAbsolute && /^[a-z][a-z0-9+.-]*:/i.test(trimmed)) return null;
   if (cleanSrc.startsWith('//') || cleanSrc.startsWith('#')) return null;
 
