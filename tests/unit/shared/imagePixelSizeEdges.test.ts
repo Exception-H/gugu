@@ -7,6 +7,11 @@ const lossy = Buffer.from('UklGRkgAAABXRUJQVlA4IDwAAAAQAwCdASolAAsAPm0wlEckIyIhK
 const frame = Buffer.from([0xff, 0xc0, 0, 11, 8, 0, 11, 0, 37, 1, 1, 0x11, 0])
 
 describe('image header boundaries', () => {
+  it('does not interpret bytes beyond the JPEG scan or end marker as frame headers', () => {
+    for (const marker of [0xda, 0xd9]) {
+      expect(imagePixelSize(Buffer.concat([Buffer.from([0xff, 0xd8, 0xff, marker, 0, 2]), frame]))).toBeNull()
+    }
+  })
   it('skips repeated JPEG marker fill bytes', () => {
     const jpeg = Buffer.concat([Buffer.from([0xff, 0xd8, 0xff, 0xff]), frame])
     expect(imagePixelSize(jpeg)).toEqual({ width: 37, height: 11 })
