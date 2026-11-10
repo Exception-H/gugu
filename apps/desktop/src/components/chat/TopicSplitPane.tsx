@@ -161,6 +161,8 @@ const TOPIC_SPLIT_PANE_STYLE: React.CSSProperties = {
   background: 'var(--bg-primary)',
   borderLeft: '1px solid var(--border-subtle)',
 }
+// @@@panel-chrome 嵌在页签分栏里时,分栏缝(1px 拖拽柄)已经是那条竖线;自己再画左边线 = 两根 1px 并排。
+const TOPIC_SPLIT_PANE_EMBEDDED_STYLE: React.CSSProperties = { ...TOPIC_SPLIT_PANE_STYLE, borderLeft: 'none' }
 // 手机上放不下两栏 ⇒ 整页盖住来源线(同 ChatSettingsPanel 的手机页)。来源线在下面不被挤窄,返回后停在原处。
 const TOPIC_PAGE_PANE_MOBILE_STYLE: React.CSSProperties = { ...TOPIC_SPLIT_PANE_STYLE, borderLeft: 'none', background: 'transparent' }
 const TOPIC_TAB_STYLE: React.CSSProperties = { position: 'absolute', inset: 0, zIndex: 1, background: 'transparent' }
@@ -169,8 +171,8 @@ const TOPIC_SPLIT_HEADER_STYLE: React.CSSProperties = {
   alignItems: 'flex-start',
   justifyContent: 'space-between',
   gap: 8,
-  padding: '12px 14px',
-  borderBottom: '1px solid var(--border-subtle)',
+  // 头与消息区之间只留白(面板外壳规则:线只留给分栏缝);左边线与消息列同为 12。
+  padding: '12px 12px 0',
   flexShrink: 0,
 }
 const TOPIC_SPLIT_HEADER_ACTIONS_STYLE: React.CSSProperties = { display: 'flex', alignItems: 'center', gap: 2, flexShrink: 0, marginTop: 'calc((var(--lh-title) - var(--control-h-sm)) / 2)' }
@@ -354,7 +356,7 @@ export function TopicSplitPane({ viewportKey = 'topic', navigationTarget = false
         data-testid="topic-split-pane"
         data-topic-id={topic.chatId}
         data-chat-surface={topic.chatId}
-        style={mobile ? TOPIC_PAGE_PANE_MOBILE_STYLE : TOPIC_SPLIT_PANE_STYLE}
+        style={mobile ? TOPIC_PAGE_PANE_MOBILE_STYLE : embedded ? TOPIC_SPLIT_PANE_EMBEDDED_STYLE : TOPIC_SPLIT_PANE_STYLE}
       >
         {/* 这一条**常驻**:面板开着时它也在。曾经开面板就把它收起来,代价是
             ①「收起分栏」与另一颗切换键一起消失,②这一栏里再没有一个字说明你在哪条话题上

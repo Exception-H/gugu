@@ -220,10 +220,11 @@ describe('MemberListPanel —— agent 行的引擎/模型', () => {
     expect(harness.container.querySelector('[data-member-section="agent"] [data-member-row="a1"]')).toBeTruthy()
     // 段内限高 = 第二条滚动轴。6 个 agent 一共 468px 撞上 420px 的顶 ⇒ 最后一行被切掉半截,
     // 而外面那层还空着三百多像素(owner 2026-09-19 实测截图)。
-    for (const kind of ['human', 'agent']) {
-      const rows = harness.container.querySelector(`[data-member-section-rows="${kind}"]`) as HTMLElement
-      expect(rows.style.maxHeight).toBe('')
-      expect(rows.style.overflowY).toBe('')
+    const sections = [...harness.container.querySelectorAll<HTMLElement>('[data-member-section], [data-member-section-rows]')]
+    expect(sections.length).toBeGreaterThanOrEqual(2)
+    for (const box of sections) {
+      expect(box.style.maxHeight).toBe('')
+      expect(box.style.overflowY).toBe('')
     }
     // 阳控:滚动仍然有人负责 —— 面板自己那一层。少了这一格,上面两句用「整块都不能滚」也能过。
     const scroll = harness.container.querySelector('[data-member-list-scroll]') as HTMLElement

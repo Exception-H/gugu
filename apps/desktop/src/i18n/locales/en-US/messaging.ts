@@ -550,8 +550,8 @@ export default {
       "notParticipant": "No members of this topic are visible right now",
       "sectionAgents": "Agents",
       "sectionPeople": "People",
-      "myAgents": "My agents · {{count}}",
-      "otherAgents": "Others' agents · {{count}}",
+      "myAgents": "My agents",
+      "otherAgents": "Others' agents",
       "listen": {
         "all": "Hears all messages",
         "allHint": "Also receives group messages that don't mention it. Its owner can click to switch to mentions only.",
