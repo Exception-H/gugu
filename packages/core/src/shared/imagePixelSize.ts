@@ -25,6 +25,7 @@ export function imagePixelSize(b: Uint8Array): { width: number; height: number }
     let turned = false
     for (let i = 2; i + 9 < b.length; ) {
       if (b[i] !== 0xff) return null
+      if (b[i + 1] === 0xff) { i++; continue }
       const marker = b[i + 1]!
       if (marker === 0xd8 || marker === 0x01 || (marker >= 0xd0 && marker <= 0xd7)) { i += 2; continue }
       if (marker === 0xe1) {

@@ -4,8 +4,13 @@ import { imagePixelSize } from '@gugu/core/shared/imagePixelSize'
 const lossless = Buffer.from('UklGRh4AAABXRUJQVlA4TBEAAAAvJIACAAdQhSJXof+BiOh/AAA=', 'base64')
 const png = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAACUAAAALCAIAAAB3WtMSAAAAHElEQVR4nGM8wcXFQEfARE/LRu0btW/UvhFlHwBbwgDymT3VBQAAAABJRU5ErkJggg==', 'base64')
 const lossy = Buffer.from('UklGRkgAAABXRUJQVlA4IDwAAAAQAwCdASolAAsAPm0wlEckIyIhKqgAgA2JYwB2AACspoAA/vIiX//sWctgSg//+5wP+5wP+5wP4rHJAAA=', 'base64')
+const frame = Buffer.from([0xff, 0xc0, 0, 11, 8, 0, 11, 0, 37, 1, 1, 0x11, 0])
 
 describe('image header boundaries', () => {
+  it('skips repeated JPEG marker fill bytes', () => {
+    const jpeg = Buffer.concat([Buffer.from([0xff, 0xd8, 0xff, 0xff]), frame])
+    expect(imagePixelSize(jpeg)).toEqual({ width: 37, height: 11 })
+  })
   it('requires VP8 and VP8L frame signatures before reading dimensions', () => {
     const invalidLossless = Buffer.from(lossless); invalidLossless[20] = 0
     const invalidLossy = Buffer.from(lossy); invalidLossy[23] = 0
