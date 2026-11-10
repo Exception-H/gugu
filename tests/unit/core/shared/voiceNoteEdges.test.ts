@@ -2,6 +2,11 @@ import { describe, expect, it } from 'vitest'
 import { exportFileName, groupVoiceNotesByWeek, parseTranscript, renderTranscript, summaryTitle, transcriptTail } from '@gugu/core/shared/voiceNotes'
 
 describe('voice-note text boundaries', () => {
+  it('exports portable filenames without splitting Unicode or using device names', () => {
+    expect(exportFileName('CON')).toBe('_CON.md')
+    expect(exportFileName('a'.repeat(119) + '🍵')).toBe('a'.repeat(119) + '🍵.md')
+    expect(exportFileName('note\nname')).toBe('notename.md')
+  })
   it('does not cut a summary title inside a Unicode code point', () => {
     const title = 'a'.repeat(199) + '🍵'
     expect(summaryTitle('# ' + title)).toBe(title)

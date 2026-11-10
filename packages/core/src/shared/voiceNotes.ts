@@ -390,7 +390,8 @@ export function summaryBody(markdown: string): string {
 // ── 导出(文件名 = 标题,`# 标题` + 总结 + `## 转写`) ────────────────────────────
 
 export function exportFileName(title: string): string {
-  const safe = title.replace(/[\\/:*?"<>|]/g, '_').trim().slice(0, 120)
+  let safe = Array.from(title.replace(/\p{Cc}/gu, '').replace(/[\\/:*?"<>|]/g, '_').trim()).slice(0, 120).join('')
+  if (/^(?:con|prn|aux|nul|com[1-9¹²³]|lpt[1-9¹²³])(?:\.|$)/iu.test(safe)) safe = '_' + safe
   return `${safe || '语音笔记'}.md`
 }
 
