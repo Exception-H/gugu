@@ -30,6 +30,7 @@ export function readQuestionAnswerDelivery(text: string): { answer: string | nul
   if (!block) return undefined
   let data: unknown
   try { data = JSON.parse(block[1]!) } catch { return undefined }
+  if (!data || typeof data !== 'object' || Array.isArray(data)) return undefined
   const fact = data as { state?: unknown; answers?: unknown }
   if (fact.state === 'withdrawn') return { answer: null }
   return fact.state === 'answered' && Array.isArray(fact.answers) ? { answer: questionAnswerText(fact.answers as QuestionAnswer[]) } : undefined
