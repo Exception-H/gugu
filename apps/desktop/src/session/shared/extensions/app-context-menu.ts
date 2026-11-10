@@ -14,10 +14,16 @@ export function appContextMenuOf(args: Record<string, unknown>): { x: number; y:
     if (typeof item.id !== 'string' || !item.id || ids.has(item.id) || typeof item.label !== 'string' || !item.label.trim()) throw new Error('Context menu items need unique ids and labels');
     if (item.enabled !== undefined && typeof item.enabled !== 'boolean') throw new Error('Context menu enabled must be a boolean');
     if (item.items !== undefined && (!Array.isArray(item.items) || !item.items.length)) throw new Error('Context menu items must be a non-empty array');
+    for (const key of ['checked', 'danger'] as const) if (item[key] !== undefined && typeof item[key] !== 'boolean') throw new Error(`Context menu ${key} must be a boolean`);
+    for (const key of ['title', 'person'] as const) if (item[key] !== undefined && (typeof item[key] !== 'string' || !item[key])) throw new Error(`Context menu ${key} must be a non-empty string`);
     ids.add(item.id);
     return {
       id: item.id, label: item.label,
       ...(item.enabled === undefined ? {} : { enabled: item.enabled }),
+      ...(item.checked === undefined ? {} : { checked: item.checked as boolean }),
+      ...(item.danger === undefined ? {} : { danger: item.danger as boolean }),
+      ...(item.title === undefined ? {} : { title: item.title as string }),
+      ...(item.person === undefined ? {} : { person: item.person as string }),
       ...(item.items === undefined ? {} : { items: itemsOf(item.items as unknown[]) }),
     };
   });
