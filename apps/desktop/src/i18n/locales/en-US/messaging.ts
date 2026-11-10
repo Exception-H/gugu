@@ -476,6 +476,11 @@ export default {
     "reactWith": "React with {{emoji}}"
   },
   "forward": {
+    "detail": "Details",
+    "next": "Next",
+    "send": "Send",
+    "sendTo": "Send to:",
+    "several": "Select several",
     "fileFailed": "{{name}} could not be forwarded with the task",
     "fileGone": "{{name}} is gone and wasn't forwarded.",
     "fileTooLarge": "{{name}} is too large. At most 512 MB is forwarded at once.",
@@ -489,6 +494,7 @@ export default {
     "forwarding": "Forwarding…",
     "noResults": "No chats found",
     "noTargets": "No chats available for forwarding",
+    "note": "Add a note",
     "preview": {
       "attachment": "[Attachment]",
       "card": "[Card]",

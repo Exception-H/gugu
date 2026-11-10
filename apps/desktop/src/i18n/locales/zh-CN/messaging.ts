@@ -474,6 +474,11 @@ export default {
     "reactWith": "回应 {{emoji}}"
   },
   "forward": {
+    "detail": "详情",
+    "next": "下一步",
+    "send": "发送",
+    "sendTo": "发送给：",
+    "several": "多选",
     "fileFailed": "{{name}} 没能一起转发",
     "fileGone": "{{name}} 已经不在了，没转发出去。",
     "fileTooLarge": "{{name}} 太大，一次最多转发 512 MB。",
@@ -487,6 +492,7 @@ export default {
     "forwarding": "转发中…",
     "noResults": "未找到对话",
     "noTargets": "暂无可转发的对话",
+    "note": "留言",
     "preview": {
       "attachment": "[附件]",
       "card": "[卡片]",
