@@ -132,9 +132,9 @@ export function useProjectFolderStage(projectId: string, { floating = false, onC
 
   // 那台机器上还没有这个项目:在那台把文件夹认成项目(并进来的就用那一个),绑到这个项目的群上(product spec,owner 选 A)。
   const linkDeps = projectLinkDeps(displayName, sessionCountOf);
-  const linkOnMachine = async (machine: string | null, path: string, existingProjectId?: string): Promise<boolean> => {
+  const linkOnMachine = async (machine: string | null, path: string): Promise<boolean> => {
     try {
-      const linked = await linkFolderOnMachine(linkDeps, { rowId, machine, path, existingProjectId });
+      const linked = await linkFolderOnMachine(linkDeps, { rowId, machine, path });
       projectGroupsStore.refreshAll();
       // 那台机器的项目清单变了(多了一个 / 绑了群):重读一遍,下次它离线时侧栏照样列着(❌ 只在连上那一刻读过)。
       const resyncMachine = () => (machine ? void remoteHostsStore.syncProjects(machine) : undefined);
@@ -170,14 +170,14 @@ export function useProjectFolderStage(projectId: string, { floating = false, onC
   // 那台机器上的这个文件夹已经是一个有会话的项目:先说清会发生什么,确认了才并(owner 2026-10-17 选 A)。
   const confirmMerge = (machine: string | null, existingProjectId: string, name: string, path: string): Promise<boolean> => {
     const count = sessionCountOf(existingProjectId);
-    if (count === 0) return linkOnMachine(machine, path, existingProjectId);
+    if (count === 0) return linkOnMachine(machine, path);
     return new Promise<boolean>((resolve) => showConfirm({
       title: translate('projects.folders.mergeTitle', { name, projectName: displayName }),
       description: translate('projects.folders.mergeDescription', { machine: machineLabel(machine), name, count, projectName: displayName }),
       confirmLabel: translate('projects.folders.mergeConfirm'),
       // 并进来不删任何东西(原来的群留作历史):❌ 删除那种红按钮。
       variant: 'default',
-      onSuccess: () => resolve(linkOnMachine(machine, path, existingProjectId)),
+      onSuccess: () => resolve(linkOnMachine(machine, path)),
       // 取消 / Esc:没并,❌ 当成挂上了。
       onClose: () => resolve(false),
     }));
