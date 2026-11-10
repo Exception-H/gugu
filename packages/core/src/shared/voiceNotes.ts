@@ -241,7 +241,7 @@ export function weekStart(at: Date): Date {
 export function groupVoiceNotesByWeek<T>(items: readonly T[], timeOf: (item: T) => string, now: Date): { week: VoiceNoteWeek; items: T[] }[] {
   const current = weekStart(now).getTime()
   const groups = new Map<number, T[]>()
-  const sorted = [...items].sort((a, b) => timeOf(b).localeCompare(timeOf(a)))
+  const sorted = [...items].sort((a, b) => Date.parse(timeOf(b)) - Date.parse(timeOf(a)))
   for (const item of sorted) {
     const at = new Date(timeOf(item))
     const key = Number.isNaN(at.getTime()) ? 0 : weekStart(at).getTime()
