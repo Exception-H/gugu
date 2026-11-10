@@ -283,7 +283,7 @@ export function MenuSearch({ value, onChange, placeholder, noResults, empty, cla
         className="min-w-0 flex-1 bg-transparent text-[length:var(--font-body)] text-inherit outline-none placeholder:text-[var(--menu-icon)]"
       />
     </div>
-    {empty && <div className="text-[length:var(--font-body)] text-[var(--menu-icon)]" style={{ padding: menuRowPadding }}>{noResults}</div>}
+    {empty && <div className="text-[length:var(--font-body)] text-[var(--menu-icon)]" style={submenuRowStyle}>{noResults}</div>}
   </>)
 }
 
