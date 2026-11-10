@@ -95,7 +95,9 @@ export const EXTENSION_WIDGET_IDENTITY_API_VERSION = 33;
 // 36: shared task resources for App-owned capabilities (#1607): task page leases, projection viewers, scoped task
 //     messages, authorized file payloads and non-activating App surfaces.
 // 37: account-bound, single-conversation unread grants. No content or Agent authority.
-export const EXTENSION_API_VERSION = 37;
+// 38: `showContextMenu` rows say `checked`, `danger`, `title` and `person` (a member, drawn as one); long submenus are
+//     searchable and a phone opens a submenu in the menu's place. Presentation only: an older host draws plain rows.
+export const EXTENSION_API_VERSION = 38;
 
 /**
  * The page `app_check` runs is started with this argument (摩擦单 F5, F69): it says how often it wrote, set presence and

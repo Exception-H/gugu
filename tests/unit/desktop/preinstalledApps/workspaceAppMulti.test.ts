@@ -127,10 +127,10 @@ describe('picking', () => {
       target.dispatchEvent(Object.assign(new MouseEvent('pointerup', { bubbles: true }), { pointerType: 'touch' }))
       open('b')
       expect(picked()).toEqual([])
-      expect($('menu').hidden).toBe(false)
-      expect($('menu').querySelector('.menu-file')!.textContent).toContain('b.pdf')
-      const select = [...$('menu').querySelectorAll<HTMLButtonElement>('button')].find((item) => item.textContent === '选择')!
-      select.click()
+      // A phone's file menu is the host's shared menu too (one menu, one submenu style, one Delete confirm).
+      expect(menu.isOpen()).toBe(true)
+      vi.useRealTimers()
+      await menu.pick('选择')
       expect(picked()).toEqual(['b'])
       expect($('select-files').getAttribute('aria-pressed')).toBe('true')
       expect(gugu.files.openWith).not.toHaveBeenCalled()
@@ -153,12 +153,13 @@ describe('picking', () => {
       target.dispatchEvent(Object.assign(new MouseEvent('pointerdown', { bubbles: true }), { pointerType: 'touch' }))
       await vi.advanceTimersByTimeAsync(nativeAt)
       target.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true }))
-      expect($('menu').hidden).toBe(false)
+      expect(menu.showContextMenu).toHaveBeenCalledTimes(1)
       await vi.advanceTimersByTimeAsync(500)
-      expect($('menu').hidden).toBe(false)
+      expect(menu.showContextMenu).toHaveBeenCalledTimes(1)
       target.dispatchEvent(Object.assign(new MouseEvent('pointerup', { bubbles: true }), { pointerType: 'touch' }))
       open('b')
-      expect($('menu').hidden).toBe(false)
+      expect(menu.isOpen()).toBe(true)
+      expect(menu.showContextMenu).toHaveBeenCalledTimes(1)
       expect(picked()).toEqual([])
       expect(gugu.files.openWith).not.toHaveBeenCalled()
     } finally { vi.useRealTimers() }
@@ -244,18 +245,14 @@ describe('picking', () => {
     expect(gugu.files.openWith).not.toHaveBeenCalled()
   })
 
-  test('mobile More and retention reuse the same menu and retain disabled reasons', async () => {
+  test('mobile More and retention are submenus of the shared menu and retain disabled reasons', async () => {
     touch = true
     row('b').dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true }))
-    const choose = (label: string) => [...$('menu').querySelectorAll<HTMLButtonElement>('button')].find((item) => item.textContent === label)!.click()
-    choose('更多')
-    choose('保留方式')
-    const options = [...$('menu').querySelectorAll<HTMLButtonElement>('[role="menuitemradio"]')]
-    expect(options.map((item) => item.disabled)).toEqual([true, true])
+    const options = menu.rows('更多', '保留方式')
+    expect(options.map((item) => item.enabled)).toEqual([false, false])
+    expect(options.every((item) => item.checked !== undefined)).toBe(true)
     expect(options[0]!.title).toBe('只有上传这份文件的人能改它保留多久。')
-    choose('‹ 保留方式')
-    choose('‹ 更多')
-    expect($('menu').querySelector('button')!.textContent).toBe('转发')
+    expect(menu.labels()[0]).toBe('转发')
   })
 
   test('another kind lets go of what was picked', async () => {

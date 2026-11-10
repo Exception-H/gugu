@@ -264,8 +264,11 @@ const searchableSubmenuPopupStyle: CSSProperties = { width: 260, maxHeight: 'min
 
 /**
  * The search field at the top of a long menu (a list of members, projects…): it stays put while the rows under it scroll.
- * Keys stay in the field (the menu's typeahead would take them), except Escape / Tab, which still close / leave the menu.
+ * Typed keys stay in the field (the menu's typeahead would take them). Escape / Tab close / leave the menu, and the arrows and
+ * Enter go on to it: down from the field to the rows, Enter picks the highlighted one.
  */
+const MENU_KEYS = new Set(['Escape', 'Tab', 'ArrowDown', 'ArrowUp', 'Enter'])
+
 export function MenuSearch({ value, onChange, placeholder, noResults, empty, className }: Partial<Pick<MenuSearchState, 'noResults' | 'empty'>>
   & Pick<MenuSearchState, 'value' | 'onChange' | 'placeholder'> & {
   /** Default: across the full width of a menu's 4px-padded surface. A surface without padding passes its own margins. */
@@ -277,7 +280,7 @@ export function MenuSearch({ value, onChange, placeholder, noResults, empty, cla
       <input
         value={value}
         onChange={event => onChange(event.target.value)}
-        onKeyDown={event => { if (event.key !== 'Escape' && event.key !== 'Tab') event.stopPropagation() }}
+        onKeyDown={event => { if (!MENU_KEYS.has(event.key)) event.stopPropagation() }}
         placeholder={placeholder}
         aria-label={placeholder}
         className="min-w-0 flex-1 bg-transparent text-[length:var(--font-body)] text-inherit outline-none placeholder:text-[var(--menu-icon)]"
@@ -287,14 +290,17 @@ export function MenuSearch({ value, onChange, placeholder, noResults, empty, cla
   </>)
 }
 
-/** A list of rows longer than this gets a MenuSearch over it. */
+/** A list of more choices than this gets a MenuSearch over it. */
 export const MENU_SEARCH_FROM = 10
 
-/** The rows a MenuSearch leaves, and the search to hand to MenuSubmenu (none while the list is short). */
+/**
+ * The rows a MenuSearch leaves, and the search to hand to MenuSubmenu (none while the list is short). Only rows with a label
+ * count and match: `labelOf` gives '' for a separator or a heading, and those go while a search is typed.
+ */
 export function useMenuSearch<T>(rows: readonly T[], labelOf: (row: T) => string, words: { placeholder: string; noResults: string }) {
   const [value, onChange] = useState('')
   const needle = value.trim().toLowerCase()
-  const searchable = rows.length > MENU_SEARCH_FROM
+  const searchable = rows.filter(row => labelOf(row)).length > MENU_SEARCH_FROM
   const shown = searchable && needle ? rows.filter(row => labelOf(row).toLowerCase().includes(needle)) : rows
   return { search: searchable ? { value, onChange, ...words, empty: !shown.length } : undefined, shown }
 }

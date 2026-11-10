@@ -316,7 +316,7 @@ describe('a session\'s tab: one folder, two roots', () => {
     const row = document.querySelector('[data-id="README.md"]') as HTMLElement
     expect(row.draggable).toBe(false)
     row.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true }))
-    const labels = [...$('menu').querySelectorAll('button')].map((button) => button.textContent)
+    const labels = menu.labels()
     for (const desktop of ['在新页签打开', '在旁边打开', '在文件管理器中显示', '改名', '删除']) expect(labels).not.toContain(desktop)
     switchRoot('chat')
     await until('phone chat files shown again', () => names().includes('plan.md'))

@@ -172,6 +172,7 @@ const STRINGS = {
     createdBy: '{who} 创建 · {time}',
     editedBy: '{who} 编辑 · {time}',
     editedAt: '已编辑 · {time}',
+    agent: 'Agent',
     system: '系统',
     sources: '来源消息',
     source: '第 {n} 条',
@@ -410,6 +411,7 @@ const STRINGS = {
     createdBy: 'Created by {who} · {time}',
     editedBy: 'Edited by {who} · {time}',
     editedAt: 'Edited · {time}',
+    agent: 'agent',
     system: 'System',
     sources: 'Source messages',
     source: '#{n}',
@@ -1349,7 +1351,7 @@ function filterItems(files, now) {
   const machines = [...new Set(files.filter((e) => e.storedOn).map((e) => machineOf(e.storedOn)))]
   const kept = new Set(files.map((e) => keptAs(e, now)).filter(Boolean))
   const options = {
-    who: people.size > 1 || state.filters.who ? [...people.values()].map((person) => [person.id, who(person)]) : [],
+    who: people.size > 1 || state.filters.who ? [...people.values()].map((person) => [person.id, nameOf(person)]) : [],
     where: machines.length || state.filters.where ? [['cloud', t.cloud], ...machines.map((name) => [name, name])] : [],
     keep: kept.size || state.filters.keep ? [['temporary', t.keep_temporary], ['soon', t.keep_soon], ['kept', t.keep_kept]] : [],
   }
@@ -1537,8 +1539,8 @@ function goUp() {
 // In a folder, or with this page's own menu open, the host's Back (the phone's back key) is a step here rather than leaving
 // the App (gugu.navigation.onBack): the menu closes first, then a folder up; at the top it is the host's again. One claim or release at a time; `state.releaseBack` is set only once a claim has
 // succeeded, so a failed claim is tried again on the next change.
-const backStepWanted = () => ((!!state.folder || (inWorkspace() && choosesFolder() && !!copyOf())) && !state.ctx?.file) || !$('menu').hidden
-const stepBack = () => (!$('menu').hidden ? closeMenu() : goUp())
+const backStepWanted = () => (!!state.folder || (inWorkspace() && choosesFolder() && !!copyOf())) && !state.ctx?.file
+const stepBack = () => goUp()
 let backStep = Promise.resolve()
 function holdBack(want) {
   if (typeof gugu.navigation?.onBack !== 'function') return
@@ -1704,10 +1706,11 @@ function folderMark() {
 }
 
 // A person or an agent by name, the system as itself (entry.createdBy, §2.4).
-// A member by name, as the app names them everywhere (no 「(agent)」 after it: the host's menus draw the avatar).
+// A member by name. A line of text says an agent is one; a menu row (`person`) is drawn by the host with the member's avatar.
+const nameOf = (person) => person.name?.trim() || person.id.slice(0, 6)
 function who(person) {
   if (person.kind === 'system') return state.t.system
-  return person.name?.trim() || person.id.slice(0, 6)
+  return person.kind === 'agent' ? `${nameOf(person)} (${state.t.agent})` : nameOf(person)
 }
 
 // Creation and editing are separate facts: the creator must never be paired with the last edit's time.
@@ -4053,10 +4056,9 @@ function applyMode() {
   syncBlockControls(true)
 }
 
-// A control's menu, and a file's on the desktop, is the host's shared menu (the same surface, rows, submenus and keyboard as
-// the rest of the app), below the control or at the pointer. A press on the control while its menu is open closes it.
-// An item that asks first (`ask`: Delete) says its question in a menu of its own, in red. On a phone a file's menu is the
-// page's own sheet (#menu) under the file's name, a row with `children` opening them in its place.
+// Every menu of the page is the host's shared menu (the same surface, rows, submenus and keyboard as the rest of the app,
+// on a desktop and on a phone), below the control or at the pointer. A press on the control while its menu is open closes it.
+// An item that asks first (`ask`: Delete) says its question in a menu of its own, in red.
 // An item: `[text, run, ask]`, or `{ text, run, ask, checked, disabled, title, person, children }`; `{ separator: true }`
 // sets groups apart. A `checked` one is one of a choice; `person` (a member's id) is drawn as that member.
 function toggleMenu(anchor, items, context = {}) {
@@ -4064,7 +4066,6 @@ function toggleMenu(anchor, items, context = {}) {
   state.menuPressed = null
   closeMenu()
   if (again) return
-  if ((context.entry || context.selection) && touchPane?.matches) return sheetMenu(anchor, items, context)
   const box = anchor.getBoundingClientRect()
   const at = context.point ?? { x: box.left, y: box.bottom + 4 }
   const opened = state.menuOpened = {}
@@ -4076,50 +4077,6 @@ function toggleMenu(anchor, items, context = {}) {
     if (picked?.ask) return toggleMenu(anchor, [{ text: picked.ask, danger: true, run: picked.run }], context)
     try { await picked?.run() } catch (error) { showBanner(failureText(error), 'error') }
   }, (error) => showBanner(failureText(error), 'error'))
-}
-
-function sheetMenu(anchor, items, context) {
-  const menu = $('menu')
-  const nodes = (entries) => entries.map((given) => {
-    const { text, run, ask, danger, checked, disabled, title, separator, children } = Array.isArray(given) ? { text: given[0], run: given[1], ask: given[2] } : given
-    if (separator) return Object.assign(document.createElement('div'), { className: 'menu-separator', role: 'separator' })
-    const item = document.createElement('button')
-    item.type = 'button'
-    if (ask || danger) item.className = 'destructive'
-    if (checked !== undefined) {
-      item.setAttribute('role', 'menuitemradio')
-      item.setAttribute('aria-checked', String(checked))
-      item.classList.add('menu-choice')
-    } else {
-      item.setAttribute('role', 'menuitem')
-    }
-    item.textContent = text
-    if (children) item.setAttribute('aria-haspopup', 'menu')
-    if (title) item.title = title
-    if (disabled) item.disabled = true
-    item.onclick = () => {
-      if (ask && item.textContent !== ask) return void (item.textContent = ask)
-      closeMenu()
-      if (children) sheetMenu(anchor, [{ text: `‹ ${text}`, run: () => sheetMenu(anchor, items, context) }, { separator: true }, ...(typeof children === 'function' ? children() : children)], context)
-      else run()
-    }
-    return item
-  })
-  menu.replaceChildren(...nodes(items))
-  const heading = Object.assign(document.createElement('div'), { className: 'menu-file' })
-  const words = Object.assign(document.createElement('div'), { className: 'menu-file-words' })
-  words.append(Object.assign(document.createElement('strong'), { textContent: context.selection ? fmt(state.t.picked, { n: state.picked.size }) : shownName(context.entry) }))
-  if (context.entry) {
-    words.append(Object.assign(document.createElement('small'), { textContent: fileTip(context.entry) }))
-    heading.append(isFolder(context.entry) ? folderMark() : fileMark(context.entry))
-  }
-  heading.append(words)
-  menu.prepend(heading)
-  state.menuOpened = {}
-  state.menuAnchor = anchor
-  anchor.setAttribute('aria-expanded', 'true')
-  menu.hidden = false
-  holdBack(backStepWanted())
 }
 
 // ─── 多选 ───────────────────────────────────────────────────────────────────
@@ -4384,11 +4341,8 @@ function closeDetails() {
 }
 
 function closeMenu() {
-  if ($('menu').contains(document.activeElement)) state.menuAnchor?.focus({ preventScroll: true })
   state.menuAnchor?.setAttribute('aria-expanded', 'false')
   state.menuAnchor = null
-  $('menu').hidden = true
-  holdBack(backStepWanted())
 }
 
 // ─── start ──────────────────────────────────────────────────────────────────
@@ -4473,7 +4427,7 @@ function start() {
   document.addEventListener('pointerdown', (event) => {
     // A press on the control of the open menu: its click closes the menu (the host's menu may already have closed itself).
     state.menuPressed = state.menuAnchor?.contains(event.target) ? state.menuAnchor : null
-    if (state.menuAnchor && !$('menu').contains(event.target) && !state.menuAnchor.contains(event.target)) closeMenu()
+    if (state.menuAnchor && !state.menuAnchor.contains(event.target)) closeMenu()
   })
   document.addEventListener('keydown', (event) => {
     if ((event.metaKey || event.ctrlKey) && !event.shiftKey && event.key === 's' && state.current?.source) {
@@ -4485,11 +4439,6 @@ function start() {
     else if (!state.menuAnchor && (state.picked.size || state.selecting)) clearPicks()
     closeMenu()
     if (!$('move-dialog').hidden) closeMoveDialog()
-  })
-  // Tabbing out of the menu closes it too (past its last item the focus leaves the page, and Escape with it); a move
-  // to its own ⋯ is left to that ⋯'s click, which toggles.
-  $('menu').addEventListener('focusout', (event) => {
-    if (!$('menu').contains(event.relatedTarget) && event.relatedTarget !== state.menuAnchor) closeMenu()
   })
   // The menu stays where its ⋯ was: a scroll (the list's too, captured) or a resize moves the ⋯ away from it.
   document.addEventListener('scroll', () => closeMenu(), true)

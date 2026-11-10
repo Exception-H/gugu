@@ -4,6 +4,7 @@ import { ChevronLeft, FileText, Reply } from '@/lib/icons'
 import { formatHotkeyText } from '@/session/renderer/lib/ui/shortcut-format'
 import type { RendererContentContextMenu } from '@/lib/contentContextMenu'
 import { useAvatarIdentity } from '@/lib/avatarIdentity'
+import { readIdentityDirectoryBridge } from '@/lib/identityDirectoryBridge'
 import { useShownAgentName } from '@/hooks/useShownAgentName'
 import type { ContentMenuItem } from '@/session/shared/content-context-menu'
 import { Avatar } from './Avatar'
@@ -31,7 +32,9 @@ export function ContentMenu({ menu, onClose, onAction }: {
 
 type RowsProps = { items: readonly ContentMenuItem[]; onAction: (id: string) => void }
 
-const labelOf = (row: ContentMenuItem) => row.type === 'separator' ? '' : row.label
+// A search matches what a row shows: a member by the name the identity directory gives them (PersonRow's), not the App's label.
+const labelOf = (row: ContentMenuItem) => row.type === 'separator' ? ''
+  : row.person ? readIdentityDirectoryBridge()?.getSnapshot()?.[row.person]?.display_name ?? row.label : row.label
 
 function useRowSearch(rows: readonly ContentMenuItem[]) {
   const { t } = useTranslation('common')
@@ -64,12 +67,13 @@ function PhoneRows({ items, onAction }: RowsProps) {
     back={at && { label: at.label, go: () => setTrail(trail.slice(0, -1)) }} />
 }
 
+// Only an opened submenu is searched, as on the desktop: a menu's own first level is never a long list of choices.
 function PhoneLevel({ items, onAction, onOpen, back }: RowsProps & { onOpen: (row: Row) => void; back?: { label: string; go: () => void } }) {
   const { search, shown } = useRowSearch(items)
   return <>
     {back && <><MenuItem icon={<ChevronLeft size={16} />} closeOnClick={false} onClick={back.go}>{back.label}</MenuItem><MenuSeparator /></>}
-    {search && <MenuSearch {...search} className={back ? 'top-[-4px] -mx-1 mb-1' : undefined} />}
-    <Rows items={shown} onAction={onAction} onOpen={onOpen} />
+    {back && search && <MenuSearch {...search} className="top-[-4px] -mx-1 mb-1" />}
+    <Rows items={back ? shown : items} onAction={onAction} onOpen={onOpen} />
   </>
 }
 
