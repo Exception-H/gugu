@@ -118,9 +118,14 @@ function unwrapQrPayload(value: unknown): Record<string, unknown> | null {
       return null
     }
   }
-  if (!value || typeof value !== 'object') return null
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return null
+  const prototype = Object.getPrototypeOf(value)
+  if (prototype !== Object.prototype && prototype !== null) return null
   const record = value as Record<string, unknown>
   if (record.payload && typeof record.payload === 'object') {
+    if (Array.isArray(record.payload)) return null
+    const wrappedPrototype = Object.getPrototypeOf(record.payload)
+    if (wrappedPrototype !== Object.prototype && wrappedPrototype !== null) return null
     return record.payload as Record<string, unknown>
   }
   return record
