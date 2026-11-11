@@ -1,4 +1,5 @@
 import { bindPasswordBetaAgent } from './password-vault/beta-runtime-port'
+import { PASSWORD_AGENT_RPC } from './password-vault/server-delivery'
 import { createPasswordBetaPolicyReader } from './password-vault/beta-policy-reader'
 import './browser-user-agent-bootstrap'
 import './page-navigation-bootstrap'
@@ -1728,7 +1729,9 @@ function createPrimaryDeviceRpcHandlers(io?: { openTopicPublisher: OpenTopicPubl
   const base = projectionDeviceRuntime.track(bridge.createSessionpageSessionDeviceRpcHandlers(io
     ? { preview: messagePreviewHostDeps(io), projection: projectionDeviceRuntime.options } : undefined))
   // #7199 第二步:别的机器上的 agent 调这台电脑的单个动作(请执行 / 结果收到)。
-  return { ...base, handlers: { ...base.handlers, ...serverUpdateRpcHandlers(), ...assistantWorkDeliveryHost().rpcHandlers(), ...deviceActionsRuntime().rpcHandlers(), ...tunnelRpcHandlers(), ...desktopFiles.handlers(io ? 'realtime' : 'ssh') } }
+  // 「本机送」(#2481): the account's servers ask the desktop that keeps the vault. A server has no vault to answer from.
+  const passwords = process.env.GUGU_SERVER_MODE === '1' ? {} : bridge.passwordBetaRemoteHandlers()
+  return { ...base, handlers: { ...base.handlers, ...serverUpdateRpcHandlers(), ...assistantWorkDeliveryHost().rpcHandlers(), ...deviceActionsRuntime().rpcHandlers(), ...tunnelRpcHandlers(), ...desktopFiles.handlers(io ? 'realtime' : 'ssh'), ...passwords } }
 }
 
 let assistantWorkOutbox: AssistantWorkOutboxHost | null = null
@@ -5023,10 +5026,58 @@ app.whenReady().then(async () => {
         ? { accessToken: auth.accessToken, refreshToken: auth.refreshToken ?? '', userId: auth.userId }
         : null
     }
+    if (process.env.GUGU_SERVER_MODE === '1') {
+      // 「本机送」: no vault on a server; each password step asks the account's desktop (password-vault/server-agent.ts).
+      bindPasswordBetaAgent(emdash.createServerPasswordAgent({
+        ownerId: async () => (await getSessionpageAuth())?.userId ?? null,
+        thisDevice: async () => { const id = await localDeviceId(); if (!id) throw new Error('not registered'); return id },
+        desktops: async () => (await crossMachine().listDeviceRows())
+          .filter(row => row.kind === 'desktop' && !row.this_machine).sort((a, b) => Number(b.online) - Number(a.online)).map(row => row.device_id),
+        call: async (deviceId, payload, signal) => {
+          crossMachine()
+          if (!crossMachineRequester) throw new Error('device RPC requester is not ready')
+          return crossMachineRequester.call(deviceId, PASSWORD_AGENT_RPC, payload, { timeoutMs: 20_000, signal })
+        },
+        describe: (ownerId, agentId, sessionId) => emdash.passwordRequestPresentation(ownerId, agentId, sessionId),
+        deliver: (sessionId, requestId, status) => emdash.deliverPasswordBetaDecision(sessionId, requestId, status),
+        deliverSave: (sessionId, requestId, status, credentialId) => emdash.deliverPasswordBetaSaveResult(sessionId, requestId, status, credentialId),
+        home: () => app.getPath('userData'),
+        privateLogin: (sessionId, input) => emdash.serverTaskPrivateLogin(sessionId, input),
+      }))
+    } else {
     emdash.installPasswordBetaHost({ window: () => mainWindow, account: async () => (await getSessionpageAuth())?.userId ?? null, device: localDeviceId,
       deliver: (sessionId, requestId, status) => emdash.deliverPasswordBetaDecision(sessionId, requestId, status),
-      readPolicy: createPasswordBetaPolicyReader(getSessionpageAuth) })
+      deliverSave: (sessionId, requestId, status, credentialId) => emdash.deliverPasswordBetaSaveResult(sessionId, requestId, status, credentialId),
+      readPolicy: createPasswordBetaPolicyReader(getSessionpageAuth),
+      verifyOwner: async (reason) => {
+        const helper = deviceActionsRuntime().macHelper()
+        if (!helper) throw new Error('mac helper unavailable')
+        await helper.call('owner.verify', { reason }, { timeoutMs: 120_000 })
+      },
+      // #2481 vault sync: ciphertext and device keys only; the backend checks the signed-in owner of the device.
+      rpc: async (name, args) => {
+        const auth = await getSessionpageAuth()
+        if (!auth) throw new Error('Not signed in')
+        const { data, error } = await makeIdentityClient(auth.accessToken).rpc(name, args)
+        if (error) throw error
+        return data
+      },
+      presence: () => {
+        const state = powerMonitor.getSystemIdleState(30)
+        return state === 'active' || state === 'locked' ? state : 'idle'
+      },
+      notify: (title, body) => {
+        if (IS_TEST_MODE || mainWindow?.isFocused()) return
+        void notificationGate.usable().then(usable => {
+          if (!usable) return
+          const notification = new Notification({ title, body })
+          notification.on('click', () => { if (mainWindow && !mainWindow.isDestroyed()) { mainWindow.show(); mainWindow.focus() } })
+          notification.once('failed', (_event, error) => { notificationLogger.warn({ error: String(error) }, `[notification] 密码设备提示被系统拒绝: ${error}`) })
+          notification.show()
+        })
+      } })
     bindPasswordBetaAgent(emdash.passwordBetaAgent)
+    }
     app.once('will-quit', startSessionpageAgentArchivalSync({ getAuth: getSessionpageAuth, resolveDeviceId: localDeviceId,
       inventory: () => emdash.emdashSessionpageInventory(), subscribe: (listener) => emdash.onEmdashSessionpageReapTrigger(listener) }))
     // @@@task-shell-port (#5012) 「给会话开账号」的口与网页版无头宿主共用(sessionpage-identity-host.ts);

@@ -20,7 +20,8 @@ import { NOTIFICATION_LIST_SLOT_PREFIX, NOTIFICATION_TOGGLE_SLOT_PREFIX } from '
 import { NeedsYouTaskRow } from './NeedsYouTaskRow'
 import { isAssistantAgent } from '@/session/renderer/features/assistant/assistant-lineage'
 import { markNeedsYouTaskSeen, useNeedsYouTasks, type NeedsYouTask } from './useNeedsYouTasks'
-import { usePasswordNotifications, openPasswordRequest } from '@/lib/passwordBetaNotifications'
+import { usePasswordNotifications, usePasswordSnapshot, openPasswordRequest, openPasswordDevicePrompt } from '@/lib/passwordBetaNotifications'
+import { promptedRequests, waitingToJoin } from '../password/passwordModel'
 
 installShellSlots()
 const EMPTY_SLOTS: ReadonlyMap<string, HTMLElement> = new Map()
@@ -32,7 +33,9 @@ export const NeedsYouHost = observer(function NeedsYouHost({ onAttentionChange }
   const mobile = useMobileShell()
   const { tasks, count, attention, error } = useNeedsYouTasks()
   const passwords = usePasswordNotifications()
-  const notificationCount = count + passwords.length
+  const sync = usePasswordSnapshot()?.sync
+  const devices = promptedRequests(sync), joining = waitingToJoin(sync)
+  const notificationCount = count + passwords.length + devices.length + (joining ? 1 : 0)
   const open = useSidebarNotificationsOpen()
   useEffect(() => { onAttentionChange?.(attention) }, [onAttentionChange, attention])
   const slots = readShellSlots()
@@ -68,7 +71,11 @@ export const NeedsYouHost = observer(function NeedsYouHost({ onAttentionChange }
         {error && <p role="alert">{error}</p>}
         {readError && <p role="alert">{readError}</p>}
         {passwords.map(request => <Button key={request.requestId} variant="ghost" className="w-full justify-start" data-password-notification={request.requestId}
-          onClick={() => { openPasswordRequest(request); setSidebarNotificationsOpen(false) }}>请求使用密码 · {request.origin}</Button>)}
+          onClick={() => { openPasswordRequest(request); setSidebarNotificationsOpen(false) }}>{request.kind === 'save' ? '请求保存密码' : '请求使用密码'} · {request.origin}</Button>)}
+        {devices.map(request => <Button key={request.deviceId} variant="ghost" className="w-full justify-start" data-password-device={request.deviceId}
+          onClick={() => { openPasswordDevicePrompt(request.deviceId); setSidebarNotificationsOpen(false) }}>「{request.label || '新设备'}」想用你的密码</Button>)}
+        {joining && <Button variant="ghost" className="w-full justify-start" data-password-join=""
+          onClick={() => { openPasswordDevicePrompt(null); setSidebarNotificationsOpen(false) }}>在另一台设备上允许这台电脑用你的密码</Button>}
         {tasks.map(task => {
           // The assistant's own session is the assistant, not a task of its: its row opens the assistant's chat, which the one
           // decision (lib/assistantEntry.ts) sends to its App, or, when the App is not usable here, opens as any chat — never the
