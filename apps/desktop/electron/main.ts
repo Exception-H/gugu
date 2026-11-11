@@ -104,6 +104,7 @@ import {
 } from '@shared/extensions/host-actions'
 import { givesAgentTools } from '@shared/extensions/app-places'
 import { buildProbePlatformCredentials } from './harness-catalog-probe-env'
+import { createProbeConnectionCredentials } from './harness-catalog-probe-connection'
 import { runWindowMenuCommand } from './window-menu-commands'
 import { isWindowMenuCommand } from '../shared/window-menu-commands'
 import { purgeStaleUpdaterCache, updaterCacheBaseDir } from './updaterCache'
@@ -4343,6 +4344,11 @@ function loadEmdashBridge(): EmdashBridgeModule | null {
     // 模型目录的第二遍探测:没登录这家 harness 的用户也要看得到推理强度(owner 08-26:每家都得有档位)。
     // 占位凭据由宿主算(要用 engine-injection-contract 与 capability-bundle),注进会话页那侧的探针。
     emdashBridge.setProbePlatformEnvResolver(buildProbePlatformCredentials)
+    // #2507 选中走模型注入的 API Key 连接(pi / opencode / CodeBuddy)时,目录照那把连接读:输入框列出并默认选中它的模型。
+    emdashBridge.setProbeConnectionModelResolver(createProbeConnectionCredentials(async (providerId) => {
+      const { resolveConnectionModel } = await import('./session/main/core/agents/harness-connections')
+      return resolveConnectionModel(providerId)
+    }))
     return emdashBridge
   } catch (err) {
     console.error('[sessionpage] FAILED to load session page module — session page backend disabled:', err)
@@ -5191,6 +5197,19 @@ app.whenReady().then(async () => {
       },
       onPlatformSessionEnded: (sessionId) => sessionpagePlatformRecovery?.forget(sessionId),
       onHostResume: resumeAllCodexAppServerTurnWaiters,
+      // #2507 不上平台时,这一家选中的那把「走模型注入」的 API Key 连接(pi / opencode / CodeBuddy)。
+      // 动态 import:连接那一层在加载时读库,与 agent-run-context 里同一个理由。
+      connectionModel: async ({ providerId, surface }) => {
+        const { resolveConnectionModel } = await import('./session/main/core/agents/harness-connections')
+        const connection = await resolveConnectionModel(providerId)
+        if (!connection) return null
+        const { connectionModelLaunch } = await import('./sessionpage/connection-model-launch')
+        createLogger('sessionpage/platform').info(
+          { providerId, surface, connectionId: connection.connectionId },
+          '2507: API key connection injected as the session model',
+        )
+        return connectionModelLaunch({ providerId, surface, ...connection })
+      },
       env: process.env,
     })
     sessionpagePlatformRecoveryHooks = sessionpagePlatformHooks
