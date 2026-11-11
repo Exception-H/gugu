@@ -8,6 +8,7 @@ import { enUSSessionWorkflowMessages, zhCNSessionWorkflowMessages } from './mess
 import { enUSLegacyDmMessages, zhCNLegacyDmMessages } from './messages-legacy-dm';
 import { enUSSessionScheduleMessages, zhCNSessionScheduleMessages } from './messages-session-schedules';
 import { enUSAgentStatusMessages, zhCNAgentStatusMessages } from './messages-agent-status';
+import { enUSResourceKindMessages, zhCNResourceKindMessages } from './messages-resource-kinds';
 import { enUSAppSettingsMessages, zhCNAppSettingsMessages } from './messages-app-settings';
 import { enUSThemeMessages, zhCNThemeMessages } from './messages-themes';
 
@@ -275,11 +276,32 @@ const enUSCoreMessages = {
   // `gugu.dispatch` to a member of a chat: a whisper to one person or agent, sent as you and marked as from this App (摩擦单 F16, F79).
   'extensions.permissionsChatRelay': 'Whisper to a person or agent in any chat you are in, in your name — they see it came from this App',
   'extensions.permissionsChatUnread': 'See only whether one conversation you select has unread messages',
+  // #1927: the same conversation as `chat:unread`'s, never another.
+  'extensions.permissionsChatFiles': 'Read only the files of the conversation you select, without changing them',
+  'extensions.permissionsChatDraft': 'Put a draft into the conversation you select; only you can send it',
+  // #1925: gugu draws that conversation beside the App's page; the App sees none of it.
+  'extensions.permissionsChatSurface': 'Show its page beside the conversation you select; the App cannot see that conversation',
+  // #1927 (42): your personal assistant, when that conversation is your private one with it. {kinds}: only what this App
+  // lists (`extensions.resourceKind.*`).
+  'extensions.permissionsChatResources': 'Read only what your agent keeps in the conversation you select: {kinds}',
+  'extensions.permissionsChatResourcesWrite': 'Change what your agent keeps in the conversation you select: {kinds}; your agent applies the changes',
+  'extensions.permissionsChatVoiceNotesManage': 'Transcribe, export or delete the voice notes your agent keeps in the conversation you select; you confirm each delete',
+  // #1928: only when that conversation is your private one with an agent of yours.
+  'extensions.permissionsChatSchedules': 'See only the schedules of your agent in the conversation you select, without changing them',
+  'extensions.permissionsChatSchedulesControl': 'Add, change, pause or remove the schedules of your agent in the conversation you select',
+  // #1925: that conversation's assistant, only when it is the person's own.
+  'extensions.permissionsAssistantStatus': 'See your name and setup progress while you have no assistant; then, for your assistant in the conversation you select: its name, look and colour, its home and that computer\'s name, setup progress, which apps it can connect and whether each is connected, and how many devices, connected apps, projects and capabilities it has; and have its moving figure drawn on the App\'s page',
+  'extensions.permissionsAssistantOpen': 'When you click, open setup while you have no assistant, and the setup, move, close, settings, projects and capabilities pages of your assistant in the conversation you select, or move its setup on',
+  'extensions.permissionsAssistantRename': 'Rename your assistant in the conversation you select',
+  // #1925 (46): only when that conversation is the person's chat with their own assistant; a task's conversation is drawn by gugu.
+  'extensions.permissionsChatWork': 'See the tasks your assistant handed out, their titles and progress, and show a task\'s conversation in its panel; the App cannot see that conversation',
+  // #1927 (47): the host records; the App starts and stops it and draws the bar.
+  'extensions.permissionsChatVoiceNotesRecord': 'Record voice notes from your microphone when you click, for your agent in the conversation you select; the App never gets the audio',
   'extensions.unreadBindingChoose': 'Choose conversation',
   'extensions.unreadBindingSearch': 'Search conversations',
   'extensions.unreadBindingEmpty': 'No available conversations',
-  'extensions.unreadBindingTitle': 'Allow unread state for one conversation',
-  'extensions.unreadBindingSave': 'Allow unread state',
+  'extensions.unreadBindingTitle': 'Choose the one conversation this App can use',
+  'extensions.unreadBindingSave': 'Allow this conversation',
   'extensions.unreadBindingRemove': 'Remove conversation binding',
   'extensions.unreadBindingFailed': 'Could not update the conversation binding',
   'extensions.unreadBindingReadFailed': 'Could not read the available conversations',
@@ -394,6 +416,7 @@ const enUSCoreMessages = {
   'extensions.unpinFromRail': 'Take off the left rail',
   'extensions.dockFailed': 'The left rail could not be changed',
   'extensions.turnOnInSettings': 'Switched off — turn it on in Apps',
+  'extensions.assistantPreparing': 'Getting your Gugu ready…',
   // ── extensions: cloud market versioning (#5410) ─────────────────────────
   'extensions.groupUpdate': 'Update available',
   'extensions.marketShown': '{shown} of {total} shown',
@@ -1451,11 +1474,24 @@ const zhCNCoreMessages: Record<CoreSessionMessageKey, string> = {
   'extensions.permissionsFilesWrite': '改你所在的所有对话里的文件，和{computer}上各个会话里的文件',
   'extensions.permissionsChatRelay': '以你的名义在你所在的对话里给某个人或 agent 发悄悄话，对方看得到是这个 App 发的',
   'extensions.permissionsChatUnread': '只获知你选定的一条会话是否有未读消息',
+  'extensions.permissionsChatFiles': '只读取你选定的那条会话里的文件，不改动',
+  'extensions.permissionsChatDraft': '只往你选定的那条会话的输入框里放草稿，发不发由你',
+  'extensions.permissionsChatSurface': '把它的页面摆在你选定的那条会话旁边，它看不到这条会话',
+  'extensions.permissionsChatResources': '只读取你选定的那条会话里 agent 记着的{kinds}',
+  'extensions.permissionsChatResourcesWrite': '改动你选定的那条会话里 agent 记着的{kinds}，由 agent 照改',
+  'extensions.permissionsChatVoiceNotesManage': '转写、导出或删除你选定的那条会话里 agent 记着的语音笔记，每次删除都由你确认',
+  'extensions.permissionsChatSchedules': '只查看你选定的那条会话里你的 agent 的已安排，不改动',
+  'extensions.permissionsChatSchedulesControl': '添加、修改、暂停或删除你选定的那条会话里你的 agent 的已安排',
+  'extensions.permissionsAssistantStatus': '还没有助理时获知你的称呼和开通进度；有了之后只获知你选定的那条会话里你的助理的名字、形象与主题色、住处与那台电脑的名字、开通进度、能连哪些应用及各自连没连，以及设备、连接应用、项目和能力的数目；并把它会动的形象画在 App 的页面上',
+  'extensions.permissionsAssistantOpen': '你点按时，还没有助理就打开开通页；有了之后为你选定会话里的助理打开开通、搬家、关闭、设置、项目和能力页面，或推进开通步骤',
+  'extensions.permissionsAssistantRename': '给你选定会话里的助理改名',
+  'extensions.permissionsChatWork': '查看你的助理派出的任务（标题和进度），并在它的面板里显示某个任务的对话，它看不到这段对话',
+  'extensions.permissionsChatVoiceNotesRecord': '你点了才用麦克风录语音笔记，交给你选定的那条会话里的 agent；App 拿不到录音',
   'extensions.unreadBindingChoose': '选择会话',
   'extensions.unreadBindingSearch': '搜索会话',
   'extensions.unreadBindingEmpty': '暂无可选会话',
-  'extensions.unreadBindingTitle': '允许读取一条会话的未读状态',
-  'extensions.unreadBindingSave': '允许读取未读状态',
+  'extensions.unreadBindingTitle': '选定这个 App 能用的那一条会话',
+  'extensions.unreadBindingSave': '允许使用这条会话',
   'extensions.unreadBindingRemove': '移除会话绑定',
   'extensions.unreadBindingFailed': '未能更新会话绑定',
   'extensions.unreadBindingReadFailed': '未能读取可选会话',
@@ -1544,6 +1580,7 @@ const zhCNCoreMessages: Record<CoreSessionMessageKey, string> = {
   'extensions.unpinFromRail': '从左栏移走',
   'extensions.dockFailed': '左栏没能改动',
   'extensions.turnOnInSettings': '已停用：到「App」里启用',
+  'extensions.assistantPreparing': '正在准备你的咕咕…',
   // ── extensions: 云端市场的版本(#5410) ───────────────────────────────────
   'extensions.groupUpdate': '有更新',
   'extensions.marketShown': '已显示 {shown} / {total}',
@@ -2325,6 +2362,7 @@ export const enUSMessages = {
   ...enUSRemotePortMessages,
   ...enUSSubscriptionMessages,
   ...enUSAgentStatusMessages,
+  ...enUSResourceKindMessages,
   ...enUSAppSettingsMessages,
   ...enUSSessionScheduleMessages,
   ...enUSThemeMessages,
@@ -2349,6 +2387,7 @@ export const zhCNMessages: Record<SessionMessageKey, string> = {
   ...zhCNRemotePortMessages,
   ...zhCNSubscriptionMessages,
   ...zhCNAgentStatusMessages,
+  ...zhCNResourceKindMessages,
   ...zhCNAppSettingsMessages,
   ...zhCNSessionScheduleMessages,
   ...zhCNThemeMessages,

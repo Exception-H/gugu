@@ -9,6 +9,11 @@ const mocks = vi.hoisted(() => ({
   owner: 'owner', online: true, stored: [] as ProvisionResumeRecord[],
   start: vi.fn(), status: vi.fn(), cancel: vi.fn(), preflight: vi.fn(), provision: vi.fn(), resume: vi.fn(), models: vi.fn(), ipc: vi.fn(),
 }))
+// The rules main answers the window with (#1931): the built-in copy here.
+vi.mock('../../../../apps/desktop/src/lib/assistantSetupRules', async () => {
+  const { NEUTRAL_ASSISTANT_RULES } = await import('../assistantRules/neutralRules')
+  return { assistantSetupRules: async () => NEUTRAL_ASSISTANT_RULES }
+})
 vi.mock('../../../../apps/desktop/src/mobile/agent-watch/sessionpage-rpc', () => ({ machineRpc: (deviceId: string) => {
   if (deviceId !== 'server') throw new Error('wrong target')
   return { assistantHome: { start: mocks.start, status: mocks.status, cancel: mocks.cancel, preflight: mocks.preflight } }
