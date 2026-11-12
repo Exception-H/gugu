@@ -28,5 +28,5 @@ export function excerpt(text: string, max: number): string {
 }
 
 function escapeInline(text: string): string {
-  return text.replace(/([\\`*_[\]<>#|~])/g, '\\$1')
+  return text.replace(/[\r\n]+/g, ' ').replace(/([\\`*_[\]<>#|~])/g, '\\$1')
 }
