@@ -50,7 +50,7 @@ describe('PtySessionRegistry input', () => {
   it('非预期写入错误不吞:照旧抛给调用方,而且每次都记', () => {
     const registry = new PtySessionRegistry();
     const write = vi.fn(() => {
-      throw new Error('unexpected write failure: EINVAL');
+      throw new Error('Napi::Error: unexpected write failure');
     });
     registry.register('p:t:c', fakePty(write), { size: { cols: 80, rows: 24 } });
     const input = f.handlers.get(ptyInputChannel)!;

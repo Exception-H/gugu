@@ -34,8 +34,11 @@ export interface PtySessionMetadata {
  * (`…\x1b[?25` | `l…`),截下的前半截接到下一块前面一起认。
  */
 const FLUSH_INTERVAL_MS = 16;
-/** 与 LocalPtySession.resize() 吞的是同一类「这个 PTY 已经没了」的错误。 */
-const PTY_CLOSED_ERROR = /EBADF|ENOTTY|EIO|EPIPE|ioctl\(2\) failed|not open|closed pty|Cannot write|Napi::Error/;
+/**
+ * 只认「这个 PTY 已经没了」的确切证词:errno / node-pty 的关闭文案。
+ * ❌ 加 `Napi::Error` 这类通用包装前缀:它也会包住非关闭类错误,一并吞掉就把真故障藏了。
+ */
+const PTY_CLOSED_ERROR = /EBADF|ENOTTY|EIO|EPIPE|not open|closed pty|Cannot write/;
 const FRAME_TOGGLE = /\x1b\[\?(2026|25)([hl])/g;
 /** 一块末尾若是这两种序列之一的前半截(还差最后一个字母),返回它,接到下一块前面。 */
 function trailingTogglePrefix(text: string): string {
