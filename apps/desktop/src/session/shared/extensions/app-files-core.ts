@@ -63,7 +63,7 @@ import { readUserSettingsConfig, updateUserSettingsConfig, type VersionedSetting
 /** A refusal of `gugu.files`: `code` and `detail` are what an App branches on (bridge-protocol.ts `ErrorDetail`), the message is for people. */
 export class AppFileError extends Error {
   constructor(
-    readonly code: 'denied' | 'invalid' | 'failed' | 'not-found' | 'elsewhere' | 'ambiguous' | 'too-large' | 'content-changed' | 'name-taken' | 'unavailable' | 'stale-version',
+    readonly code: 'denied' | 'invalid' | 'failed' | 'not-found' | 'ambiguous' | 'too-large' | 'content-changed' | 'name-taken' | 'unavailable' | 'stale-version',
     message: string,
     readonly detail?: ErrorDetail,
   ) {
@@ -402,6 +402,21 @@ async function projectFoldersOfChat(token: string, viewerId: string, chatId: str
       online: !!machine && isDeviceOnline(machine.status as Parameters<typeof isDeviceOnline>[0]),
     }));
   });
+}
+
+/**
+ * One project folder on one of the reader's machines, as the account records it (the same rows as above): the project it
+ * is in there and its path there (that machine's own path). Null when the account no longer records it.
+ */
+export async function recordedProjectFolder(token: string, viewerId: string, folder: { deviceId: string; workspaceId: string }): Promise<{ projectId: string; path: string } | null> {
+  const identity = createGuguSupabaseClient({ schema: 'identity', headers: { Authorization: `Bearer ${token}` } });
+  const { data, error } = await identity.from('device_projects').select('local_project_id, folders').eq('user_id', viewerId).eq('device_id', folder.deviceId);
+  if (error) throw new AppFileError('failed', error.message);
+  for (const row of (data ?? []) as { local_project_id: string; folders: { workspace_id: string; path: string }[] }[]) {
+    const found = row.folders.find((each) => each.workspace_id === folder.workspaceId);
+    if (found) return { projectId: row.local_project_id, path: found.path };
+  }
+  return null;
 }
 
 export async function extensionChatOf(

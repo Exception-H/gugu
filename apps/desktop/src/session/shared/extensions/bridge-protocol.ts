@@ -222,7 +222,7 @@ export interface ExtensionMember {
  * machine it is on) or a project's root folder. `id` is what `gugu.files` names it by (`{ workspace: id }`).
  */
 export interface ExtensionWorkspace {
-  /** `session:<id>` or `project:<id>`: the place `gugu.files.list({ workspace: id })` lists. */
+  /** `session:<id>`, `project:<id>` or `folder:<device>/<workspace>`: the place `gugu.files.list({ workspace: id })` lists. */
   id: string;
   /** The session it is the working copy of; absent for a project's root folder. */
   sessionId?: string;
@@ -244,6 +244,8 @@ export interface ExtensionWorkspace {
    */
   deviceId?: string;
   deviceLabel?: string;
+  /** A project folder on another computer (`folder:`): only read from here, as the chat's folders say it. */
+  thisMachine?: false;
 }
 
 /**

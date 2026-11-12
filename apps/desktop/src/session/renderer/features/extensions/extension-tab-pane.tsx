@@ -1,5 +1,5 @@
 import { ExtensionGuestBinding, type ExtensionGuestTarget } from './extension-guest-binding';
-import { projectWorkspace, sessionWorkspace, WORKSPACE_APP_ID } from '@shared/extensions/app-runtime-protocol';
+import { sessionWorkspace, WORKSPACE_APP_ID } from '@shared/extensions/app-runtime-protocol';
 import { useTaskConversation, useTaskProjectChat } from '@/lib/taskConversation';
 import { useCallback, useMemo, useContext, useEffect, useRef, useState } from 'react';
 import { TabLayerShownContext } from '@renderer/features/tabs/retained-tab-content';
@@ -44,7 +44,7 @@ export function ExtensionTabPane({
   navigation,
   filePath,
   byHost,
-  projectId,
+  workspace: fileWorkspace,
   chatId,
   resourceChat,
   itemId,
@@ -66,8 +66,8 @@ export function ExtensionTabPane({
   filePath?: string;
   /** `filePath` was opened by the host for an agent or an App (`open_in_tab`, `files.openWith`), not by the person. */
   byHost?: boolean;
-  /** G1 With `filePath` and no session: the project whose folder the file is in (a page opened beside another). */
-  projectId?: string;
+  /** G1 With `filePath` and no session: the working copy (a project's folder, on any machine) the file is in (a page opened beside another). */
+  workspace?: string;
   /** Drawn for a chat (a chat's tab in a window of its own), and the chat file it was opened for. */
   chatId?: string;
   resourceChat?: string;
@@ -82,7 +82,7 @@ export function ExtensionTabPane({
   conversationRef.current = chatId ?? taskConversation ?? taskProjectChat;
   const resourceChatRef = useRef(resourceChat);
   resourceChatRef.current = resourceChat ?? taskProjectChat ?? undefined;
-  const workspace = sessionId ? sessionWorkspace(sessionId) : projectId && filePath ? projectWorkspace(projectId) : null;
+  const workspace = sessionId ? sessionWorkspace(sessionId) : fileWorkspace && filePath ? fileWorkspace : null;
   const [surface, setSurface] = useState<ExtensionSurface | null>(null);
   const [failure, setFailure] = useState<SurfaceFailure | null>(null);
   const containerRef = useRef<HTMLDivElement | null>(null);
