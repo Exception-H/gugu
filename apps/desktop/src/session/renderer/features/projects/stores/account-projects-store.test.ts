@@ -106,6 +106,16 @@ describe('accountProjectsStore reading', () => {
     expect(store.localDeviceId).toBeNull();
   });
 
+  // An offline reload: the list read fails, but which machine this is is this machine's own fact — its projects still
+  // match their bindings (otherwise this computer's project rows turn into folderless group rows and reorder).
+  it('knows this computer even when the first list read fails', async () => {
+    const store = new AccountProjectsStore();
+    read.list.mockRejectedValueOnce(new Error('fetch failed'));
+    await store.refresh();
+    expect(store.status).toBe('error');
+    expect(store.localDeviceId).toBe('this-computer');
+  });
+
   // owner asked whether the account list makes the client depend on the backend: reloading while it is unreachable keeps
   // the account's last list (marked by the read error), not an empty project section.
   it('a reload while the backend is unreachable starts from this account\'s last list and says the read failed', async () => {

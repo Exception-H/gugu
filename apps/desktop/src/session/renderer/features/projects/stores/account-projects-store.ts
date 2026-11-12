@@ -107,15 +107,16 @@ export class AccountProjectsStore {
       return this.inFlight;
     }
     const generation = this.generation;
-    const read = Promise.all([
-      import('@/lib/deviceProjects').then((cloud) => cloud.listMyAccountProjects()),
-      Promise.resolve(platform.getLocalDeviceSelfSnapshot?.()).then((self) => self?.device_id ?? null, () => this.localDeviceId),
-    ])
-      .then(([list, localDeviceId]) => {
+    // Which machine this is comes from this machine, not from the account list: read it on its own, so a list read that
+    // fails (offline, a reload over the cached list) still knows which bindings are this computer's.
+    const self = Promise.resolve(platform.getLocalDeviceSelfSnapshot?.()).then((self) => {
+      if (generation === this.generation && self?.device_id) runInAction(() => { this.localDeviceId = self.device_id; });
+    }, (error: unknown) => log.warn('[projects] this computer\'s device id could not be read', error));
+    const read = import('@/lib/deviceProjects').then((cloud) => cloud.listMyAccountProjects())
+      .then((list) => {
         if (generation !== this.generation) return;
         runInAction(() => {
           this.list = list;
-          this.localDeviceId = localDeviceId;
           this.status = 'ready';
           this.error = null;
         });
@@ -137,8 +138,9 @@ export class AccountProjectsStore {
           void this.refresh();
         }
       });
-    this.inFlight = read;
-    return read;
+    const both = Promise.all([self, read]).then(() => undefined);
+    this.inFlight = both;
+    return both;
   }
 
   /** 登出 / 换账号:上一个账号的项目一条不留,在途的那次读回来也不要。 */
