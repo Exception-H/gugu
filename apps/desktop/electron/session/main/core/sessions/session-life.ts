@@ -1,4 +1,4 @@
-import { hydrateLife, OUTCOME_UNKNOWN, shouldStartOnHydrate, step } from '@gugu/core/local/session-life/step';
+import { hydrateLife, OUTCOME_UNKNOWN, shouldStartAfterOutage, shouldStartOnHydrate, step } from '@gugu/core/local/session-life/step';
 import { STAGES } from '@gugu/core/local/session-life/types';
 import { isSqliteBusy } from '@gugu/core/shared/sqliteBusy';
 import { toSerializedError } from '@gugu/session-shared/result';
@@ -275,6 +275,19 @@ export class SessionLife {
     if (this.account === null) throw new Error('Sign in before starting this session');
     if (this.leaving) throw new Error('Sign-out is in progress; this session cannot start now');
     this.send(sessionId, { k: 'start', origin });
+  }
+
+  /** The backend is back: every session a start failure left holding rows starts again; `before` runs first for each. */
+  startAfterOutage(before: (sessionId: string) => void): readonly string[] {
+    if (this.account === null || this.leaving) return [];
+    const started: string[] = [];
+    for (const [sessionId, entry] of this.entries) {
+      if (!shouldStartAfterOutage(entry.life, this.ports.store(sessionId).pending(sessionId))) continue;
+      before(sessionId);
+      this.send(sessionId, { k: 'start', origin: 'retry' });
+      started.push(sessionId);
+    }
+    return started;
   }
 
   interrupt(sessionId: string, event: InterruptEvent): Promise<void> {

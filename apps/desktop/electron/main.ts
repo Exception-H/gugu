@@ -361,7 +361,7 @@ import {
 import { sessionPlatformModel } from './session/main/core/sessions/platform-model-selection'
 import { providerSessionIdForSession } from './session/main/core/sessions/provider-session-id'
 import { SESSIONPAGE_SESSION_RELOAD_CHANNEL } from '../src/session/shared/core/agents/session-reload'
-import { SESSIONPAGE_PLATFORM_RETRY_CHANNEL } from '../src/session/shared/core/agents/platform-model'
+import { SESSIONPAGE_BACKEND_RECOVERED_CHANNEL, SESSIONPAGE_PLATFORM_RETRY_CHANNEL } from '../src/session/shared/core/agents/platform-model'
 import {
   VOICE_NOTE_MEETINGS_CHANNEL,
   VOICE_NOTE_MICROPHONE_CHANNEL,
@@ -2516,6 +2516,14 @@ ipcMain.handle(VOICE_NOTE_MEETINGS_CHANNEL, () => {
 handleShellChannel(SESSIONPAGE_PLATFORM_RETRY_CHANNEL, (_event, sessionId: unknown) => {
   if (typeof sessionId !== 'string' || !sessionId.trim()) throw new Error('session id is required for a platform retry')
   clearPlatformIssueBackoff(sessionId.trim())
+})
+
+// 后端恢复(渲染层同步节拍失败过又拉通):起不来、还压着消息的会话各自重来一次,先清它的取票退避 —— 和人点重试同一条路。
+ipcMain.handle(SESSIONPAGE_BACKEND_RECOVERED_CHANNEL, () => {
+  if (!sessionLifeBooted) return []
+  const started = bootedSessionLife().startAfterOutage(clearPlatformIssueBackoff)
+  if (started.length) createLogger('session-life').info({ started }, 'backend recovered; restarting failed sessions')
+  return started
 })
 
 /**
