@@ -109,7 +109,7 @@ export function assistantRuleSlots(template: string): string[] {
 export function renderAssistantRule(template: string, values: Readonly<Record<string, string>>): string {
   return template.replace(SLOT, (_, name: string) => {
     const value = values[name]
-    if (value === undefined) throw new Error(`assistant rule slot {{${name}}} has no value here`)
+    if (!Object.hasOwn(values, name) || value === undefined) throw new Error(`assistant rule slot {{${name}}} has no value here`)
     return value
   })
 }

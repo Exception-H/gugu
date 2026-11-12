@@ -75,7 +75,8 @@ export function widgetIdOf(message: { id: string; content: string | null | undef
 export function serializeWidgetMessage(widget: WidgetMessage): string {
   const error = widgetMessageError(widget)
   if (error) throw new Error(error)
-  const content = JSON.stringify(widget)
+  const { v, text, ...rest } = widget
+  const content = JSON.stringify({ v, text, ...rest })
   const size = bytes(content)
   if (size > WIDGET_CONTENT_MAX_BYTES) throw new Error(`content is ${size} UTF-8 bytes; maximum is ${WIDGET_CONTENT_MAX_BYTES}`)
   return content

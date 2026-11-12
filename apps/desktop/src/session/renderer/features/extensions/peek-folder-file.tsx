@@ -1,5 +1,7 @@
 import { workspaceSession } from '@shared/extensions/app-runtime-protocol';
+import { observer } from 'mobx-react-lite';
 import { useEffect, useState } from 'react';
+import { workspaceReachLabel } from '@renderer/features/sessions/workspace-backend/workspace-surface';
 import type { PeekTarget } from '@shared/extensions/app-runtime-protocol';
 import { OpenWithSystemButton } from '@renderer/features/sessions/file-view/open-with-system-button';
 import { rpc } from '@renderer/lib/ipc';
@@ -8,13 +10,20 @@ import { WorkspaceFileView } from '@renderer/features/sessions/file-view/workspa
 import { ExtensionTabPane } from './extension-tab-pane';
 import { pickSessionOpener, type SessionOpener } from './open-with';
 
-type LocalPeek = Extract<PeekTarget, { kind: 'local' }>;
+type FolderPeek = Extract<PeekTarget, { kind: 'folder' }>;
 
 /**
- * G1 A file of a folder on this computer beside an App's page: the App that claims it, as a click in a session's files
- * picks it (`pickSessionOpener`) — else the preview a session's file tab draws. Nothing here is a second viewer.
+ * G1 A file of a project's folder beside an App's page: the App that claims it, as a click in a session's files picks it
+ * (`pickSessionOpener`) — else the preview a session's file tab draws. Nothing here is a second viewer. A folder on another
+ * machine is the same: its project's calls go to that machine (machine-routing), and while it cannot be reached the
+ * workspace's own line says why (offline since, sign in, update), as a session's files there say it.
  */
-export function PeekLocalFile({ target, tabId }: { target: LocalPeek; tabId: string }) {
+export const PeekFolderFile = observer(function PeekFolderFile({ target, tabId }: { target: FolderPeek; tabId: string }) {
+  const unreachable = target.deviceId ? workspaceReachLabel(target.projectId) : null;
+  return unreachable ? <Unread target={target} why={unreachable} /> : <Reachable target={target} tabId={tabId} />;
+});
+
+function Reachable({ target, tabId }: { target: FolderPeek; tabId: string }) {
   const held = useHeldWorkspace(target);
   const [opener, setOpener] = useState<SessionOpener | null>(null);
   useEffect(() => {
@@ -33,7 +42,7 @@ export function PeekLocalFile({ target, tabId }: { target: LocalPeek; tabId: str
         extensionId={extensionId}
         tabKind={opener.tabKind}
         sessionId={workspaceSession(target.place)}
-        {...(workspaceSession(target.place) ? {} : { projectId: target.projectId })}
+        {...(workspaceSession(target.place) ? {} : { workspace: target.place.workspace })}
         tabId={tabId}
         filePath={target.path}
       />
@@ -57,7 +66,7 @@ export function PeekLocalFile({ target, tabId }: { target: LocalPeek; tabId: str
  * A project's folder is read through its workspace, held while the file is shown — as the new-task panel holds it with no
  * session there. A session's is held by its session. 'ready', why not, or null while asking.
  */
-function useHeldWorkspace(target: LocalPeek): 'ready' | string | null {
+function useHeldWorkspace(target: FolderPeek): 'ready' | string | null {
   const project = workspaceSession(target.place) ? null : target.projectId;
   const { workspaceId } = target;
   const [held, setHeld] = useState<'ready' | string | null>(project ? null : 'ready');
@@ -84,11 +93,11 @@ function useHeldWorkspace(target: LocalPeek): 'ready' | string | null {
   return held;
 }
 
-function Unread({ target, why }: { target: LocalPeek; why?: string }) {
+function Unread({ target, why }: { target: FolderPeek; why?: string }) {
   return (
     <div className="flex h-full flex-col items-center justify-center p-4 text-center text-sm text-foreground-muted">
       <p>{why ?? target.name}</p>
-      <OpenWithSystemButton absolutePath={target.absolutePath} workspace={target} />
+      {target.deviceId ? null : <OpenWithSystemButton absolutePath={target.absolutePath} workspace={target} />}
     </div>
   );
 }

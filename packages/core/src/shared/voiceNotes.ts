@@ -220,7 +220,9 @@ export function formatClock(ms: number): string {
 const LINE = /^\s*\[(\d+):(\d{2})(?::(\d{2}))?\]\s*([^：:\n]{1,40}?)\s*[：:]\s*(.*)$/
 
 function stampMs(a: string, b: string, c: string | undefined): number {
-  return c === undefined ? (Number(a) * 60 + Number(b)) * 1000 : (Number(a) * 3600 + Number(b) * 60 + Number(c)) * 1000
+  if (Number(b) >= 60 || c !== undefined && Number(c) >= 60) return NaN
+  const time = c === undefined ? (Number(a) * 60 + Number(b)) * 1000 : (Number(a) * 3600 + Number(b) * 60 + Number(c)) * 1000
+  return Number.isSafeInteger(time) ? time : NaN
 }
 
 /** 「说话人1」「Speaker 2」「说话人 3」都写成「说话人 N」;别的名字(助理认出来的人名)原样留。 */
@@ -239,7 +241,7 @@ export function parseModelTranscript(text: string, offsetMs: number): Transcript
     const line = raw.trim()
     if (!line || /^```/.test(line)) continue
     const m = LINE.exec(line)
-    if (m) {
+    if (m && Number.isFinite(stampMs(m[1], m[2], m[3]))) {
       const body = m[5].trim()
       if (!body) continue
       out.push({ startMs: offsetMs + stampMs(m[1], m[2], m[3]), speaker: normalizeSpeaker(m[4]), text: body })
@@ -256,7 +258,7 @@ export function parseModelTranscript(text: string, offsetMs: number): Transcript
  * 模型在静音 / 噪音上会编字(recording-archive 的读数):一秒超过 25 个字、或同一句来回重复,就整段不要。
  */
 export function looksHallucinated(lines: readonly TranscriptLine[], durationMs: number): boolean {
-  const chars = lines.reduce((n, l) => n + l.text.length, 0)
+  const chars = lines.reduce((n, l) => n + Array.from(l.text).length, 0)
   if (durationMs > 0 && chars / (durationMs / 1000) > 25) return true
   const counts = new Map<string, number>()
   for (const l of lines) {
@@ -269,17 +271,22 @@ export function looksHallucinated(lines: readonly TranscriptLine[], durationMs: 
 }
 
 export function renderTranscript(lines: readonly TranscriptLine[]): string {
-  return `${lines.map((l) => `[${formatTimestamp(l.startMs)}] ${l.speaker}：${l.text.replace(/\r?\n/g, '\n  ')}`).join('\n')}\n`
+  return `${lines.map((l) => `[${formatTimestamp(l.startMs)}] ${l.speaker}：${l.text.replace(/\r?\n/g, '\n\t')}`).join('\n')}\n`
 }
 
 export function parseTranscript(markdown: string): TranscriptLine[] {
   const out: TranscriptLine[] = []
   for (const raw of markdown.replace(/\r\n/g, '\n').split('\n')) {
-    if (raw.startsWith('  ') && out.length > 0) { out[out.length - 1].text += '\n' + raw.slice(2); continue }
+    // 新写入的续行用制表符区分，避免正文里的时间戳被当成新段。
+    if (raw.startsWith('\t') && out.length > 0) { out[out.length - 1].text += '\n' + raw.slice(1); continue }
     const m = LINE.exec(raw.trim())
-    if (m && m[5].trim()) out.push({ startMs: stampMs(m[1], m[2], m[3]), speaker: m[4].trim(), text: m[5].trim() })
+    if (m) {
+      const startMs = stampMs(m[1], m[2], m[3])
+      if (Number.isFinite(startMs)) out.push({ startMs, speaker: m[4].trim(), text: m[5].trim() })
+    }
   }
-  return out
+  // 首行可为空，读完续行后再丢弃完全没有正文的段。
+  return out.filter((line) => line.text.trim().length > 0)
 }
 
 export function speakersOf(lines: readonly TranscriptLine[]): string[] {
@@ -389,7 +396,7 @@ export function summaryRequestText(input: {
     ? input.createdAt
     : `${at.getMonth() + 1}月${at.getDate()}日 ${pad(at.getHours())}:${pad(at.getMinutes())}`
   // 会议名来自日历(谁发来的邀请都能写):压成一行、截短、当引用的数据,❌ 让它读起来像这段话本身。
-  const title = (input.meetingTitle ?? '').replace(/\s+/g, ' ').replace(/[「」]/g, '').trim().slice(0, 80)
+  const title = Array.from((input.meetingTitle ?? '').replace(/\s+/g, ' ').replace(/[「」]/g, '').trim()).slice(0, 80).join('')
   const meeting = title ? `,日历上这场会叫「${title}」` : ''
   return [
     `【咕咕 · 语音笔记】这是咕咕 App 自动交给你的活,不是${owner}在聊天里说的话。`,

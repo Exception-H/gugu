@@ -71,7 +71,7 @@ const NON_RENDERABLE_IMAGE_MIMES = new Set(['image/heic', 'image/heif', 'image/t
 
 /** A file name's suffix, without its dot, lowercased; `''` without one. */
 export function extensionOf(fileName) {
-  const name = String(fileName ?? '')
+  const name = String(fileName ?? '').split(/[\\/]/).pop() ?? ''
   const dot = name.lastIndexOf('.')
   return dot >= 0 ? name.slice(dot + 1).trim().toLowerCase() : ''
 }

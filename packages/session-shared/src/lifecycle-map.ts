@@ -71,7 +71,7 @@ export class LifecycleMap<T, PE, TE> {
 
   provision(id: string, run: () => Promise<Result<T, PE>>): Promise<Result<T, PE>> {
     const existing = this._active.get(id);
-    if (existing !== undefined) return Promise.resolve(ok(existing));
+    if (this._active.has(id)) return Promise.resolve(ok(existing as T));
 
     const inFlight = this._provisioning.get(id);
     if (inFlight) return inFlight;
@@ -106,12 +106,12 @@ export class LifecycleMap<T, PE, TE> {
     if (inFlight) return inFlight;
 
     const value = this._active.get(id);
-    if (value === undefined) return null;
+    if (!this._active.has(id)) return null;
 
     const promise = (async () => {
       try {
-        await this._hooks.preTeardown?.(id, value);
-        const result = await run(value);
+        await this._hooks.preTeardown?.(id, value as T);
+        const result = await run(value as T);
         if (!result.success) {
           this._teardownErrors.set(id, result.error);
         }
@@ -119,7 +119,7 @@ export class LifecycleMap<T, PE, TE> {
       } finally {
         this._active.delete(id);
         this._tearingDown.delete(id);
-        await this._hooks.postTeardown?.(id, value);
+        await this._hooks.postTeardown?.(id, value as T);
       }
     })();
 
