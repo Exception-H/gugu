@@ -4,6 +4,7 @@ import {
   GUGU_HOOK_MARKER,
   buildFlatTomlHookConfig,
   filterUserHooks,
+  flatTomlHookEntries,
   makeStdinHookCommand,
   readTomlConfig,
   writeTomlConfig,
@@ -23,9 +24,6 @@ const KIMI_HOOK_ENTRIES = [
   { event: 'SessionEnd', command: makeStdinHookCommand('stop') },
 ];
 
-const hookEntries = (config: Record<string, unknown>) =>
-  Array.isArray(config.hooks) ? (config.hooks as Record<string, unknown>[]) : [];
-
 /**
  * 旧版路径 `.kimi/config.toml`:**只更新、不创建**。无条件写会凭空造出一个「旧版 kimi-cli 安装」——
  * owner 2026-08-28 实测:咕咕的独立 home 里本来只有 `.kimi-code/`,写完之后多出一个只装着咕咕 hooks 的
@@ -36,14 +34,14 @@ async function updateLegacyHooks(fs: PluginFs, install: boolean): Promise<boolea
   if (!(await fs.read(KIMI_LEGACY_CONFIG_PATH))) return false;
   const config = await readTomlConfig(fs, KIMI_LEGACY_CONFIG_PATH);
   if (!install && !Array.isArray(config.hooks)) return false;
-  const user = filterUserHooks(hookEntries(config));
+  const user = filterUserHooks(flatTomlHookEntries(config));
   await writeTomlConfig(fs, KIMI_LEGACY_CONFIG_PATH, { ...config, hooks: install ? [...user, ...KIMI_HOOK_ENTRIES] : user });
   return true;
 }
 
 async function legacyHasGuguHooks(fs: PluginFs): Promise<boolean> {
   const config = await readTomlConfig(fs, KIMI_LEGACY_CONFIG_PATH);
-  return hookEntries(config).some((entry) => JSON.stringify(entry).includes(GUGU_HOOK_MARKER));
+  return flatTomlHookEntries(config).some((entry) => JSON.stringify(entry).includes(GUGU_HOOK_MARKER));
 }
 
 export function buildKimiHookConfig() {

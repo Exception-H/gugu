@@ -407,6 +407,11 @@ type FlatTomlHookConfigOptions = {
   stringifyEntry?: (entry: Record<string, unknown>) => string;
 };
 
+/** The entries of a flat TOML `hooks` array; none when the file has no array. */
+export function flatTomlHookEntries(config: Record<string, unknown>): Record<string, unknown>[] {
+  return Array.isArray(config.hooks) ? (config.hooks as Record<string, unknown>[]) : [];
+}
+
 /**
  * Build an `IHooksBehavior` for agents that store hooks as a flat TOML array:
  *   `[[hooks]]` / `{ hooks = [{ ... }] }`
@@ -417,10 +422,8 @@ export function buildFlatTomlHookConfig(
   options: FlatTomlHookConfigOptions = {}
 ) {
   const stringifyEntry = options.stringifyEntry ?? JSON.stringify;
-  const getHookEntries = (config: Record<string, unknown>) =>
-    Array.isArray(config.hooks) ? (config.hooks as Record<string, unknown>[]) : [];
   const hasGuguHook = (config: Record<string, unknown>) =>
-    getHookEntries(config).some((entry) => stringifyEntry(entry).includes(GUGU_HOOK_MARKER));
+    flatTomlHookEntries(config).some((entry) => stringifyEntry(entry).includes(GUGU_HOOK_MARKER));
 
   return {
     async readHooks(fs: PluginFs): Promise<HookRegistration[]> {
@@ -430,7 +433,7 @@ export function buildFlatTomlHookConfig(
     async writeHooks(fs: PluginFs, _hooks: HookRegistration[]): Promise<string[]> {
       const config = await readTomlConfig(fs, configPath);
       await options.beforeWrite?.(fs);
-      const userHooks = filterUserHooks(getHookEntries(config), stringifyEntry);
+      const userHooks = filterUserHooks(flatTomlHookEntries(config), stringifyEntry);
       await writeTomlConfig(fs, configPath, { ...config, hooks: [...userHooks, ...entries] });
       const extraPaths = (await options.afterWrite?.(fs)) ?? [];
       return [configPath, ...extraPaths];
@@ -441,7 +444,7 @@ export function buildFlatTomlHookConfig(
       if (Array.isArray(config.hooks)) {
         await writeTomlConfig(fs, configPath, {
           ...config,
-          hooks: filterUserHooks(getHookEntries(config), stringifyEntry),
+          hooks: filterUserHooks(flatTomlHookEntries(config), stringifyEntry),
         });
       }
       await options.afterDelete?.(fs);
