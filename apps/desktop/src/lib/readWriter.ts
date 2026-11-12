@@ -1,5 +1,7 @@
 import { platform } from '@/platform'
 import { chatDb } from './supabase'
+import { noteBackendWriteFailed, subscribeBackendRecovered } from './backendReachability'
+import { rendererLogger } from './log'
 
 declare const brand: unique symbol
 /** 云端会话的消息序号(chat.messages.seq,主线与话题共用一个计数)。 */
@@ -46,9 +48,44 @@ export async function readOwnerNotificationSnapshot(deviceId: string | null, con
 
 /**
  * 已读的**唯一写入口**。服务端读位单调只增,这里不守卫也不回滚:守卫(陈旧 seq 不发)与乐观 patch 的回滚
- * 归调用方(advanceReadWatermark)。失败一律抛。
+ * 归调用方(advanceReadWatermark)。失败一律抛;写不上的云端已读另外留一份,后端恢复时再写一次(见下)。
  */
 export async function writeRead(target: ReadTarget): Promise<void> {
+  try {
+    await sendRead(target)
+  } catch (error) {
+    if (target.kind !== 'native') keepUntilBackendRecovers(target)
+    throw error
+  }
+}
+
+// @@@read-outbox — 写不上的云端已读和发送失败的消息同一条恢复路:后端恢复(backendReachability 的那条边)时再写一次。
+// 读位单调只增,同一条流只留最高的那个;回执按消息记。只在内存里:重启后读位以服务端为准,打开会话时照常再读。
+// 换号之后上一个号留下的那份写不进(服务端按成员校验),响亮失败一次就丢掉。
+const unsentReads = new Map<string, ReadTarget>()
+let stopResend: (() => void) | null = null
+const readLog = rendererLogger('chat/read-writer')
+
+function readKey(target: Exclude<ReadTarget, { kind: 'native' }>): string {
+  return target.kind === 'receipt' ? `receipt:${target.messageId}:${target.readerUserId}`
+    : target.kind === 'thread' ? `thread:${target.chatId}:${target.rootId}` : `main:${target.chatId}`
+}
+
+function keepUntilBackendRecovers(target: Exclude<ReadTarget, { kind: 'native' }>): void {
+  const key = readKey(target)
+  const kept = unsentReads.get(key)
+  if (!(kept && 'seq' in kept && 'seq' in target && kept.seq >= target.seq)) unsentReads.set(key, target)
+  stopResend ??= subscribeBackendRecovered(() => {
+    const due = [...unsentReads.values()]
+    unsentReads.clear()
+    stopResend?.()
+    stopResend = null
+    for (const read of due) void writeRead(read).catch((error) => readLog.warn({ error: String(error), kind: read.kind }, 'read could not be written after the backend recovered'))
+  })
+  noteBackendWriteFailed()
+}
+
+async function sendRead(target: ReadTarget): Promise<void> {
   switch (target.kind) {
     case 'main':
       return markCloudStreamRead(target.chatId, `main:${target.chatId}`, target.seq, null)
