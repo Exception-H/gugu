@@ -1,5 +1,14 @@
-import { describe, expect, it, vi } from 'vitest';
-import { adoptLegacyScope, foldersInScope, selectedScope } from './project-device-scope';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { defaultRunMachine, foldersInScope, rememberRunMachine, resetRunMachineMemoryForTest, runMachineMemory } from './project-device-scope';
+
+const cloud = vi.hoisted(() => ({
+  remember: vi.fn(async () => ({})),
+  read: vi.fn(async () => ({ deviceId: null, projectByDevice: {}, projectByChat: {}, machineByProject: {} as Record<string, string> })),
+  self: vi.fn(async () => ({ device_id: 'this-desktop' }) as { device_id: string } | null),
+}));
+vi.mock('@/lib/agentCreateDefaults', () => ({ readAgentCreateDefaults: cloud.read, rememberAgentCreateRunMachine: cloud.remember }));
+vi.mock('@/platform', () => ({ platform: { getLocalDeviceSelfSnapshot: cloud.self } }));
+const defaults = (machineByProject: Record<string, string>) => ({ deviceId: null, projectByDevice: {}, projectByChat: {}, machineByProject });
 import type { ProjectFoldersState, ShownFolder } from './project-folders';
 
 const folder = (projectId: string): ShownFolder => ({ projectId, workspaceId: projectId, path: '/same/path', kind: 'root', branch: null, attachedAt: null, sessionIds: [], offline: projectId === 'remote', deviceId: projectId === 'remote' ? 'device-b' : null });
@@ -8,14 +17,72 @@ const remote = folder('remote');
 const state: ProjectFoldersState = { folders: [local, remote], chosen: local, fresh: undefined, loadError: false, unanswered: [], choose: vi.fn(), reload: vi.fn(), attach: vi.fn(), detach: vi.fn() };
 const deviceOf = (id: string) => id === 'remote' ? 'device-b' : null;
 
-describe('project device scope', () => {
-  it('all devices includes devices subsequently linked to the project', () => {
-    expect(selectedScope(null, ['local', 'device-b', 'device-c'])).toEqual(['local', 'device-b', 'device-c']);
-    expect(selectedScope(['local'], ['local', 'device-b'])).toEqual(['local']);
+describe('remembered run machine (account-wide)', () => {
+  // Round-2 A/B R4-b: keys other devices cannot read (a local project id, the phone's no-project key) were stored forever.
+  beforeEach(() => {
+    resetRunMachineMemoryForTest();
+    cloud.remember.mockClear();
+    vi.useRealTimers();
   });
-  it('discards stale device IDs without producing an unusable empty scope', () => {
-    expect(selectedScope(['removed', 'device-b'], ['local', 'device-b'])).toEqual(['device-b']);
-    expect(selectedScope(['removed'], ['device-b'])).toEqual(['device-b']);
+
+  // #2412 review ③: a failed read must not leave the memory empty for good.
+  it('reads again after a failed read', async () => {
+    cloud.read.mockRejectedValueOnce(new Error('offline')).mockResolvedValueOnce(defaults({ 'chat-work': 'gpu' }));
+    runMachineMemory.subscribe(() => {})();
+    await vi.waitFor(() => expect(cloud.read).toHaveBeenCalledTimes(1));
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    runMachineMemory.subscribe(() => {})();
+    await vi.waitFor(() => expect(runMachineMemory.current()).toEqual({ 'chat-work': 'gpu' }));
+  });
+
+  // #2412 review ③: a running desktop sees a choice made on the phone later; this computer reads back as 'local'.
+  it('re-reads after a while, and shows this computer as local', async () => {
+    cloud.read.mockReset();
+    cloud.read.mockResolvedValueOnce(defaults({ 'chat-work': 'gpu' })).mockResolvedValueOnce(defaults({ 'chat-work': 'this-desktop' }));
+    const now = vi.spyOn(Date, 'now');
+    now.mockReturnValue(1_000_000);
+    runMachineMemory.subscribe(() => {})();
+    await vi.waitFor(() => expect(runMachineMemory.current()).toEqual({ 'chat-work': 'gpu' }));
+    runMachineMemory.subscribe(() => {})();
+    expect(cloud.read).toHaveBeenCalledTimes(1);
+    now.mockReturnValue(1_000_000 + 16_000);
+    runMachineMemory.subscribe(() => {})();
+    await vi.waitFor(() => expect(runMachineMemory.current()).toEqual({ 'chat-work': 'local' }));
+    now.mockRestore();
+  });
+
+  // #2412 review ③: no device id at the first read must not stop "this computer" from being remembered later.
+  it('remembers this computer once its device id is known, even if it was not at first', async () => {
+    cloud.self.mockResolvedValueOnce(null);
+    runMachineMemory.subscribe(() => {})();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    rememberRunMachine('chat-site', null);
+    await vi.waitFor(() => expect(cloud.remember).toHaveBeenCalledWith('chat-site', 'this-desktop'));
+    expect(runMachineMemory.current()['chat-site']).toBe('local');
+  });
+
+  it('remembers only under a project group id, and writes it to the account', async () => {
+    rememberRunMachine(undefined, 'gpu');
+    rememberRunMachine('chat-work', 'gpu');
+    await vi.waitFor(() => expect(cloud.remember).toHaveBeenCalledWith('chat-work', 'gpu'));
+    expect(cloud.remember).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('project device scope', () => {
+  // DESIGN「新建任务」默认机器:上次那台且在线 → 本机(有文件夹)→ 在线的第一台 → 都离线才回上次那台 → 第一台。
+  it('defaults to the last machine only while it is online, else this computer, else the first online one', () => {
+    const local = { key: 'local', online: true };
+    const gpu = { key: 'gpu', online: true };
+    const juma = { key: 'juma', online: false };
+    expect(defaultRunMachine([local, gpu], 'gpu')).toBe('gpu');
+    expect(defaultRunMachine([local, juma], 'juma')).toBe('local');
+    expect(defaultRunMachine([juma, gpu], undefined)).toBe('gpu');
+    expect(defaultRunMachine([juma, { key: 'wen', online: false }], 'wen')).toBe('wen');
+    expect(defaultRunMachine([juma], undefined)).toBe('juma');
+    // A machine without this project's folder is never a default, whatever was saved.
+    expect(defaultRunMachine([gpu], 'mac1')).toBe('gpu');
+    expect(defaultRunMachine([], 'gpu')).toBeNull();
   });
   it('a remote-only scope chooses that remote folder, including when it is offline', () => {
     const scoped = foldersInScope(state, ['device-b'], deviceOf);
@@ -34,13 +101,6 @@ describe('project device scope', () => {
     const moved = { ...remote, projectId: 'local' };
     const scoped = foldersInScope({ ...state, folders: [local, moved] }, ['device-b'], () => null);
     expect(scoped.folders).toEqual([moved]);
-  });
-  it('the scope saved under the old row id is read once, moved to the project group key, and the old key dropped', () => {
-    expect(adoptLegacyScope({ 'row-1': ['device-b'], other: null }, 'chat-1', 'row-1')).toEqual({ other: null, 'chat-1': ['device-b'] });
-    // Already moved, nothing under the old key, or no group yet (same key): nothing to do.
-    expect(adoptLegacyScope({ 'chat-1': ['local'], 'row-1': ['device-b'] }, 'chat-1', 'row-1')).toBeNull();
-    expect(adoptLegacyScope({}, 'chat-1', 'row-1')).toBeNull();
-    expect(adoptLegacyScope({ 'row-1': ['device-b'] }, 'row-1', 'row-1')).toBeNull();
   });
   it('a scoped device that has not answered yet is unknown (loading), not a device without folders', () => {
     const waiting = { ...state, folders: [local], chosen: local, unanswered: ['remote'] };

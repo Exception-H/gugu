@@ -314,7 +314,7 @@ import { MAIN_UI_EVENTS } from '../src/lib/mainUiEvents'
 import { createSessionpageIdentityHost } from './sessionpage/sessionpage-identity-host'
 import { createSessionpageProjectGroupHost, ensureProjectNoticeAccess } from './sessionpage/sessionpage-project-group-binding'
 import { prepareProjectAgentNotice } from './sessionpage/project-agent-notice'
-import { onProjectGroupMappingChanged } from './sessionpage/sessionpage-project-groups'
+import { forgetProjectGroupId, onProjectGroupMappingChanged } from './sessionpage/sessionpage-project-groups'
 import { readSessionpageOpenTarget } from './sessionpage/sessionpage-agent-mapping'
 import {
   clearLocalSessionDeliveryFailuresForTest,
@@ -4839,6 +4839,8 @@ app.whenReady().then(async () => {
         : result
       if (record.action === 'devices') return crossMachine().listDeviceRows()
       if (record.action === 'activity_list') {
+        // A local project id is refused here, naming the project's id, before the query fans out to every device.
+        await emdash.outboundSessionAction(record as { action: string })
         const caller = await remoteCaller(auth, context)
         return listActivity(record, { scope: `${auth.userId}:${context.sessionId}`,
           devices: () => crossMachine().activityDevices(),
@@ -4903,6 +4905,7 @@ app.whenReady().then(async () => {
         return hoistDevicePictures(result)
       }
       if (record.action === 'project_add_device') {
+        await emdash.outboundSessionAction(record as { action: string })
         const caller = await remoteCaller(auth, context)
         const onDevice = async (device: string | undefined, step: Record<string, unknown>) =>
           device && !(await crossMachine().isThisDevice(device))
@@ -4914,7 +4917,7 @@ app.whenReady().then(async () => {
       if (typeof record.device === 'string') {
         const { device, ...rest } = record
         if (!(await crossMachine().isThisDevice(device as string))) {
-          return projectResult(await crossMachine().runOnDevice(device as string, await remoteCaller(auth, context), rest as { action: string }, signal))
+          return projectResult(await crossMachine().runOnDevice(device as string, await remoteCaller(auth, context), await emdash.outboundSessionAction(rest as { action: string }), signal))
         }
         record = rest
       }
@@ -6454,8 +6457,14 @@ app.whenReady().then(async () => {
           deviceId: () => localDeviceId(),
           client: (accessToken) => makeIdentityClient(accessToken) as unknown as DeviceProjectsRpcClient,
           records: () => emdash.listDeviceProjectRecords(),
+          dropBindings: async (ownerUserId, localProjectIds) => {
+            for (const projectId of localProjectIds) await forgetProjectGroupId(projectId, ownerUserId)
+          },
           warn: (message, fields) => createLogger('device-projects').warn(fields, message),
-          onPublished: () => emdash.projectFoldersPublished(),
+          onPublished: () => {
+            emdash.projectFoldersPublished()
+            emdash.deviceProjectsPublished()
+          },
         })
         try {
           emdash.onDeviceProjectsMaybeChanged(() => deviceProjectsPublisher?.notify())

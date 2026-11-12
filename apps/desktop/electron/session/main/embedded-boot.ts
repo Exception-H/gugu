@@ -187,6 +187,7 @@ import { providerConsumesStartupPrompt } from '@gugu/session-core/agents/plugins
 import { pluginRegistry, type AgentProviderId } from '@gugu/session-plugins/agents'
 import {
   localSessionIds,
+  outboundSessionAction,
   resolveCreateModelChoice,
   runRemoteSessionAction,
   runSessionAction,
@@ -264,6 +265,7 @@ export {
   adoptLegacyTaskNames,
   runRemoteSessionAction,
   runSessionAction,
+  outboundSessionAction,
   sessionCallerFacts,
   type SessionAction,
   type SessionCallerContext,

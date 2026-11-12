@@ -1,15 +1,16 @@
 import { comparer, observable, reaction, runInAction } from 'mobx';
 import type { ProjectGroupBinding } from '@shared/core/projects/project-groups';
-import { projectGroupBindingChangedChannel } from '@shared/core/projects/projectEvents';
+import { deviceProjectsPublishedChannel, projectGroupBindingChangedChannel } from '@shared/core/projects/projectEvents';
 import { events, onMachineEvent, rpcOn } from '@renderer/lib/ipc';
 import { onEachMachine } from '@renderer/lib/machine-clients';
 import { machineRegistry } from '@renderer/lib/machine-routing';
 import { log } from '@renderer/utils/logger';
 import { publishProjectGroupChats } from './project-group-chats-bridge';
+import { accountProjectsStore } from './account-projects-store';
 
 /**
  * 每个本地项目绑的项目群(这台电脑 + 每台连着的机器各自回答),#7341 第二步。
- * 绑在同一个群上的本地项目 = 同一个项目:侧栏合成一行、项目首页汇总各台机器的文件夹(project-group-layout.ts)。
+ * 群操作(绑定 / 解绑 / 建群)、任务卡、项目首页的文件夹读它;侧栏有哪些项目、一个本地项目归哪个项目读 accountProjectsStore。
  *
  * 没连着的机器(离线、太旧):那台的绑定照账号上记着的那份(#113,由远程主机那边交进来,见 applyBindings)——
  * 离线机器上的项目照样并在原来那一行里(product spec:机器离线时文件夹照样列在项目里),❌ 一掉线就拆成单独一行。
@@ -75,9 +76,18 @@ export class ProjectGroupsStore {
         { fireImmediately: true }
       );
       // 哪台机器上的绑定变了(并进来、撤销、agent 挂的):在那台机器上订,就重读那一台。
-      const offLocal = events.on(projectGroupBindingChangedChannel, () => void this.refresh(null));
+      // 绑定变了:账号上的项目跟着重读。这台电脑的项目记上账号(建了项目、绑了群之后的那次发布,断网时是重连后那次)再读一次:
+      // 它们在那一刻才进 list_my_projects。别的机器记上的,经设备修订(device_changed)再读。
+      const offLocal = events.on(projectGroupBindingChangedChannel, () => {
+        void this.refresh(null);
+        void accountProjectsStore.refresh();
+      });
+      const offPublished = events.on(deviceProjectsPublishedChannel, () => void accountProjectsStore.refresh());
       const offMachines = onEachMachine((deviceId) =>
-        onMachineEvent(deviceId, projectGroupBindingChangedChannel, () => void this.refresh(deviceId))
+        onMachineEvent(deviceId, projectGroupBindingChangedChannel, () => {
+          void this.refresh(deviceId);
+          void accountProjectsStore.refresh();
+        })
       );
       // 只有项目页确实有行的群才从聊天页拿掉;绑定还在但项目已隐藏的群仍在聊天页。
       const offPublish = reaction(
@@ -99,6 +109,7 @@ export class ProjectGroupsStore {
       this.stop = () => {
         offHosts();
         offLocal();
+        offPublished();
         offMachines();
         offPublish();
       };

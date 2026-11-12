@@ -28,7 +28,7 @@ vi.mock('@renderer/lib/layout/navigation-provider', () => ({
 }));
 vi.mock('@renderer/lib/stores/app-state', () => ({
   appState: { navigation: { currentViewId: 'new-session' } },
-  sidebarStore: { expandedProjectIds: new Set(), homeLayout: { homeRows: new Set(), standIns: new Map() },
+  sidebarStore: { sidebarProjects: [], expandedProjectIds: new Set(), homeLayout: { homeRows: new Set(), standIns: new Map() },
     needsYouCountForProject: () => 0, projectMembersOf: () => ['proj'], hasNameTwin: () => false, rowProjectIdOf: (id: string) => id,
     ensureProjectExpanded: vi.fn(), toggleProjectExpanded: vi.fn() },
 }));

@@ -1,7 +1,8 @@
 import { isImplicitSessionHomeProjectId } from '@shared/core/projects/session-home-project';
 import type { DeviceProject } from '@gugu/core/shared/types/deviceProject';
-import { tapMainEvents } from '@main/lib/events';
+import { events, tapMainEvents } from '@main/lib/events';
 import {
+  deviceProjectsPublishedChannel,
   projectCreatedChannel,
   projectDeletedChannel,
   projectFoldersChangedChannel,
@@ -11,7 +12,7 @@ import {
 import { sessionCreatedChannel } from '@shared/core/sessions/sessionEvents';
 import { getProjects } from './getProjects';
 import { listProjectFolderRefs } from './project-folders';
-import { listProjectGroupBindings } from './project-groups';
+import { listProjectGroupBindings, retryProjectGroups } from './project-groups';
 
 /**
  * #113 这台机器记到账号上的那一份项目(product spec「项目」:项目记在账号上)。
@@ -60,6 +61,12 @@ export function isoFromProjectTimestamp(value: string): string {
  * 会让它重新显出来,而那一下没有显隐事件。项目没有改名这件事(名字只在建时写)。返回退订。
  * 订阅要在会话页后端 boot 之后(同 onEmdashSessionpageReapTrigger)。
  */
+/** 记上了(发布器的 onPublished):告诉这台电脑的窗口去重读账号上的项目;断网时没建成的项目群这时再建。 */
+export function deviceProjectsPublished(): void {
+  events.emit(deviceProjectsPublishedChannel, {});
+  void retryProjectGroups();
+}
+
 export function onDeviceProjectsMaybeChanged(listener: () => void): () => void {
   const channels = new Set(
     [

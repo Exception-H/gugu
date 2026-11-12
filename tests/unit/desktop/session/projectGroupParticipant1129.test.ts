@@ -6,7 +6,6 @@ import { projectGroupsStore } from '@renderer/features/projects/stores/project-g
 import { screenLayout } from '@renderer/app/screen-layout';
 import { groupParticipantPanes } from '@renderer/features/chats/group-participant-panes';
 import { showGroupParticipant } from '@renderer/features/chats/group-participant-actions';
-import { projectGroupLayout } from '@renderer/features/projects/stores/project-group-layout';
 const first = { kind: 'project', projectId: 'first-bound-project' } as const;
 const visible = { kind: 'project', projectId: 'visible-project' } as const;
 const target = { kind: 'session', projectId: visible.projectId, sessionId: 'project-session-agent' } as const;
@@ -43,19 +42,10 @@ it('also opens when both devices resolve to the same visible sidebar row', () =>
   expect(screenLayout.order.map(id => screenLayout.blocks.get(id))).toEqual([visible, target]);
 });
 it('keeps using the visible project after a newly available local project becomes the representative', () => {
-  const projects = [
-    { id: first.projectId, machine: 'other-device', online: false },
-    { id: visible.projectId, machine: 'visible-device', online: true },
-  ];
-  const before = projectGroupLayout(projects, id => projectGroupsStore.chatIdOf(id));
-  state.rows = new Map(before.rowOf);
-  expect(state.rows.get(first.projectId)).toBe(visible.projectId);
+  // Before: the visible project (on a connected machine) represents the project; after: the newly local one does.
+  state.rows = new Map([[first.projectId, visible.projectId]]);
   screenLayout.show(visible);
-  const after = projectGroupLayout([
-    { ...projects[0]!, machine: null }, projects[1]!,
-  ], id => projectGroupsStore.chatIdOf(id));
-  state.rows = new Map(after.rowOf);
-  expect(state.rows.get(visible.projectId)).toBe(first.projectId);
+  state.rows = new Map([[visible.projectId, first.projectId]]);
   showGroupParticipant('shared-project-group', target);
   expect(screenLayout.order.map(id => screenLayout.blocks.get(id))).toEqual([visible, target]);
 });

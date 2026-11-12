@@ -248,10 +248,8 @@ export const SidebarVirtualList = observer(function SidebarVirtualList() {
     const overRowIdx = rows.findIndex((r) => rowToDndId(r) === String(over.id));
     if (overRowIdx === -1) return;
     const insertionRowIdx = isAbove ? overRowIdx : overRowIdx + 1;
-    // 本机项目与别的机器上的项目(#6264)是同一张项目表,拖拽写回的是整份 id。
-    const ids = sidebarStore.sidebarProjects
-      .map((ref) => (ref.project.state === 'unregistered' ? ref.project.id : (ref.project.data?.id ?? '')))
-      .filter(Boolean);
+    // 一个账号项目一行(行 id 见 SidebarProjectRef),拖拽写回的是整份行 id。
+    const ids = sidebarStore.sidebarProjects.map((ref) => ref.id);
     const oldIdx = ids.indexOf(aParsed.projectId);
     if (oldIdx === -1) return;
     const projectsAbove = rows.slice(0, insertionRowIdx).filter((r) => r.kind === 'project').length;

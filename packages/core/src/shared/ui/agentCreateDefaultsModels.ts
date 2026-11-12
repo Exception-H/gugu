@@ -21,12 +21,18 @@ export interface AgentCreateDefaults {
    * 这个对话没选过 = 回落到 projectByDevice(你最近一次选的)。
    */
   projectByChat: Record<string, { deviceId: string; projectId: string }>
+  /**
+   * 项目与机器解耦:每个项目(键 = 项目群 chatId,还没绑群 = 那个本地项目 id)上次选在哪台机器上跑(设备 id)。
+   * 跟着账号走:手机、别的桌面打开同一个项目,默认的还是这台。
+   */
+  machineByProject: Record<string, string>
 }
 
 export const EMPTY_AGENT_CREATE_DEFAULTS: AgentCreateDefaults = Object.freeze({
   deviceId: null,
   projectByDevice: Object.freeze({}) as Record<string, string>,
   projectByChat: Object.freeze({}) as AgentCreateDefaults['projectByChat'],
+  machineByProject: Object.freeze({}) as Record<string, string>,
 })
 
 function readString(value: unknown): string | null {
@@ -60,7 +66,15 @@ export function parseAgentCreateDefaults(config: unknown): AgentCreateDefaults {
       if (chatId && deviceId && projectId) projectByChat[chatId] = { deviceId, projectId }
     }
   }
-  return { deviceId: readString(row.device_id), projectByDevice, projectByChat }
+  const machineByProject: Record<string, string> = {}
+  const machines = row.machine_by_project
+  if (machines && typeof machines === 'object' && !Array.isArray(machines)) {
+    for (const [projectKey, deviceId] of Object.entries(machines as Record<string, unknown>)) {
+      const id = readString(deviceId)
+      if (projectKey && id) machineByProject[projectKey] = id
+    }
+  }
+  return { deviceId: readString(row.device_id), projectByDevice, projectByChat, machineByProject }
 }
 
 function serialize(defaults: AgentCreateDefaults): Record<string, unknown> {
@@ -70,6 +84,7 @@ function serialize(defaults: AgentCreateDefaults): Record<string, unknown> {
       project_by_device: defaults.projectByDevice,
       project_by_chat: Object.fromEntries(Object.entries(defaults.projectByChat)
         .map(([chatId, choice]) => [chatId, { device_id: choice.deviceId, project_id: choice.projectId }])),
+      machine_by_project: defaults.machineByProject,
     },
   }
 }
@@ -101,6 +116,16 @@ export function mergeAgentCreateProjectChoice(
   if (chatId && projectId) projectByChat[chatId] = { deviceId, projectId }
   else if (chatId) delete projectByChat[chatId]
   return { ...config, ...serialize({ ...current, projectByDevice, projectByChat }) }
+}
+
+/** 记住这个项目上次在哪台机器上跑(覆盖旧的)。 */
+export function mergeAgentCreateRunMachine(
+  config: Record<string, unknown>,
+  projectKey: string,
+  deviceId: string,
+): Record<string, unknown> {
+  const current = parseAgentCreateDefaults(config)
+  return { ...config, ...serialize({ ...current, machineByProject: { ...current.machineByProject, [projectKey]: deviceId } }) }
 }
 
 // ── 设备解析 ──────────────────────────────────────────────────────────────────
@@ -190,6 +215,21 @@ export function resolveAgentCreateProject(
   const remembered = rememberedAgentCreateProject(defaults, deviceId, chatId)
   if (!remembered) return null
   return availableProjectIds.includes(remembered) ? remembered : null
+}
+
+/**
+ * 在这个对话里派任务记着的项目:这个对话选过的(哪台机器上的都算 —— 项目可以在别的机器上),否则 `localDeviceId` 这台上
+ * 最近一次选的。返回(机器, 那台上的本地项目);由调用方认回账号上的项目。
+ */
+export function rememberedChatProject(
+  defaults: AgentCreateDefaults,
+  chatId: string,
+  localDeviceId: string,
+): { deviceId: string; projectId: string } | null {
+  const inChat = defaults.projectByChat[chatId]
+  if (inChat) return inChat
+  const recent = defaults.projectByDevice[localDeviceId]
+  return recent ? { deviceId: localDeviceId, projectId: recent } : null
 }
 
 /** 记着的那个项目(还没对照可用列表):这个对话在这台设备上选过的,否则这台设备上最近一次选的。 */
