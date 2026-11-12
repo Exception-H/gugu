@@ -1,4 +1,5 @@
 import { err, ok, type Result } from '@gugu/session-shared';
+import { noteBackendRequestFailed, subscribeBackendRecovered } from '@gugu/core/cloud/backendReachability';
 import { randomUUID } from 'node:crypto';
 import { activitySignal } from '../../activity/signals';
 import { and, asc, eq, isNull } from 'drizzle-orm';
@@ -67,9 +68,9 @@ export async function ensureProjectGroup(
     return err(projectNotFound(projectId));
   }
   const result = await projectGroupHost().ensureGroup(subject);
-  // 云端那一发没成(断网时建的项目):记着,云端再答话时(这台机器的项目记上账号那一刻)再建一次。建成了对照变了,这台机器再记一次,
+  // 云端那一发没成(断网时建的项目):记着,后端恢复那一刻(backendReachability 的那条边)再建一次。建成了对照变了,这台机器再记一次,
   // 带着群的这一份记上账号之后,窗口重读就有了它。❌ 先把没建出来的群 id 写进对照:项目块会去画一个壳里还没有的群(一片空白)。
-  if (!result.success && result.error.type === 'cloud-failed') groupsToRetry.add(projectId);
+  if (!result.success && result.error.type === 'cloud-failed') retryWhenBackendRecovers(projectId);
   else groupsToRetry.delete(projectId);
   if (!result.success) return result;
   if (result.data.changed) {
@@ -80,12 +81,24 @@ export async function ensureProjectGroup(
   return ok({ chatId: result.data.chatId });
 }
 
-/** 建群时云端没答上的项目(见 ensureProjectGroup)。 */
+/** 建群时云端没答上的项目(见 ensureProjectGroup)。进程内:进程重启后由打开项目块的那次 ensureProjectGroup 再建。 */
 const groupsToRetry = new Set<string>();
+let offRecovered: (() => void) | null = null;
 
-/** 云端又答话了(这台机器的项目刚记上账号):上次没建成的项目群各再建一次。仍没成的留着等下一次。 */
-export async function retryProjectGroups(): Promise<void> {
+/** 记下这个项目,并请本进程的节拍马上拉一次(后端真断着,恢复的那条边就挂上了);恢复时各再建一次。 */
+function retryWhenBackendRecovers(projectId: string): void {
+  groupsToRetry.add(projectId);
+  noteBackendRequestFailed();
+  offRecovered ??= subscribeBackendRecovered(() => void retryProjectGroups());
+}
+
+/** 后端又答话了:上次没建成的项目群各再建一次。仍没成的留着等下一次;都建成了就不再订。 */
+async function retryProjectGroups(): Promise<void> {
   for (const projectId of [...groupsToRetry]) await ensureProjectGroup(projectId);
+  if (groupsToRetry.size === 0) {
+    offRecovered?.();
+    offRecovered = null;
+  }
 }
 
 /**
