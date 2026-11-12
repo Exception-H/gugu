@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState, useSyncExternalStore } from 'react'
 import { LoginPage } from './pages/LoginPage'
 import { authCallbacks, startAuthCallbackRouting } from './lib/authCallbacks'
+import { watchReferralLinks } from './lib/referral'
 import { googleLogin } from './lib/googleLogin'
 import { LoginMethodChangeNotice } from './components/LoginMethodChangeNotice'
 import { logoutAndRelaunch } from './lib/authLogout'
@@ -107,6 +108,7 @@ export default function App() {
     return sessionCoordinator.start()
   }, [])
   useEffect(startAuthCallbackRouting, [])
+  useEffect(() => watchReferralLinks(platform.watchOpenedLinks, sessionCoordinator), [])
   useEffect(() => { authCallbacks.setAuthenticated(Boolean(session.session)) }, [session.session])
   useEffect(() => { googleLogin.initialize() }, [])
 

@@ -112,7 +112,7 @@ import { detectLocalSigning, downloadDmg, pickMacDmgFile, shouldUseDmgPath } fro
 import type { LocalSigning } from './macDmgUpdater'
 import { createSelectAccountHandler, webAuthnKeychainGroup } from './macWebAuthn'
 import { isOAuthCallback } from '../shared/oauth-callback'
-import { OAuthCallbackInbox } from './oauth-callback-inbox'
+import { OpenedLinkMailbox } from './opened-link-mailbox'
 import { googleAuthorizationUrl, googleIdentityLinkUrl } from '../shared/google-authorization-url'
 import { isOAuthAttemptRedirect } from '../shared/oauth-attempt'
 import {
@@ -2399,8 +2399,8 @@ ipcMain.handle('updates:changelog', async (): Promise<unknown> => {
 })
 ipcMain.handle('app:get-version', () => app.getVersion())
 ipcMain.handle('auth:oauth-redirect', () => `${GUGU_LINK_SCHEME}://auth/callback`)
-ipcMain.handle('auth:take-callbacks', (event) => {
-  if (event.sender !== mainWindow?.webContents) throw new Error('OAuth callbacks are only available to the main window')
+ipcMain.handle('opened-links:take', (event) => {
+  if (event.sender !== mainWindow?.webContents) throw new Error('Opened links are only available to the main window')
   return openedLinks.take()
 })
 ipcMain.handle('auth:open-browser', async (event, raw: unknown) => {
@@ -3403,11 +3403,10 @@ app.on('open-url', (event, url) => {
  * 与 electron-builder.cjs 的 protocols、扩展侧 linkTo 用的是同一条规则(core 的 linkScheme.mjs)。
  */
 const GUGU_LINK_SCHEME = guguLinkScheme({ tier: process.env.GUGU_TIER, devLaunch: Boolean(process.defaultApp) })
-// Every link the OS hands this app is also shown to the main renderer: it routes OAuth callbacks to login and
-// remembers an invite's referrer before sign-up (rememberReferrerFromLink, the same function Android's appUrlOpen
-// calls). Everything else about a link stays here (handleGuguLink).
-const openedLinks = new OAuthCallbackInbox(() => {
-  if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send('auth:callback-available')
+// Every link the OS hands this app is also shown to the main renderer (its opened-links stream: login takes the OAuth
+// callbacks, the product watches every link). Opening a link stays here (handleGuguLink).
+const openedLinks = new OpenedLinkMailbox(() => {
+  if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send('opened-links:available')
 })
 // A cold Windows/Linux link must reach the renderer even if the session-page host cannot boot.
 const coldOpenedLink = process.argv.find((arg) => arg.startsWith(`${GUGU_LINK_SCHEME}://`))
