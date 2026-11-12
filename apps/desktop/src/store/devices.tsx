@@ -153,6 +153,7 @@ export function DevicesProvider({ children, active = true }: { children: React.R
       if (projectsAccountRef.current !== null) accountProjectsStore.clear()
       projectsAccountRef.current = userId
     }
+    accountProjectsStore.restore(userId)
     void accountProjectsStore.refresh()
   }, [userId, signedOut])
 

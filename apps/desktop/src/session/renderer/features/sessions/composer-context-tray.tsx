@@ -114,20 +114,16 @@ export const ComposerProjectPicker = observer(function ComposerProjectPicker({
                   <span>{translate('task.projectSkip')}</span>
                 </DropdownMenuItem>
               ) : null}
-              {accountProjectsStore.status === 'error' ? (
-                <AccountProjectsError className="px-3 py-2 text-xs" />
-              ) : (
-                <>
-                  {visibleProjects.length === 0 && projects.length > 0 ? (
-                    <div className="px-3 py-2 text-xs text-foreground-muted">
-                      {translate('task.projectNoMatch')}
-                    </div>
-                  ) : null}
-                  {visibleProjects.map((p) => (
-                    <AccountProjectItem key={p.chatId} project={p} twin={twins.has(p.chatId)} onSelect={onSelect} />
-                  ))}
-                </>
-              )}
+              {/* 读不到:一行读不到 + 重试,下面仍列上次读到的那份(与侧栏同一个样子)。 */}
+              <AccountProjectsError className="px-3 py-2 text-xs" />
+              {visibleProjects.length === 0 && projects.length > 0 ? (
+                <div className="px-3 py-2 text-xs text-foreground-muted">
+                  {translate('task.projectNoMatch')}
+                </div>
+              ) : null}
+              {visibleProjects.map((p) => (
+                <AccountProjectItem key={p.chatId} project={p} twin={twins.has(p.chatId)} onSelect={onSelect} />
+              ))}
             </div>
             <NewProjectSubmenu onProjectReady={onSelect} />
           </>

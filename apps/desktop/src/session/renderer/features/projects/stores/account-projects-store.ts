@@ -3,6 +3,7 @@ import type { AccountProject } from '@gugu/core/cloud/deviceProjects';
 import { platform } from '@/platform';
 import { log } from '@renderer/utils/logger';
 import { groupRowOrder } from './project-group-layout';
+import { readCachedAccountProjects, writeCachedAccountProjects } from './account-projects-cache';
 
 export type AccountProjectsStatus = 'loading' | 'ready' | 'error';
 
@@ -21,7 +22,8 @@ const bindingKey = (deviceId: string, localProjectId: string) => `${deviceId}\u0
 /**
  * 账号上的项目(identity.list_my_projects,项目与机器解耦):项目就是它的项目群,一个文件夹都没有也在。
  * 侧栏、项目选择器、任务历史、手机都只从这一份认「有哪些项目、一个本地项目属于哪个项目」;❌ 各处再按群拼本地项目。
- * 读不到 = status 'error',由各处画出错误和重试;❌ 退回本地拼法。
+ * 读不到 = status 'error',由各处画出错误和重试;❌ 退回本地拼法。列着的仍是这份上次读到的(同一份,不是别的来源):
+ * 开机 / 重载时先铺上这个账号上次那份({@link restore}),读到了就换成此刻的;断网重载不会把项目区读空。
  */
 export class AccountProjectsStore {
   list: readonly AccountProject[] = [];
@@ -30,6 +32,8 @@ export class AccountProjectsStore {
   /** 这台电脑的设备 id(绑定里的 deviceId 是它 = 这台电脑上的本地项目);手机上没有 = null。 */
   localDeviceId: string | null = null;
   local: LocalProjects | null = null;
+  /** 这份属于哪个账号(写缓存用);登出 / 换账号前由 {@link clear} 清掉。 */
+  private accountId: string | null = null;
   private inFlight: Promise<void> | null = null;
   private again = false;
   private generation = 0;
@@ -57,6 +61,14 @@ export class AccountProjectsStore {
     runInAction(() => { this.local = local; });
   }
 
+  /** 认出登录的是谁:铺上这个账号上次读到的那份(别的账号的那份不用),再由 refresh 换成此刻的。 */
+  restore(accountId: string): void {
+    this.accountId = accountId;
+    if (this.list.length > 0) return;
+    const cached = readCachedAccountProjects(accountId);
+    if (cached.length > 0) runInAction(() => { this.list = cached; });
+  }
+
   /** 读一次;正在读时再要一次 = 这次读完再读一遍(❌ 吞掉:那次读的可能是变之前的)。 */
   refresh(): Promise<void> {
     if (this.inFlight) {
@@ -76,6 +88,7 @@ export class AccountProjectsStore {
           this.status = 'ready';
           this.error = null;
         });
+        if (this.accountId) writeCachedAccountProjects(this.accountId, list);
       })
       .catch((error: unknown) => {
         if (generation !== this.generation) return;
@@ -102,6 +115,7 @@ export class AccountProjectsStore {
     this.generation += 1;
     this.inFlight = null;
     this.again = false;
+    this.accountId = null;
     runInAction(() => {
       this.list = [];
       this.status = 'loading';

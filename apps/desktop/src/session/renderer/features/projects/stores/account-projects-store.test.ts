@@ -95,6 +95,40 @@ describe('accountProjectsStore reading', () => {
     expect(store.localDeviceId).toBeNull();
   });
 
+  // owner asked whether the account list makes the client depend on the backend: reloading while it is unreachable keeps
+  // the account's last list (marked by the read error), not an empty project section.
+  it('a reload while the backend is unreachable starts from this account\'s last list and says the read failed', async () => {
+    const storage = new Map<string, string>();
+    vi.stubGlobal('localStorage', {
+      getItem: (key: string) => storage.get(key) ?? null,
+      setItem: (key: string, value: string) => { storage.set(key, value); },
+    });
+    try {
+      const before = new AccountProjectsStore();
+      before.restore('user-a');
+      read.list.mockResolvedValueOnce([paper, empty]);
+      await before.refresh();
+
+      const reloaded = new AccountProjectsStore();
+      reloaded.restore('user-a');
+      expect(reloaded.projects).toEqual([paper, empty]);
+      expect(reloaded.status).toBe('loading');
+      read.list.mockRejectedValueOnce(new Error('fetch failed'));
+      await reloaded.refresh();
+      expect(reloaded.status).toBe('error');
+      expect(reloaded.projects).toEqual([paper, empty]);
+
+      // Another account on this computer never sees it; clear (sign-out) drops what is on screen.
+      const other = new AccountProjectsStore();
+      other.restore('user-b');
+      expect(other.projects).toEqual([]);
+      reloaded.clear();
+      expect(reloaded.projects).toEqual([]);
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
   it('a refresh asked for while reading reads again afterwards; a read that lands after clear is dropped', async () => {
     const store = new AccountProjectsStore();
     let resolveFirst!: (list: AccountProject[]) => void;

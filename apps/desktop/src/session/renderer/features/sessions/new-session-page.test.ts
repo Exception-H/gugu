@@ -864,7 +864,7 @@ describe('NewSessionPage', () => {
     }
   });
 
-  it('shows the read error with a retry instead of any project list when the account projects cannot be read', async () => {
+  it('shows the read error with a retry above the last list when the account projects cannot be read', async () => {
     const { accountProjectsStore } = await import('@renderer/features/projects/stores/account-projects-store');
     mocks.orderedProjects = [{ id: 'project-1', state: 'mounted' }];
     const { runInAction } = await import('mobx');
@@ -874,7 +874,8 @@ describe('NewSessionPage', () => {
         root.render(localized(React.createElement(ComposerProjectPicker, { selectedId: undefined, onSelect: vi.fn() })));
       });
       expect(container.querySelector('[data-testid="account-projects-error"]')).not.toBeNull();
-      expect(container.querySelectorAll('[data-chat-id]')).toHaveLength(0);
+      // The list is the same source's last read (as in the sidebar), not a local stitch: it stays under the error line.
+      expect([...container.querySelectorAll('[data-chat-id]')].map((row) => row.getAttribute('data-chat-id'))).toEqual(['chat-project-1']);
     } finally {
       act(() => runInAction(() => { accountProjectsStore.status = 'ready'; }));
     }
