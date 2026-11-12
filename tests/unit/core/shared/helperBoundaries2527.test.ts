@@ -12,3 +12,5 @@ it('does not parse partial or invalid PR numbers',()=>{for(const identifier of [
 it('reads HTTP and SSH repository schemes regardless of case',()=>{expect(parseRepositoryRef('HTTPS://github.com/team/repo.git')?.nameWithOwner).toBe('team/repo');expect(parseRepositoryRef('SSH://git@github.com/team/repo.git')?.nameWithOwner).toBe('team/repo')})
 
 it('does not read a directory dot as a file extension',()=>{expect(extensionOf('folder.md/README')).toBe('');expect(extensionOf('folder.png\\README')).toBe('');expect(mimeTypeFromName('folder.md/README')).toBeNull();expect(extensionOf('folder.md/note.PNG')).toBe('png')})
+
+it('does not fill rule templates from inherited properties',()=>{expect(()=>renderAssistantRule('{{constructor}}',{})).toThrow();expect(renderAssistantRule('{{constructor}}',Object.fromEntries([['constructor','value']]))).toBe('value')})
