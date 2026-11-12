@@ -590,16 +590,24 @@ describe('会话历史(按目录分节)核心合同', () => {
   });
 
   // A slow machine must not hold back scrolling through what the others brought back (it gated on "any machine reading").
-  it('滚动加载:另一台机器的第一页还没回来(800 ms),滚到底照样把 limit 放大', async () => {
+  it('滚动加载:另一台机器的第一页还没回来,滚到底照样把 limit 放大', async () => {
     const many = Array.from({ length: 50 }, (_, i) => dir({ key: `/d/${i}`, sessionCount: 1, sessions: [gugu({ key: `gugu:c${i}`, title: `c${i}`, directory: `/d/${i}`, gugu: { projectId: `p-${i}`, sessionId: `c${i}`, runtime: 'acp' } })] }));
     mocks.listDirectories.mockResolvedValue(directoryPageOf(many, { matched: 250 }));
-    mocks.remoteListDirectories.mockImplementation(() => new Promise((resolve) => setTimeout(() => resolve(directoryPageOf([], { directories: [] })), 800)));
-    render();
-    await vi.waitFor(() => expect(screen.getByTestId('session-history-section').all()).toHaveLength(50));
-    await vi.waitFor(() => {
-      scrollToListEnd();
-      expect(directoryParams().some((p) => p.limit === 100)).toBe(true);
-    }, { timeout: 600 });
+    // The other machines answer only when the test lets them: the order of events is asserted, never a time.
+    const held: Array<() => void> = [];
+    mocks.remoteListDirectories.mockImplementation(() => new Promise((resolve) => { held.push(() => resolve(directoryPageOf([], { directories: [] }))); }));
+    try {
+      render();
+      await vi.waitFor(() => expect(screen.getByTestId('session-history-section').all()).toHaveLength(50));
+      // Another machine was asked and has not answered.
+      expect(held.length).toBeGreaterThan(0);
+      await vi.waitFor(() => {
+        scrollToListEnd();
+        expect(directoryParams().some((p) => p.limit === 100)).toBe(true);
+      }, { timeout: 10_000 }); // a ceiling on waiting, not a speed claim: the remote stays unanswered until the finally
+    } finally {
+      for (const answer of held) answer();
+    }
   });
 
   it('点一行展开详情(咕咕行含 session id),再点收起;已归档的行:恢复走唯一路径并刷新', async () => {
