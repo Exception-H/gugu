@@ -23,6 +23,8 @@ const memory = {
   reading: false,
 };
 const listeners = new Set<() => void>();
+/** 进项目块时带进来、还没记上账号的机器(项目那一行 → scopeKey),见 carryRunMachine。 */
+const carried = new Map<string, string>();
 let snapshot: Readonly<Record<string, string>> = {};
 
 function publish(): void {
@@ -74,11 +76,12 @@ export function rememberRunMachine(groupId: string | undefined, deviceId: string
     .finally(() => { if (memory.pending.get(projectKey) === device) memory.pending.delete(projectKey); });
 }
 
-/** 测试用:清掉这一端的记忆。 */
+/** 测试用:清掉这一端的记忆和带进来的机器。 */
 export function resetRunMachineMemoryForTest(): void {
   memory.byProject = {};
   memory.pending.clear();
   memory.reading = false;
+  carried.clear();
   snapshot = {};
 }
 
@@ -99,6 +102,16 @@ export function defaultRunMachine(candidates: readonly RunMachineCandidate[], sa
 }
 
 /**
+ * 进项目块时带进来的机器(新建任务页上先选了机器、再选项目,`projectKey` = 项目那一行):这个窗口里这个项目先选它,
+ * ❌ 写进账号 —— 只是把一台机器交给接下来打开的项目块;在它上面真建了任务才记(useProjectRunMachine 的 created)。
+ * 人在选择器里另选一台 = 不再带着。
+ */
+export function carryRunMachine(projectKey: string, deviceId: string | null): void {
+  carried.set(projectKey, scopeKey(deviceId));
+  publish();
+}
+
+/**
  * 这个项目此刻选着的机器。`projectKey` 分开这一页上的不同项目;`groupId` = 它的项目群(没有 = 不记、也不读记忆)。`pick` = 人选的(记下来,下次默认还是它);候选里没有它(没有文件夹)也照选 ——
  * 那是人刚在那台机器上挂了文件夹、文件夹清单还没读回来。
  */
@@ -106,14 +119,22 @@ export function useProjectRunMachine(projectKey: string, candidates: readonly Ru
   const saved = useSyncExternalStore(runMachineMemory.subscribe, runMachineMemory.current);
   const savedDevice = groupId ? saved[groupId] : undefined;
   const [picked, setPicked] = useState<{ projectKey: string; key: string } | null>(null);
+  const carriedKey = carried.get(projectKey);
   const chosen = picked && picked.projectKey === projectKey
     ? picked.key
-    : defaultRunMachine(candidates, savedDevice && savedDevice === accountProjectsStore.localDeviceId ? scopeKey(null) : savedDevice);
+    : carriedKey ?? defaultRunMachine(candidates, savedDevice && savedDevice === accountProjectsStore.localDeviceId ? scopeKey(null) : savedDevice);
   const pick = (deviceId: string | null) => {
+    carried.delete(projectKey);
     setPicked({ projectKey, key: scopeKey(deviceId) });
     rememberRunMachine(groupId, deviceId);
   };
-  return { selected: chosen ? [chosen] : [], machine: chosen === null ? undefined : machineOfKey(chosen), pick };
+  /** 在选着的这台上真建了任务(新建框的 onSessionCreated):带进来的那台到这时才记上账号。 */
+  const created = () => {
+    if (carriedKey === undefined || carriedKey !== chosen) return;
+    carried.delete(projectKey);
+    rememberRunMachine(groupId, machineOfKey(carriedKey));
+  };
+  return { selected: chosen ? [chosen] : [], machine: chosen === null ? undefined : machineOfKey(chosen), pick, created };
 }
 
 /** `deviceOfMember` 只用来认还没答的那几个本地项目在哪台上;读到的文件夹各带自己的 deviceId。 */

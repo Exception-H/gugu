@@ -137,6 +137,10 @@ const ProjectDispatch = observer(function ProjectDispatch({ projectId, draftKey,
         key={targetProjectId}
         draftKey={draftKey}
         {...composer}
+        onSessionCreated={(result) => {
+          stage.runMachine.created();
+          composer.onSessionCreated?.(result);
+        }}
         workspaceId={scopedFolders.chosen?.workspaceId ?? null}
         {...machineComposerProps(machineContext, { projectId: targetProjectId, isContextPending: scopedFolders.folders === null })}
       />

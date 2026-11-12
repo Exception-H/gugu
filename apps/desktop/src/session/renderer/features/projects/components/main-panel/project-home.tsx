@@ -122,7 +122,10 @@ export const ProjectTaskComposer = observer(function ProjectTaskComposer({
               placeholder={placeholder}
               verb={verb}
               workspaceId={scopedFolders.chosen?.workspaceId ?? null}
-              onSessionCreated={onSessionCreated}
+              onSessionCreated={(result) => {
+                stage.runMachine.created();
+                onSessionCreated?.(result);
+              }}
               {...machineComposerProps(machineContext, { projectId: targetProjectId, isContextPending: scopedFolders.folders === null, blockReason: scopedFolders.folders?.length === 0 ? translate('projects.folders.scopeUnavailable') : null })}
             />
           </ComposerTray>

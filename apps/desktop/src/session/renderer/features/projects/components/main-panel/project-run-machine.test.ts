@@ -1,5 +1,10 @@
+// @vitest-environment jsdom
+import React, { act } from 'react';
+import { createRoot } from 'react-dom/client';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { defaultRunMachine, foldersInScope, rememberRunMachine, resetRunMachineMemoryForTest, runMachineMemory } from './project-run-machine';
+import {
+  carryRunMachine, defaultRunMachine, foldersInScope, rememberRunMachine, resetRunMachineMemoryForTest, runMachineMemory, useProjectRunMachine,
+} from './project-run-machine';
 
 const cloud = vi.hoisted(() => ({
   remember: vi.fn(async () => ({})),
@@ -59,6 +64,42 @@ describe('remembered run machine (account-wide)', () => {
     await vi.waitFor(() => expect(cloud.remember).toHaveBeenCalledWith('chat-site', 'this-desktop'));
     expect(cloud.remember).toHaveBeenCalledTimes(1);
     expect(runMachineMemory.current()['chat-site']).toBe('this-desktop');
+  });
+
+  // Architecture review ④: a machine handed to the project block is its choice there, and goes to the account settings only
+  // once a task is created on it.
+  it('a carried machine is chosen without being remembered, and is remembered when a task is created on it', async () => {
+    (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
+    const host = document.createElement('div');
+    const root = createRoot(host);
+    let hook!: ReturnType<typeof useProjectRunMachine>;
+    const Probe = () => {
+      hook = useProjectRunMachine('row-site', [{ key: 'local', online: true }, { key: 'gpu', online: true }], 'chat-site');
+      return null;
+    };
+    try {
+      carryRunMachine('row-site', 'gpu');
+      await act(async () => root.render(React.createElement(Probe)));
+      expect(hook.machine).toBe('gpu');
+      expect(cloud.remember).not.toHaveBeenCalled();
+      await act(async () => hook.created());
+      await vi.waitFor(() => expect(cloud.remember).toHaveBeenCalledWith('chat-site', 'gpu'));
+      // Later tasks: the remembered machine is the default; nothing is carried any more.
+      await act(async () => hook.created());
+      expect(hook.machine).toBe('gpu');
+      expect(cloud.remember).toHaveBeenCalledTimes(1);
+
+      // Picking another machine drops the carried one.
+      carryRunMachine('row-site', 'gpu');
+      await act(async () => hook.pick(null));
+      await vi.waitFor(() => expect(cloud.remember).toHaveBeenCalledWith('chat-site', 'this-desktop'));
+      cloud.remember.mockClear();
+      await act(async () => hook.created());
+      expect(hook.machine).toBeNull();
+      expect(cloud.remember).not.toHaveBeenCalled();
+    } finally {
+      await act(async () => root.unmount());
+    }
   });
 
   it('remembers only under a project group id, and writes it to the account', async () => {

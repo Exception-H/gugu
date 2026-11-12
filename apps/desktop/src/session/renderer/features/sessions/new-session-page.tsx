@@ -13,10 +13,8 @@ import { useNavigate } from '@renderer/lib/layout/navigation-provider';
 import { ComposerProjectPicker } from './composer-context-tray';
 import { describeImplicitProjectFailure, machineComposerProps } from './use-machine-create-target';
 import { useNewSessionMachine } from '@renderer/features/remote-hosts/use-new-session-machine';
-import { accountProjectsStore } from '@renderer/features/projects/stores/account-projects-store';
 import { sidebarStore } from '@renderer/lib/stores/app-state';
 import { machineRegistry } from '@renderer/lib/machine-routing';
-import { rememberRunMachine } from '@renderer/features/projects/components/main-panel/project-run-machine';
 import { useWakeCloudOnInput } from '@renderer/features/remote-hosts/use-wake-cloud-once';
 import { machineLibraryHost } from '@renderer/features/library/library-host';
 import { ComposerTray } from './composer-tray';
@@ -244,13 +242,12 @@ export const NewSessionPage = observer(function NewSessionPage({
   const openProject = (projectId: string | undefined) => {
     setSelectedId(projectId);
     if (!projectId) return;
-    // 人先选了别的机器再选项目,而那台机器有这个项目的文件夹:进了项目块就在那台上开。
+    // 人先选了别的机器再选项目,而那台机器有这个项目的文件夹:进了项目块就在那台上开(在那台上真建了任务才记上账号)。
     // 机器还是默认的「这台电脑」(没人选过),或那台没有这个项目的文件夹(它不是候选):❌ 拿它盖掉这个项目记着的机器。
-    if (remote && sidebarStore.projectMembersOf(projectId).some((id) => machineRegistry.machineOf(id) === remote.deviceId)) {
-      rememberRunMachine(accountProjectsStore.projectOfLocal(projectId)?.chatId, remote.deviceId);
-    }
+    const machine = remote && sidebarStore.projectMembersOf(projectId).some((id) => machineRegistry.machineOf(id) === remote.deviceId)
+      ? remote.deviceId : undefined;
     // gugu-dev#181 ⑩:选项目 = 去那个项目里开新任务,写好的话跟着进项目块新任务框的草稿。
-    prepareProjectTask(projectId, NEW_SESSION_DRAFT_KEY);
+    prepareProjectTask(projectId, NEW_SESSION_DRAFT_KEY, machine);
     navigate('project', { projectId });
   };
 

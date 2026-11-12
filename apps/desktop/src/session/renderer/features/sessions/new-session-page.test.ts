@@ -703,22 +703,36 @@ describe('NewSessionPage', () => {
     }
   });
 
-  // #2412 review ②: a machine picked on New task is remembered for the project only when it holds that project's folder.
-  it('remembers the machine picked first only for a project that has a folder there', async () => {
+  // #2412 review ②: a machine picked on New task goes with the project only when it holds that project's folder.
+  // Architecture review ④: it is handed to the project block that opens next, not written to the account settings —
+  // those are written when a task is actually created on it.
+  it('hands the machine picked first to the project block only for a project that has a folder there, remembering nothing', async () => {
     machineRegistry.register('device-9', ['project-remote']);
     mocks.orderedProjects = [{ id: 'project-1', state: 'mounted' }, { id: 'project-remote', state: 'mounted' }];
     remoteHostsStore.requestNewSession('device-9');
+    const { resetRunMachineMemoryForTest, useProjectRunMachine } = await import('@renderer/features/projects/components/main-panel/project-run-machine');
+    const runMachineOf = async (projectId: string) => {
+      let machine: string | null | undefined;
+      const Probe = () => {
+        machine = useProjectRunMachine(projectId, [{ key: 'local', online: true }, { key: 'device-9', online: true }], `chat-${projectId}`).machine;
+        return null;
+      };
+      await act(async () => root.render(React.createElement(Probe)));
+      return machine;
+    };
     try {
       runMachineCloud.remember.mockClear();
       await renderPage();
       const pick = (name: string) => Array.from(container.querySelectorAll('[role="menuitem"]')).find((item) => item.textContent?.trim() === name) as HTMLButtonElement;
       await act(async () => pick('project-1').click());
-      await new Promise((resolve) => setTimeout(resolve, 0));
-      expect(runMachineCloud.remember).not.toHaveBeenCalled();
+      expect(await runMachineOf('project-1')).toBeNull();
       await renderPage();
       await act(async () => pick('project-remote').click());
-      await vi.waitFor(() => expect(runMachineCloud.remember).toHaveBeenCalledWith('chat-project-remote', 'device-9'));
+      expect(await runMachineOf('project-remote')).toBe('device-9');
+      await new Promise((resolve) => setTimeout(resolve, 0));
+      expect(runMachineCloud.remember).not.toHaveBeenCalled();
     } finally {
+      resetRunMachineMemoryForTest();
       machineRegistry.forgetMachine('device-9');
     }
   });
