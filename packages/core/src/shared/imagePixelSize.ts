@@ -10,7 +10,7 @@ export function imagePixelSize(b: Uint8Array): { width: number; height: number }
   const u32be = (i: number) => ((b[i]! << 24) | (b[i + 1]! << 16) | (b[i + 2]! << 8) | b[i + 3]!) >>> 0
   const size = (width: number, height: number) => width > 0 && height > 0 ? { width, height } : null
   if (b.length >= 24 && b[0] === 0x89 && ascii(1, 4) === 'PNG' && ascii(4, 8) === '\r\n\x1a\n'
-    && u32be(8) === 13 && ascii(12, 16) === 'IHDR') return size(u32be(16), u32be(20))
+    && u32be(8) === 13 && ascii(12, 16) === 'IHDR') return u32be(16) <= 0x7fffffff && u32be(20) <= 0x7fffffff ? size(u32be(16), u32be(20)) : null
   if (b.length >= 10 && (ascii(0, 6) === 'GIF87a' || ascii(0, 6) === 'GIF89a')) return size(u16le(6), u16le(8))
   if (b.length >= 25 && ascii(0, 4) === 'RIFF' && ascii(8, 12) === 'WEBP') {
     const chunk = ascii(12, 16)
