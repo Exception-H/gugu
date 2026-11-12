@@ -1037,13 +1037,15 @@ export class SidebarStore implements Snapshottable<SidebarSnapshot> {
   }
 
   /**
-   * 会话列在「任务」里的本地项目:不属于账号上任何项目的 —— #609 每台机器上的 workspace,以及账号项目读到之后
-   * 仍对不上的(刚建、还没发布)。还在读 / 读失败时只有 workspace(项目分区那时画的是读取状态)。
+   * 会话列在「任务」里的本地项目:不属于账号上任何项目的 —— #609 每台机器上的 workspace,以及对着手上那份账号项目
+   * (读到的、上次留下的)仍对不上的(刚建、还没发布)。读失败也照这样列:❌ 让它的会话哪里都不列。只有头一次读、手上还
+   * 一份都没有时只列 workspace(那时谁都对不上,不能把项目的会话全倒进「任务」再搬走)。
    * 「任务」是一张平铺的表,❌ 按机器分组。
    */
   private isTasksProject(project: { id: string; data?: { kind?: string } | null }): boolean {
     if (this.accountProjects.projectOfLocal(project.id)) return false;
-    return isWorkspaceProject(project) || this.accountProjects.status === 'ready';
+    const { status, list } = this.accountProjects;
+    return isWorkspaceProject(project) || status !== 'loading' || list.length > 0;
   }
 
   togglePinnedCollapsed(): void {

@@ -1023,7 +1023,7 @@ describe('SidebarStore: 别的机器上的会话归到那台机器的项目下',
       expect(store.orderedProjects).toEqual([]);
     });
 
-    it('a local project absent from the store is not a row; once the list is read its sessions are listed under Tasks', () => {
+    it('a local project absent from the store is not a row; its sessions are listed under Tasks unless the first read is still under way', () => {
       acquire('at-stray', 'local-stray', 'ac-stray');
       try {
         const { store, accounts } = accountSidebar(managerWithPaths([
@@ -1031,9 +1031,12 @@ describe('SidebarStore: 别的机器上的会话归到那台机器的项目下',
         ]), []);
         expect(store.sidebarProjects).toEqual([]);
         expect(store.standaloneSessionEntries.map((entry) => entry.sessionId)).toEqual(['ac-stray']);
-        // Still reading / read failed: no project rows and nothing re-derived from the local table.
+        // The read failed: still no project row derived from the local table, and its sessions stay listed (under Tasks).
         runInAction(() => { accounts.status = 'error'; });
         expect(store.sidebarProjects).toEqual([]);
+        expect(store.standaloneSessionEntries.map((entry) => entry.sessionId)).toEqual(['ac-stray']);
+        // The first read, with no list in hand yet: nothing can be matched, so only workspaces are listed meanwhile.
+        runInAction(() => { accounts.status = 'loading'; });
         expect(store.standaloneSessionEntries).toEqual([]);
       } finally {
         sessionRegistry.release('at-stray');
