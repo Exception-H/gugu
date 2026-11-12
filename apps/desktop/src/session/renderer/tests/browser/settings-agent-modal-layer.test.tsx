@@ -91,6 +91,10 @@ it.each([2000, 5100])('the real model menu can be hit and selected above Sheet %
     <AgentModelPicker items={[{ id: 'first', name: 'First model' }, { id: 'second', name: 'Second model' }]}
       value="first" disabled={false} onChange={select} />
   </Sheet>, { auth: { id: 'owner-layer' }, contacts: {} });
+  // While the Sheet's pop-in still applies a transform (even a near-identity one at the end of the spring), its
+  // content is the containing block of the menu's fixed layer: a menu opened then is sized and clipped to the
+  // content. Playwright's stability check can click in that tail; a person meets the menu after the Sheet opened.
+  await until('the Sheet has finished opening', () => document.querySelector('.gg-sheet-content')?.getAnimations().length === 0);
   await userEvent.click(page.getByTestId('composer-model-trigger'));
   await until('the real model menu opens', () => !!document.querySelector('[data-slot="combobox-content"]'));
   const popup = document.querySelector<HTMLElement>('[data-slot="combobox-content"]')!;

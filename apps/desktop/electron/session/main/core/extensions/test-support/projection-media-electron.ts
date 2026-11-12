@@ -1,3 +1,4 @@
+import '../../test-support/headless-electron';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
@@ -19,7 +20,6 @@ import { withFixtureCleanup } from '../../test-support/fixture-failure';
 
 if (!process.env.GUGU_HOME || !process.env.GUGU_USER_DATA_DIR) throw new Error('Pipeline fixture needs isolated paths');
 app.setPath('userData', process.env.GUGU_USER_DATA_DIR);
-app.dock?.hide();
 const pause = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 
 void app.whenReady().then(async () => {

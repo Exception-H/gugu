@@ -233,6 +233,7 @@ export default {
       "resize": "Resize the panel",
       "offer": "Open it with “{{name}}”",
       "appFiles": "Files of “{{name}}”",
+      "noAppFiles": "This chat has no files of “{{name}}” yet. It opens files in a chat: make one, or ask an agent to.",
       "fileUnavailable": "This file can't be opened here: it may have been deleted, or be outside this chat.",
       "noOpener": "No App on this device opens “{{name}}”, and the Gugu market has none that does.",
       "marketUnreadable": "No App on this device opens “{{name}}”, and the Gugu market can't be reached right now. Try again later.",
@@ -606,6 +607,7 @@ export default {
     "settings": {
       "notLoaded": "Group settings are still loading. Try again in a moment.",
       "manage": "Group management",
+      "qrCode": "QR code",
       "saveFailed": "Could not save. The previous setting has been restored; try again.",
       "sectionAgents": "Agent collaboration",
       "sectionChat": "Chat",
@@ -690,7 +692,6 @@ export default {
       "rules": "Collaboration rules",
       "rulesPlaceholder": "Core principles, direction, and collaboration agreements…",
       "rulesUnset": "No collaboration rules",
-      "sharePoster": "Share group poster",
       "title": "Group settings",
       "unavailable": "Unavailable",
       "uploading": "Uploading"

@@ -6,7 +6,7 @@ import type { MessageItem, MessageSendState, TopicSummary } from '@gugu/core/sha
 import type { HeldMessage } from '@gugu/core/shared/ui/systemNotice'
 import type { ParsedAttachment } from '@gugu/core/shared/ui/attachmentModels'
 import { computeGroupedWithPrev } from '@gugu/core/shared/ui/messageListModels'
-import { deriveMessageSendState, deriveReadReceipt } from '@gugu/core/shared/ui/messageState'
+import { deriveMessageSendState, deriveReadReceipt, type MessageRecipientFacts } from '@gugu/core/shared/ui/messageState'
 import { AUTOMATION_TEST_IDS } from '@/lib/automationDom'
 import { OPEN_AT_LATEST, useRowAboveViewport } from '@/lib/listLanding'
 import { useFlowList, type FlowListHandle, type ListLanding } from '@/lib/flowList'
@@ -31,9 +31,9 @@ import { useStructurallyShared } from '@/hooks/useStructurallyShared'
 // #1163 perf — 在父层为单条消息预算「发送/已读态」(primitive 字符串)，下传给 memo 化的 MessageBubble，
 // 取代旧的「整个 memberReadSeqs map 下传、气泡自己 derive」。任一成员已读回执会换 map 引用、破气泡浅比较
 // memo → 全群可视气泡重渲；改传 primitive 后，只有本消息状态真翻转时气泡才重渲。仅 is_mine 非撤回消息需要。
-function computeSendState(msg: MessageItem, memberReadSeqs: Record<string, number>): MessageSendState | undefined {
+function computeSendState(msg: MessageItem, memberReadSeqs: Record<string, number>, facts: MessageRecipientFacts): MessageSendState | undefined {
   if (!msg.is_mine || msg.retracted_at) return undefined
-  return deriveMessageSendState(msg, memberReadSeqs, {
+  return deriveMessageSendState(msg, memberReadSeqs, facts, {
     // @@@per-message-read (#598) - precise directed read receipts, decoupled from the watermark.
     // memberIds = current OTHER members (so a recipient who left drops out of the denominator).
     memberIds: Object.keys(memberReadSeqs),
@@ -48,14 +48,15 @@ function computeSendState(msg: MessageItem, memberReadSeqs: Record<string, numbe
 function computeReadReceipt(
   msg: MessageItem,
   memberReadSeqs: Record<string, number>,
+  facts: MessageRecipientFacts,
 ): { read: number; total: number } | undefined {
   if (!msg.is_mine || msg.retracted_at || msg.seq < 0 || msg.local_send_state === 'sending' || msg.local_send_state === 'failed') {
     return undefined
   }
-  const receipt = deriveReadReceipt(msg, memberReadSeqs, {
+  const receipt = deriveReadReceipt(msg, memberReadSeqs, facts, {
     messageReaders: msg.readers && msg.readers.length ? { [msg.id]: new Set(msg.readers) } : {},
   })
-  if (receipt.totalRecipients === 0) return undefined // 无其他收件方（自言自语/空群）→ 不显
+  if (!receipt || receipt.totalRecipients === 0) return undefined // 无其他收件方（自言自语/空群）→ 不显
   return { read: receipt.readCount, total: receipt.totalRecipients }
 }
 
@@ -89,8 +90,10 @@ export interface MessageListRowProps {
   /** #1708 命中「来源消息跳转」时高亮闪烁的消息 id。 */
   flashMessageId: string | null | undefined
   memberReadSeqs: Record<string, number>
-  /** My messages an agent has not taken yet (useDeliveryWaits): their bubbles say so until it reads them. */
+  /** My messages an agent has not taken yet (useMessageDelivery): their bubbles say so until it reads them. */
   deliveryWaits: ReadonlyMap<string, HeldMessage>
+  /** Who each of my messages is for (useMessageDelivery): denominators of its read receipt. */
+  recipientFacts: MessageRecipientFacts
   // 私聊/AI 没有 thread surface；群聊 thread 由右侧 panel 承载。
   isGroupChat: boolean
   threeParty: boolean | undefined
@@ -160,7 +163,7 @@ const MessageListRow = memo(function MessageListRow({
   messages,
   mobile,
   flashMessageId,
-  memberReadSeqs, deliveryWaits,
+  memberReadSeqs, deliveryWaits, recipientFacts,
   isGroupChat,
   threeParty,
   memberProfiles, bubbleMemberProfiles,
@@ -213,9 +216,9 @@ const MessageListRow = memo(function MessageListRow({
   const prevRow = index > 0 ? rows[index - 1] : undefined
 
   const isSelected = selectedIds.has(msg.id)
-  const readReceipt = computeReadReceipt(msg, memberReadSeqs) // @@@1577 M5 A6 — 单次派生,原同行同参调两次
+  const readReceipt = computeReadReceipt(msg, memberReadSeqs, recipientFacts) // @@@1577 M5 A6 — 单次派生,原同行同参调两次
   const held = deliveryWaits.get(msg.id)
-  const sendState = held?.wait ?? computeSendState(msg, memberReadSeqs)
+  const sendState = held?.wait ?? computeSendState(msg, memberReadSeqs, recipientFacts)
 
   // 连续消息合组：同一发送者、无时间分隔线切断、双方都是普通消息时，后续消息隐藏头像+名字/时间行，
   // 只留气泡（间距也收紧）。whisper 形态特殊，不参与合组。

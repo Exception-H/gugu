@@ -183,7 +183,10 @@ export function ProcessBackgroundPill(props: { ownerId: string; ctx: RenderCtx }
       <button type="button" class={conversationProcessButton} data-slot="background-tasks-pill"
         style={{ width: `${backgroundPillLayout(props.ownerId, props.ctx.measureCtx!())!.width}px`, height: `${backgroundPillLayout(props.ownerId, props.ctx.measureCtx!())!.height}px` }}
         data-collapse-id={BACKGROUND_TASKS_TOGGLE} data-collapse-anchor={props.ownerId} aria-expanded={tasks().expanded}>
-        <ShimmerText active multiline style={{ 'white-space': 'pre-wrap', 'line-height': '22px', 'min-width': 0 }}>{backgroundPillLayout(props.ownerId, props.ctx.measureCtx!())!.text}</ShimmerText>
+        {/* The text slot is the measured width and nothing more: it must not shrink below its own content. A rendering a
+            hair wider than the canvas measure (another font, another pixel ratio) would otherwise wrap the last glyph, and
+            the second line spills out of this one-line box over the process header above it. */}
+        <ShimmerText active multiline style={{ 'white-space': 'pre-wrap', 'line-height': '22px', 'flex-shrink': 0 }}>{backgroundPillLayout(props.ownerId, props.ctx.measureCtx!())!.text}</ShimmerText>
         <span class={conversationProcessChevron} aria-hidden="true">›</span>
       </button>
     </span>
@@ -193,6 +196,6 @@ export function ProcessBackgroundPill(props: { ownerId: string; ctx: RenderCtx }
 /** 单子就地展开在过程行下面(高度见 `backgroundHeight`)。 */
 export function ProcessBackgroundList(props: { ownerId: string; ctx: RenderCtx }) {
   return <Show when={attachedBackground(props.ownerId, props.ctx)?.expanded ? attachedBackground(props.ownerId, props.ctx) : null}>{tasks =>
-    <BackgroundTasksList commands={tasks().commands} subagents={tasks().subagents} measureCtx={props.ctx.measureCtx!} />
+    <BackgroundTasksList commands={tasks().commands} subagents={tasks().subagents} measureCtx={props.ctx.measureCtx!} anchorId={props.ownerId} />
   }</Show>;
 }

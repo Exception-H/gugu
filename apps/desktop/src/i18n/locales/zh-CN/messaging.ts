@@ -232,6 +232,7 @@ export default {
       "resize": "调整面板宽度",
       "offer": "用『{{name}}』打开",
       "appFiles": "『{{name}}』的文件",
+      "noAppFiles": "这个对话里还没有『{{name}}』的文件。它打开的是对话里的文件，先建一个，或者让 agent 建一个。",
       "fileUnavailable": "这里打不开这个文件：它可能已被删除，或者不在这个对话里。",
       "noOpener": "本机没有能打开『{{name}}』的 App，咕咕市场里也没有。",
       "marketUnreadable": "本机没有能打开『{{name}}』的 App；咕咕市场现在读不到，稍后再试。",
@@ -604,6 +605,7 @@ export default {
     "settings": {
       "notLoaded": "群设置还没加载完，请稍后再试",
       "manage": "群管理",
+      "qrCode": "二维码",
       "saveFailed": "保存失败，已恢复为原来的设置。请重试。",
       "sectionAgents": "Agent 协作",
       "sectionChat": "聊天",
@@ -688,7 +690,6 @@ export default {
       "rules": "协作规则",
       "rulesPlaceholder": "群协作规则：核心原则、方向确认、协作约定…",
       "rulesUnset": "未设置协作规则",
-      "sharePoster": "分享本群（生成海报）",
       "title": "群设置",
       "unavailable": "不可用",
       "uploading": "上传中"

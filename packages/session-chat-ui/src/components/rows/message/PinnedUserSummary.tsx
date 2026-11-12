@@ -3,12 +3,11 @@ import { createMemo } from 'solid-js';
 import { layout as layoutText, prepareWithSegments } from '@chenglou/pretext';
 import type { MeasureCtx } from '@session-chat/core/define';
 import { blockPlainText } from '@session-chat/core/markdown/plain-text';
-import { isDoubleColumnLayout } from '@session-chat/core/layout/preset';
 import type { ChatMessage } from '@session-chat/model';
 import { conversationContext, conversationVars } from './ConversationMessage';
 import { conversationRoot } from './conversation-message.css';
-import { attachStripHeight, effectiveMessageVars, userAvailableWidth, userInnerWidth, type MessageVars } from './metrics';
-import { userMessageFolds } from './user-message-metrics';
+import { effectiveMessageVars, userInnerWidth, type MessageVars } from './metrics';
+import { userBubbleBox } from './user-message-metrics';
 import { card } from './user-message.css';
 
 /**
@@ -21,18 +20,15 @@ export function pinSummary(item: ChatMessage, ctx: MeasureCtx, baseVars: Message
   const layout = (conversation ? conversationContext(ctx) : ctx).theme.layout;
   const vars = effectiveMessageVars(baseVars, layout);
   const parse = item.streaming ? ctx.caches.parseBlocksStreaming : ctx.caches.parseBlocks;
-  const body = parse(item.id, item.text).map(blockPlainText).join(' ').replace(/\s+/g, ' ').trim();
+  // The message's own lines, so a message of one or two lines and its summary are the same picture.
+  const body = parse(item.id, item.text).map(blockPlainText).join('\n').replace(/[^\S\n]+/g, ' ').replace(/ ?\n[\n ]*/g, '\n').trim();
   const text = body || (item.attachments ?? []).map(attachment => attachment.name).join(', ');
-  const available = userAvailableWidth(ctx.width, layout);
-  const inner = userInnerWidth(available, vars);
+  // The summary rests behind the last `height` px of the bubble it repeats, in the bubble's own box (ChatRoot @@@pin-cover).
+  const bubble = conversation ? userBubbleBox(item, conversationContext(ctx, item), conversationVars(item, baseVars)) : userBubbleBox(item, ctx, baseVars);
   const lineHeight = ctx.theme.fonts.body.lineHeight;
-  const lines = summaryLineCount(text, ctx.theme.fonts.body.font, inner, lineHeight, ctx.measureEpoch ?? 0);
+  const lines = summaryLineCount(text, ctx.theme.fonts.body.font, userInnerWidth(bubble.width, vars), lineHeight, ctx.measureEpoch ?? 0);
   const height = Math.min(Math.max(lines, 1), 2) * lineHeight + 2 * vars.userCardPadY + 2 * vars.cardBorder;
-  // Where the message's bubble starts inside its row: below its attachments, which sit above the bubble.
-  const bubbleTop = body ? attachStripHeight(item.attachments?.length ?? 0, available, vars) : 0;
-  // A message the transcript folds is too tall to push along: it pins only once it has gone (ChatRoot placeRow).
-  const folds = conversation ? userMessageFolds(item, conversationContext(ctx, item), conversationVars(item, baseVars)) : userMessageFolds(item, ctx, baseVars);
-  return { text, vars, conversation, hug: isDoubleColumnLayout(layout), height, clipped: lines > 2, bubbleTop, available, folds };
+  return { text, vars, conversation, height, clipped: lines > 2, rest: Math.max(0, bubble.bottom - height), width: bubble.width, bare: !bubble.drawn };
 }
 
 // @@@summary-lines-once — the list asks for every anchor's summary each time it is rebuilt (an older page lands, a
@@ -59,13 +55,13 @@ export function PinnedUserSummary(props: { item: ChatMessage; ctx: MeasureCtx; v
   const s = createMemo(() => pinSummary(props.item, props.ctx, props.vars));
   return (
     <div class={s().conversation ? conversationRoot : undefined} data-side="right">
-      <div role="button" tabIndex={0} data-pin-summary={props.item.id} class={card({ state: 'static' })} style={{
-        // As wide as the message's own bubble, so its two lines break where the message's first two do.
-        width: s().hug ? 'fit-content' : `${s().available}px`, 'max-width': `${s().available}px`, height: `${s().height}px`, 'margin-left': 'auto',
+      <div role="button" tabIndex={0} data-pin-summary={props.item.id} data-pin-bare={s().bare ? '' : undefined} class={card({ state: 'static' })} style={{
+        // The bubble's own box, so the bubble hides it at rest and its two lines break where the message's first two do.
+        width: `${s().width}px`, height: `${s().height}px`, 'margin-left': 'auto',
         padding: `${s().vars.userCardPadY}px ${s().vars.userCardPadX}px`, 'border-width': `${s().vars.cardBorder}px`,
         font: props.ctx.theme.fonts.body.font, 'line-height': `${props.ctx.theme.fonts.body.lineHeight}px`, cursor: 'pointer',
       }}>
-        <span style={{ display: '-webkit-box', '-webkit-box-orient': 'vertical', '-webkit-line-clamp': 2, overflow: 'hidden', 'overflow-wrap': 'anywhere',
+        <span style={{ display: '-webkit-box', 'white-space': 'pre-wrap', '-webkit-box-orient': 'vertical', '-webkit-line-clamp': 2, overflow: 'hidden', 'overflow-wrap': 'anywhere',
           // Cut off: the first line whole, the second fading out over its last third.
           ...(s().clipped ? { 'mask-image': 'linear-gradient(black, black), linear-gradient(to right, black 67%, transparent)',
             'mask-size': `100% ${props.ctx.theme.fonts.body.lineHeight}px`, 'mask-position': 'top, bottom', 'mask-repeat': 'no-repeat' } : {}) }}>{s().text}</span>

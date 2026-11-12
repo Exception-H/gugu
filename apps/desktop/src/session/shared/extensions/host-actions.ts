@@ -4,6 +4,7 @@ import type { AppComposeDetail, AppForwardFilesDetail, AppOpenWithDetail, AppSho
 import type { GroupAvatarMember } from '@gugu/core/shared/types/chat';
 import type { ExtensionManifest } from './manifest';
 import type { MarketCodeSource } from './market';
+import type { ExtensionOrigin } from './upgrade';
 import type { AppModalPage } from './app-modal';
 import type { AssistantScreen, AssistantSetupAdvance } from './assistant-binding';
 
@@ -197,6 +198,23 @@ export interface EnablePlace {
 }
 export const HERE_ALL = 'here:all';
 
+/** An App installed here that did not come from a chat: where it came from (none when never kept) and its version. */
+export interface InstalledOver {
+  from: ExtensionOrigin | undefined;
+  version: string;
+}
+
+/**
+ * A chat package's consent: who sent it. `replaces` (摩擦单 F66): the one installed came from someone else's chat
+ * package — their name (null when not known). `over`: the one installed came from elsewhere (the market, a folder).
+ * Either way it is another publisher's App under the same id, asked about in full.
+ */
+export interface AttachmentSheetSource {
+  from: string;
+  replaces?: string | null;
+  over?: InstalledOver;
+}
+
 export interface ExtensionInstallConsentRequest {
   /** Removing one installed fork; the same human confirmation transport, never uninstall. */
   removeVariant?: { name: string; active: boolean };
@@ -205,11 +223,8 @@ export interface ExtensionInstallConsentRequest {
   manifestDigest: string;
   installed?: Pick<ExtensionManifest, 'version' | 'permissions'>;
   revokedPermissions: string[];
-  /**
-   * A package from a chat: who sent it. `replaces` (摩擦单 F66): the one installed came from someone else — their name
-   * (null when not known) — so this is another publisher's App under the same id, asked about in full.
-   */
-  attachment?: { from: string; replaces?: string | null };
+  /** A package from a chat: who sent it, and what installed here it replaces (`AttachmentSheetSource`). */
+  attachment?: AttachmentSheetSource;
   /** From the market (installExtensionFromMarket): where this version's code is, as the market recorded it, and what it changed. */
   market?: { source: MarketCodeSource; releaseNotes?: string };
   /** Who gets its tools on the computer it installs on (architecture §4: an install writes this computer's half only). */
