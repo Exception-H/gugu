@@ -25,6 +25,12 @@ vi.mock('../../../apps/desktop/src/lib/topics', () => ({
   },
 }))
 
+// The server's send-time wakes: the receipt's own message woke its mentioned agent.
+vi.mock('../../../apps/desktop/src/lib/chatMessageRevalidation', async (importOriginal) => ({
+  ...await importOriginal<object>(),
+  loadMessageAgentWakes: async (ids: string[]) => new Map(ids.map((id) => [id, new Set(id === 'topic-own-message' ? ['read'] : [])])),
+}))
+
 const { useTopicsOfChat, topicsSourceChatId } = await import('../../../apps/desktop/src/hooks/useTopics')
 const { TopicAnchorCard } = await import('../../../apps/desktop/src/components/chat/TopicAnchorCard')
 const { TopicBreadcrumb } = await import('../../../apps/desktop/src/components/chat/TopicBreadcrumb')
