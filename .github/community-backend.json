@@ -1,5 +1,5 @@
 {
   "repository": "OpenDCAI/gugu-supabase",
-  "ref": "fa3e0bd977aefed842178859a19fc5d056bf5c32",
-  "status": "gugu-supabase dev fa3e0bd9 (includes #256 reserved projects in list_my_projects and publish_device_projects_v2, on top of #252, #254 and #255)"
+  "ref": "e21a5440f3be5589c9f0ecdeaa3ddbbe9f669c0c",
+  "status": "gugu-supabase dev e21a5440 (includes #256 publish_device_projects_v2 and reserved projects, #258 managed join requests, #260 is_my_project, #261 group row columns)"
 }
