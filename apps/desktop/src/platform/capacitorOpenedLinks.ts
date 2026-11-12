@@ -1,11 +1,16 @@
 import { App } from '@capacitor/app'
 import { OpenedLinkInbox } from '../../shared/opened-link-inbox'
+import { rememberReferrerFromLink } from '../lib/referral'
 
 const inbox = new OpenedLinkInbox()
 let source: Promise<void> | null = null
 
 export function nativeOpenedLinksReady(): Promise<void> {
-  if (!source) source = Promise.resolve().then(() => App.addListener('appUrlOpen', (event) => inbox.push(event.url))).then(() => undefined, (error: unknown) => {
+  if (!source) source = Promise.resolve().then(() => App.addListener('appUrlOpen', (event) => {
+    // 邀请返利要在注册前记下:这里是登录前就在听的那一个口(App 启动即订 auth 回调)。@@@referral-entry
+    rememberReferrerFromLink(event.url)
+    inbox.push(event.url)
+  })).then(() => undefined, (error: unknown) => {
     source = null
     throw error
   })

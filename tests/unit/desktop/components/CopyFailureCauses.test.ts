@@ -18,14 +18,13 @@ beforeEach(() => {
   writeText.mockReset().mockRejectedValue(error)
   vi.stubGlobal('navigator', { clipboard: { writeText } })
 })
-afterEach(() => { harness.cleanup(); vi.unstubAllGlobals(); vi.unstubAllEnvs() })
+afterEach(() => { harness.cleanup(); vi.unstubAllGlobals() })
 
 describe('copy actions preserve the refusal', () => {
   it('shows the cause beside the external agent link', async () => {
-    vi.stubEnv('VITE_GUGU_WEB_URL', 'https://share.example.test')
-    await renderWithAppProviders(harness, createNode(ExtPanel, { agent: contact({ id: 'agent', type: 'agent', agent_public: true }) }))
+    await renderWithAppProviders(harness, createNode(ExtPanel, { agent: contact({ id: 'agent', type: 'agent', agent_public: true, gugu_number: 5551234 }) }))
     await clickElement(harness.container.querySelector('[data-testid="agent-share-link"] + button')!)
-    expect(writeText).toHaveBeenCalledWith('https://share.example.test/join/agent/agent')
+    expect(writeText).toHaveBeenCalledWith('https://gugu.nextmind.space/j/?5551234')
     expect(harness.container.textContent).toContain(reason)
   })
   it('shows the cause when copying a group management link', async () => {
