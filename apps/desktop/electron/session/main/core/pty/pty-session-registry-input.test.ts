@@ -47,6 +47,18 @@ describe('PtySessionRegistry input', () => {
     expect(f.logError).toHaveBeenCalledTimes(1);
   });
 
+  it('非预期写入错误不吞:照旧抛给调用方,而且每次都记', () => {
+    const registry = new PtySessionRegistry();
+    const write = vi.fn(() => {
+      throw new Error('unexpected write failure: EINVAL');
+    });
+    registry.register('p:t:c', fakePty(write), { size: { cols: 80, rows: 24 } });
+    const input = f.handlers.get(ptyInputChannel)!;
+    expect(() => input('a')).toThrow('unexpected write failure');
+    expect(() => input('b')).toThrow('unexpected write failure');
+    expect(f.logError).toHaveBeenCalledTimes(2);
+  });
+
   it('PTY 正常时按键照旧写进去,不记日志', () => {
     const registry = new PtySessionRegistry();
     const write = vi.fn();

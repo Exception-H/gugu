@@ -128,7 +128,7 @@ export async function readWorkspaceChunk(
 }
 
 type PendingUpload = {
-  /** 目标真实路径。键按路径而不是客户端给的 uploadId:重试换 id 不能再多留一份。 */
+  /** 目标真实路径(就是表键):重试换 uploadId 时不能再多留一份。 */
   path: string;
   /** 这一次保存的 id:同一路径换成新 id = 一次新的保存,旧的半截作废。 */
   uploadId: string;
@@ -137,52 +137,28 @@ type PendingUpload = {
   received: number;
   chunks: Buffer[];
   timer: ReturnType<typeof setTimeout>;
-  touchedAt: number;
 };
 
 /**
  * 按块收一次上传;半截的保存留两分钟等下一段(一次保存的各段带同一个 uploadId)。`maxBytes` 是一份文件的上限(默认工作副本的;
  * 另一台机器发来的 App 包用它自己的,received-packages.ts)。
  *
- * 一个目标文件同时只留一份未完成的上传:客户端失败重试时换一个 uploadId,新的那份直接接替旧的 ——
- * 以前按 uploadId 建表,每重试一次就多留一份已收到的字节(20 次 ≈ 2GB),把主进程撑爆;
- * 反过来,两次保存恰好复用同一个 uploadId 也不会再串线(键是路径,不是客户端给的 id)。
- * `maxPendingBytes` 只兜住「很多不同文件同时传」的极端情况(默认 4 个单文件上限),超了先丢最久没动的那一份,
- * 它再传回来会得到既有的 `upload_lost`,让客户端从头再存。
+ * 表按**目标真实路径**建,不按客户端给的 uploadId:客户端失败重试换一个 uploadId 时,新的那份直接接替旧的 ——
+ * 以前每次重试都多留一份已收到的字节(20 次 ≈ 2GB),把主进程撑爆;反过来,两次保存恰好复用同一个
+ * uploadId 也不会串线(键是路径,不是客户端给的 id)。半截的寿命仍由 2 分钟空闲 TTL 收口,不额外设份数/字节上限:
+ * 一个路径同一时刻只有一份,重试不再累积,而对正常保存不引入任何新的拒绝或淘汰。
  */
-export function createWorkspaceUploads(
-  options: { idleMs?: number; maxBytes?: number; maxPendingBytes?: number } = {}
-) {
+export function createWorkspaceUploads(options: { idleMs?: number; maxBytes?: number } = {}) {
   const uploads = new Map<string, PendingUpload>();
   const idleMs = options.idleMs ?? UPLOAD_IDLE_MS;
   const maxBytes = options.maxBytes ?? REMOTE_WORKSPACE_MAX_FILE_BYTES;
-  const maxPendingBytes = options.maxPendingBytes ?? maxBytes * 4;
-  let pendingBytes = 0;
   const drop = (file: string) => {
     const upload = uploads.get(file);
     if (!upload) return;
     clearTimeout(upload.timer);
-    pendingBytes -= upload.received;
     uploads.delete(file);
   };
-  /** 丢最久没动的那一份(不丢 `keepFile` 自己)。还有可丢的就返回 true。 */
-  const dropOldest = (keepFile: string): boolean => {
-    let oldest: PendingUpload | null = null;
-    for (const upload of uploads.values()) {
-      if (upload.path === keepFile) continue;
-      if (!oldest || upload.touchedAt < oldest.touchedAt) oldest = upload;
-    }
-    if (!oldest) return false;
-    drop(oldest.path);
-    return true;
-  };
-  const makeRoom = (incomingBytes: number, keepFile: string) => {
-    while (pendingBytes + incomingBytes > maxPendingBytes) {
-      if (!dropOldest(keepFile)) throw new WorkspaceTransferError('too_large', 'too many bytes are in flight to save; save again');
-    }
-  };
   const touch = (upload: PendingUpload) => {
-    upload.touchedAt = Date.now();
     clearTimeout(upload.timer);
     upload.timer = setTimeout(() => drop(upload.path), idleMs);
     upload.timer.unref?.();
@@ -213,7 +189,6 @@ export function createWorkspaceUploads(
           received: 0,
           chunks: [],
           timer: setTimeout(() => undefined, 0),
-          touchedAt: Date.now(),
         };
         uploads.set(file, upload);
       }
@@ -226,11 +201,9 @@ export function createWorkspaceUploads(
       if (upload.received + bytes.length > upload.total) {
         throw new WorkspaceTransferError('invalid_payload', 'more bytes than announced');
       }
-      makeRoom(bytes.length, file);
       touch(upload);
       upload.chunks.push(bytes);
       upload.received += bytes.length;
-      pendingBytes += bytes.length;
       if (!request.final) return { received: upload.received };
 
       drop(file);

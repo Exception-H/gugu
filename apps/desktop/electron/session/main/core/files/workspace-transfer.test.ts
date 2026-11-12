@@ -19,8 +19,6 @@ afterEach(() => {
 });
 
 const b64 = (text: string) => Buffer.from(text).toString('base64');
-/** 淘汰按 touchedAt 比新旧,同毫秒内的两份上传顺序不定;隔开一拍让「最久没动」可判。 */
-const waitForNextTouch = () => new Promise<void>((resolve) => setTimeout(resolve, 5));
 
 describe('路径只能落在这个工作区里', () => {
   it('`..` 与绝对路径逃不出去', async () => {
@@ -132,25 +130,5 @@ describe('挂起上传按目标路径隔离,重试换 uploadId 不再多留一�
       .rejects.toMatchObject({ code: 'upload_lost' });
     await uploads.write(root, { ...part('retry'), path: 'a.txt', offset: 2, data: b64('zw'), final: true });
     expect(readFileSync(path.join(root, 'a.txt'), 'utf8')).toBe('xyzw');
-  });
-
-  it('很多不同文件同时传时总字节有上限:超了先丢最久没动的那一份', async () => {
-    const uploads = createWorkspaceUploads({ maxBytes: 4, maxPendingBytes: 4 });
-    const part = (uploadId: string) => ({ path: `${uploadId}.txt`, uploadId, total: 4, expectedEtag: null });
-    await uploads.write(root, { ...part('u1'), offset: 0, data: b64('ab'), final: false });
-    await waitForNextTouch();
-    await uploads.write(root, { ...part('u2'), offset: 0, data: b64('cd'), final: false });
-    await waitForNextTouch();
-    // u3 这一段要 2 字节,再加就 6 > 4:丢掉最久没动的 u1。
-    await uploads.write(root, { ...part('u3'), offset: 0, data: b64('ef'), final: false });
-    await expect(uploads.write(root, { ...part('u1'), offset: 2, data: b64('gh'), final: true })).rejects.toMatchObject({
-      code: 'upload_lost',
-    });
-    // u2 收尾那 2 字节要进来,总量又超了:这回丢的是 u3。
-    await uploads.write(root, { ...part('u2'), offset: 2, data: b64('ij'), final: true });
-    await expect(uploads.write(root, { ...part('u3'), offset: 2, data: b64('kl'), final: true })).rejects.toMatchObject({
-      code: 'upload_lost',
-    });
-    expect(readFileSync(path.join(root, 'u2.txt'), 'utf8')).toBe('cdij');
   });
 });

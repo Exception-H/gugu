@@ -40,11 +40,13 @@ type StartResponse = { device_code: string; user_code: string; expires_in: numbe
 
 /**
  * 人在对话框前等这一个结果:连接卡住(半开)时必须自己收场,❌ 一直转。
- * 这只是单次请求的上限,不是登录的上限 —— 超时按「这一轮没答」处理,下一轮接着问,
- * 直到短码过期;慢网只是变成多问几次,最终结果与以前一样。
+ * 这些只是**单次请求**的上限,不是登录的上限:
+ *  · /poll 超时按「这一轮没答」处理,下一轮接着问,直到短码过期 —— 慢网只是多问几次,最终结果与以前一样;
+ *  · /start 取 300s,与 undici 原本的 headers/body 上限一致,不把原本能成功的请求变成失败;
+ *  · /auth/v1/verify 不加超时(卡上点名的是这里上面的 postJson;一次性 token 换会话不引入新失败形态)。
  */
-const LOGIN_FETCH_TIMEOUT_MS = 30_000
-const LOGIN_START_ATTEMPTS = 2
+const LOGIN_POLL_TIMEOUT_MS = 30_000
+const LOGIN_START_TIMEOUT_MS = 300_000
 
 function isFetchTimeout(error: unknown): boolean {
   return (error as { name?: string } | null)?.name === 'TimeoutError'
@@ -80,26 +82,15 @@ function machineInfo(machineId: string | null): Record<string, string> {
   }
 }
 
-async function postJson(url: string, body: unknown): Promise<{ status: number; data: Record<string, unknown> }> {
+async function postJson(url: string, body: unknown, timeoutMs: number): Promise<{ status: number; data: Record<string, unknown> }> {
   const response = await fetch(url, {
     method: 'POST',
     headers: { 'content-type': 'application/json', apikey: getSupabaseAnonKey() },
-    signal: AbortSignal.timeout(LOGIN_FETCH_TIMEOUT_MS),
+    signal: AbortSignal.timeout(timeoutMs),
     body: JSON.stringify(body),
   })
   const data = (await response.json().catch(() => ({}))) as Record<string, unknown>
   return { status: response.status, data }
-}
-
-/** 半开连接换一条再问;两次都不结算才把异常交出去。 */
-async function postJsonRetryingTimeout(url: string, body: unknown, attempts: number) {
-  for (let attempt = 1; ; attempt++) {
-    try {
-      return await postJson(url, body)
-    } catch (error) {
-      if (attempt >= attempts || !isFetchTimeout(error)) throw error
-    }
-  }
 }
 
 /** 用一次性 token_hash 向 GoTrue 换一条全新的会话(access + refresh)。 */
@@ -188,7 +179,7 @@ export async function runServerLogin(out: Out = defaultOut, args: readonly strin
     return LOGIN_EXIT_TUNNEL_CLOSED
   }
   const machineId = await machineIdOrNull()
-  const started = await postJsonRetryingTimeout(functionsUrl('/start'), { machine: machineInfo(machineId) }, LOGIN_START_ATTEMPTS)
+  const started = await postJson(functionsUrl('/start'), { machine: machineInfo(machineId) }, LOGIN_START_TIMEOUT_MS)
   if (started.status !== 200) {
     out(`登录请求没发出去(${started.status}): ${JSON.stringify(started.data)}`)
     return 1
@@ -227,7 +218,7 @@ async function pollUntilDone(
     first = false
     let polled: Awaited<ReturnType<typeof postJson>>
     try {
-      polled = await postJson(functionsUrl('/poll'), { device_code: deviceCode, ...(machineId ? { machine_id: machineId } : {}) })
+      polled = await postJson(functionsUrl('/poll'), { device_code: deviceCode, ...(machineId ? { machine_id: machineId } : {}) }, LOGIN_POLL_TIMEOUT_MS)
     } catch (error) {
       // 这一轮连接没结算:当作「还没结果」,按下一次间隔再问;authorization_pending 同一条路。
       if (!isFetchTimeout(error)) throw error
