@@ -62,8 +62,15 @@ export async function ensureProjectGroup(
   projectId: string
 ): Promise<Result<{ chatId: string }, ProjectGroupError>> {
   const subject = await subjectOf(projectId);
-  if (!subject) return err(projectNotFound(projectId));
+  if (!subject) {
+    groupsToRetry.delete(projectId);
+    return err(projectNotFound(projectId));
+  }
   const result = await projectGroupHost().ensureGroup(subject);
+  // 云端那一发没成(断网时建的项目):记着,云端再答话时(这台机器的项目记上账号那一刻)再建一次。建成了对照变了,这台机器再记一次,
+  // 带着群的这一份记上账号之后,窗口重读就有了它。❌ 先把没建出来的群 id 写进对照:项目块会去画一个壳里还没有的群(一片空白)。
+  if (!result.success && result.error.type === 'cloud-failed') groupsToRetry.add(projectId);
+  else groupsToRetry.delete(projectId);
   if (!result.success) return result;
   if (result.data.changed) {
     activitySignal({ event_id: randomUUID(), kind: 'project.group_bound', object_id: projectId,
@@ -71,6 +78,14 @@ export async function ensureProjectGroup(
     notifyProjectGroupBindingChanged(projectId);
   }
   return ok({ chatId: result.data.chatId });
+}
+
+/** 建群时云端没答上的项目(见 ensureProjectGroup)。 */
+const groupsToRetry = new Set<string>();
+
+/** 云端又答话了(这台机器的项目刚记上账号):上次没建成的项目群各再建一次。仍没成的留着等下一次。 */
+export async function retryProjectGroups(): Promise<void> {
+  for (const projectId of [...groupsToRetry]) await ensureProjectGroup(projectId);
 }
 
 /**

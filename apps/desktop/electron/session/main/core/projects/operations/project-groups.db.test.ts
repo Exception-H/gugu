@@ -33,6 +33,7 @@ import {
   ensureProjectGroup,
   listProjectGroupBindings,
   localProjectOfGroup,
+  retryProjectGroups,
   unbindProjectGroup,
 } from './project-groups';
 
@@ -158,6 +159,27 @@ describe('project groups (会话页一侧)', () => {
     setProjectGroupHost(fakeHost({ ensureGroup: async () => ok({ chatId: 'chat-reserved', changed: false }) }).host);
     await ensureProjectGroup('project-a');
     expect(mocks.emitted, '什么都没变 ⇒ 不叫').toEqual([]);
+  });
+
+  // Offline: the group could not be created. It is created again when this machine's projects are next published (the
+  // cloud answers again); a failure that is not the cloud's, or a later success, is not retried.
+  it('a group the cloud did not create is created again on retry, once; other failures are not retried', async () => {
+    let answer: 'offline' | 'online' = 'offline';
+    const { host, calls } = fakeHost({
+      ensureGroup: async (subject) => {
+        calls.push({ op: 'ensure', subject });
+        return answer === 'offline' ? err({ type: 'cloud-failed', message: 'fetch failed' }) : ok({ chatId: 'chat-reserved', changed: false });
+      },
+    });
+    setProjectGroupHost(host);
+    expect(await ensureProjectGroup('project-a')).toMatchObject({ success: false, error: { type: 'cloud-failed' } });
+    await retryProjectGroups();
+    expect(calls.filter((call) => call.op === 'ensure')).toHaveLength(2);
+    answer = 'online';
+    await retryProjectGroups();
+    expect(calls.filter((call) => call.op === 'ensure')).toHaveLength(3);
+    await retryProjectGroups();
+    expect(calls.filter((call) => call.op === 'ensure'), 'created ⇒ nothing left to retry').toHaveLength(3);
   });
 
   it('没有这个项目 ⇒ not-found,宿主一下都不问', async () => {
