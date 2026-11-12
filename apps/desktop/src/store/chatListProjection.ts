@@ -2,7 +2,7 @@ import { useCallback, useMemo, useRef, type MutableRefObject } from 'react'
 import { mergeFetchedChatsPreservingActiveLocal } from '@gugu/core/shared/ui/chatModels'
 import { createChatNotificationPayload, shouldNotify } from '@gugu/core/shared/ui/notificationModels'
 import type { ChatItem, MessageItem } from '@gugu/core/shared/types/chat'
-import { publishChatSnapshot } from '../lib/chatSnapshotPublication'
+import { publishChatSnapshot, readDurableList } from '../lib/chatSnapshotPublication'
 import { platform } from '../platform'
 import { i18n } from '@/i18n'
 import { isChatOnScreen } from '../lib/onScreenChat'
@@ -184,6 +184,7 @@ export function useChatProjectionBinding(deps: {
       ownerRef.current = { accountId, owner: createChatProjection(accountId, {
         rows: () => chatsRef.current,
         identity: (id) => repositoryRef.current?.accountId === accountId ? imSelectors.identitiesById(repositoryRef.current.snapshot())[id] : undefined,
+        durable: () => repositoryRef.current?.accountId === accountId ? readDurableList(repositoryRef.current) : null,
       }) }
     }
     return ownerRef.current.owner
