@@ -164,9 +164,10 @@ export function createAcpLegAdapter(sessionId: string, fork: RuntimeFork | null)
         return lease<Capabilities>({ injection, facts }) as CapabilityGrant;
       } catch (error) {
         // The ticket was asked first: when the backend is down both fail, and the ticket's reason (unreachable,
-        // refused, membership) is the one the page can say and act on.
-        await platformPreparation;
-        throw error;
+        // refused, membership) is the one the page can say and act on. A ticket that never answers keeps this start
+        // waiting, as the platform stage would: visible, and a stop is not held by it (session-life untilAborted).
+        const ticketFailure = platformPreparation ? await platformPreparation.then(() => null, (reason: unknown) => reason) : null;
+        throw ticketFailure ?? error;
       }
     },
     async platform(have): Promise<PlatformTicket> {
@@ -296,7 +297,7 @@ export function createAcpLegAdapter(sessionId: string, fork: RuntimeFork | null)
         // settle only the generation this early operation owns, without waiting for it.
         void platformPreparation.then(generation => generation ? releaseEmdashPlatformSession(sessionId, generation) : undefined)
           .catch(error => log.warn('early platform preparation could not settle', { sessionId, error: String(error) }));
-      } else if (have.capabilities) await releaseEmdashPlatformSession(sessionId);
+      } else if (have.capabilities) await releaseEmdashPlatformSession(sessionId); // a session on its own model asks no ticket early
     },
     onExit(have, cb) {
       const worker = read<Worker>(have.process);
