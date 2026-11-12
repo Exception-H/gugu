@@ -10,3 +10,5 @@ import { ok } from '@gugu/session-shared/result'
 it('does not parse partial or invalid PR numbers',()=>{for(const identifier of ['#12oops','#0','-1','##7','#9007199254740993']) expect(getPrNumber({identifier})).toBeNull();expect(getPrNumber({identifier:'#12'})).toBe(12)})
 
 it('reads HTTP and SSH repository schemes regardless of case',()=>{expect(parseRepositoryRef('HTTPS://github.com/team/repo.git')?.nameWithOwner).toBe('team/repo');expect(parseRepositoryRef('SSH://git@github.com/team/repo.git')?.nameWithOwner).toBe('team/repo')})
+
+it('does not read a directory dot as a file extension',()=>{expect(extensionOf('folder.md/README')).toBe('');expect(extensionOf('folder.png\\README')).toBe('');expect(mimeTypeFromName('folder.md/README')).toBeNull();expect(extensionOf('folder.md/note.PNG')).toBe('png')})
