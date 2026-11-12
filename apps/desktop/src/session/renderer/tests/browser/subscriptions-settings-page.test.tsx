@@ -178,7 +178,11 @@ let root: Root;
 let host: HTMLDivElement;
 let layer: HTMLDivElement;
 const thrown: unknown[] = [];
-const onError = (event: ErrorEvent) => thrown.push(event.error);
+// 只收真抛出来的东西。浏览器的「ResizeObserver loop completed with undelivered notifications」也走 window error,
+// 但它不是异常(error 为 null):Base UI 的菜单内容长过它这一侧的 --available-height 时，先被压到那个高度、再 flip 到另一侧，
+// 两步落在同一轮 ResizeObserver 回调里(设计如此，见 @base-ui/react useAnchorPositioning 的 flip padding)。
+// 菜单正好贴着视口边时(Qwen 那格：下方 220px、内容 221px)这条提示时有时无，算进来就时红时绿。
+const onError = (event: ErrorEvent) => { if (event.error !== null) thrown.push(event.error); };
 
 beforeEach(() => {
   queryClient.clear();
