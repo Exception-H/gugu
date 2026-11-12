@@ -15,7 +15,7 @@ export function imagePixelSize(b: Uint8Array): { width: number; height: number }
   if (b.length >= 25 && ascii(0, 4) === 'RIFF' && ascii(8, 12) === 'WEBP') {
     const chunk = ascii(12, 16)
     const chunkBytes = (b[16]! | (b[17]! << 8) | (b[18]! << 16) | (b[19]! << 24)) >>> 0
-    if (chunk === 'VP8L' && chunkBytes < 5 || (chunk === 'VP8 ' || chunk === 'VP8X') && chunkBytes < 10) return null
+    if ((chunk === 'VP8L' && chunkBytes < 5) || ((chunk === 'VP8 ' || chunk === 'VP8X') && chunkBytes < 10)) return null
     if (chunk === 'VP8 ' && b.length >= 30 && (b[20]! & 1) === 0 && ascii(23, 26) === '\x9d\x01\x2a') return size(u16le(26) & 0x3fff, u16le(28) & 0x3fff)
     if (chunk === 'VP8L' && b[20] === 0x2f && (b[24]! & 0xe0) === 0) { const bits = (b[21]! | (b[22]! << 8) | (b[23]! << 16) | (b[24]! << 24)) >>> 0; return size((bits & 0x3fff) + 1, ((bits >>> 14) & 0x3fff) + 1) }
     if (chunk === 'VP8X' && b.length >= 30 && (b[20]! & 0xc1) === 0 && b[21] === 0 && b[22] === 0 && b[23] === 0) return size(u24le(24) + 1, u24le(27) + 1)
@@ -46,7 +46,7 @@ export function imagePixelSize(b: Uint8Array): { width: number; height: number }
   return null
 }
 
-/** EXIF orientation of an APP1 segment whose payload is b[at, end): null when the segment is not EXIF, 1 when it names none. */
+/** APP1 段内的 EXIF 方向；段不合法或未声明方向时返回 null，保留已读到的方向。 */
 function exifOrientation(b: Uint8Array, at: number, end: number): number | null {
   if (end > b.length || String.fromCharCode(...b.subarray(at, at + 6)) !== 'Exif\0\0') return null
   if (at + 14 > end) return null
@@ -65,5 +65,5 @@ function exifOrientation(b: Uint8Array, at: number, end: number): number | null 
       return orientation >= 1 && orientation <= 8 ? orientation : null
     }
   }
-  return 1
+  return null
 }
