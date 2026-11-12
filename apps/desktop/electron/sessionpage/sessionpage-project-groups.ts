@@ -32,8 +32,8 @@ interface Mapping {
   unowned: ProjectMap
   /**
    * This device's own file versions, by item: a cache of the database's version records (immutable per version), filled
-   * when this device publishes a version or the database answers for one. Whether this device still holds a version is
-   * decided at read time from the binding, never by dropping entries.
+   * when this device publishes a version or the database answers for one, at most FILE_CACHE_MAX items per account.
+   * Whether this device still holds a version is decided at read time from the binding, never by dropping entries.
    */
   files?: Record<string, Record<string, FileRevision>>
   /** The roster's project groups were copied in (migrateRosterGroups); the roster is never read for them again. */
@@ -252,13 +252,25 @@ function held(mapping: Mapping, ownerId: string, deviceId: string, revision: Fil
     keptFor(mapping, ownerId, revision) ? revisionRecord(revision) : null
 }
 
+/** Items whose version records this device caches per account; past it the least recently written go (a miss asks the database). */
+const FILE_CACHE_MAX = 2000
+
+/** Put a version record into the account's cache, as its most recent entry, and drop the oldest past FILE_CACHE_MAX. */
+function putRevision(mapping: Mapping, ownerId: string, revision: FileRevision): void {
+  const mine = (mapping.files ??= {})[ownerId] ??= {}
+  delete mine[revision.item_id!]
+  mine[revision.item_id!] = revisionRecord(revision)
+  const items = Object.keys(mine)
+  for (const item of items.slice(0, Math.max(0, items.length - FILE_CACHE_MAX))) delete mine[item]
+}
+
 /** Keep a version record of this device's in the cache (the newest one per item). */
 function cacheRevision(revision: FileRevision, ownerId: string, env: NodeJS.ProcessEnv): Promise<void> {
   return mutateMapping(env, async (mapping) => {
-    const mine = (mapping.files ??= {})[ownerId] ??= {}
-    const cached = Object.hasOwn(mine, revision.item_id!) ? mine[revision.item_id!] : undefined
+    const mine = mapping.files?.[ownerId]
+    const cached = mine && Object.hasOwn(mine, revision.item_id!) ? mine[revision.item_id!] : undefined
     if (cached && cached.version! >= revision.version!) return
-    mine[revision.item_id!] = revisionRecord(revision)
+    putRevision(mapping, ownerId, revision)
     await writeMapping(mapping, env)
   })
 }
@@ -269,7 +281,7 @@ export async function rememberProjectFile(revision: FileRevision, ownerId: strin
   if (revision.source !== 'local' || revision.host_account_id !== ownerId || !revision.chat_id) throw new Error('File owner or group mismatch')
   await mutateMapping(env, async (mapping) => {
     if (!keptFor(mapping, ownerId, revision)) throw new Error('Project binding changed')
-    ;((mapping.files ??= {})[ownerId] ??= {})[revision.item_id!] = revisionRecord(revision)
+    putRevision(mapping, ownerId, revision)
     await writeMapping(mapping, env)
   })
 }
