@@ -1,12 +1,9 @@
-import { arrayMove } from '@dnd-kit/sortable';
 import { useVirtualizer } from '@tanstack/react-virtual';
 import { observer } from 'mobx-react-lite';
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, type DragEvent } from 'react';
-import { createPortal } from 'react-dom';
 import { type SidebarRow } from '@renderer/features/sidebar/sidebar-store';
 import { getSessionPageStore } from '@renderer/features/sessions/stores/session-selectors';
 import { useParams, useWorkspaceSlots } from '@renderer/lib/layout/navigation-provider';
-import { getPortalContainerOrBody } from '@renderer/lib/portal-container';
 import { getDraggedScreenContent } from '@renderer/lib/drag-screen-content';
 import { sidebarStore } from '@renderer/lib/stores/app-state';
 import { cn } from '@renderer/utils/utils';
@@ -187,8 +184,7 @@ export const SidebarVirtualList = observer(function SidebarVirtualList() {
     const overIndex = Number(rowElement?.dataset.index);
     if (!rowElement || !listRef.current?.contains(rowElement) || !Number.isInteger(overIndex)) return null;
     const rect = rowElement.getBoundingClientRect();
-    const isAbove = event.clientY < rect.top + rect.height / 2;
-    return { projectId, rowIndex: isAbove ? overIndex : overIndex + 1, rect, isAbove };
+    return { projectId, rowIndex: event.clientY < rect.top + rect.height / 2 ? overIndex : overIndex + 1 };
   }
 
   function nextProjectOrder({ projectId, rowIndex }: ProjectInsertion): string[] | null {
@@ -198,8 +194,18 @@ export const SidebarVirtualList = observer(function SidebarVirtualList() {
     if (oldIdx === -1) return null;
     let newIdx = rows.slice(0, rowIndex).filter((r) => r.kind === 'project').length;
     if (newIdx > oldIdx) newIdx -= 1;
-    return newIdx === oldIdx ? null : arrayMove(ids, oldIdx, newIdx);
+    if (newIdx === oldIdx) return null;
+    const order = [...ids];
+    order.splice(newIdx, 0, ...order.splice(oldIdx, 1));
+    return order;
   }
+
+  // The line's place from the virtualizer's row offsets (list coordinates), not from the row's screen rect.
+  const insertionTop = (rowIndex: number) => {
+    const measured = virtualizer.measurementsCache;
+    const at = rowIndex < measured.length ? measured[rowIndex]?.start : measured[measured.length - 1]?.end;
+    return (at ?? scrollMargin) - scrollMargin;
+  };
 
   const dropHandlers = {
     onDragOver: (event: DragEvent<HTMLElement>) => {
@@ -292,14 +298,16 @@ export const SidebarVirtualList = observer(function SidebarVirtualList() {
               </div>
             );
           })}
+          {insertion ? <InsertionLine top={insertionTop(insertion.rowIndex)} /> : null}
         </div>
       </div>
-      {insertion ? <InsertionIndicator insertion={insertion} /> : null}
     </>
   );
 });
 
-type ProjectInsertion = { projectId: string; rowIndex: number; rect: DOMRect; isAbove: boolean };
+/** Where a dropped project row would land: before row `rowIndex` (rows.length = after the last). Kept as a row, not a screen
+ * position, so the line follows the list when it scrolls during the drag. */
+type ProjectInsertion = { projectId: string; rowIndex: number };
 
 function rowKey(row: SidebarRow): string {
   if (row.kind === 'project') return `proj::${row.projectId}`;
@@ -308,25 +316,13 @@ function rowKey(row: SidebarRow): string {
   return `more::${row.projectId}`;
 }
 
-/** 松手会落在哪:被指着的那一行的上沿或下沿一根线。 */
-function InsertionIndicator({ insertion: { rect, isAbove } }: { insertion: ProjectInsertion }) {
-  const top = isAbove ? rect.top : rect.bottom;
-  return createPortal(
+/** 松手会落在哪:那一行的上沿一根线(在列表里定位,随列表滚动)。 */
+function InsertionLine({ top }: { top: number }) {
+  return (
     <div
       className="bg-foreground"
-      data-project-insertion
-      style={{
-        position: 'fixed',
-        left: rect.left + 8,
-        top: top - 1.5,
-        width: Math.max(0, rect.width - 16),
-        height: 3,
-        borderRadius: 2,
-        pointerEvents: 'none',
-        zIndex: 9999,
-      }}
-    />,
-    getPortalContainerOrBody()
+      style={{ position: 'absolute', left: 8, right: 8, top: top - 1.5, height: 3, borderRadius: 2, pointerEvents: 'none', zIndex: 10 }}
+    />
   );
 }
 
