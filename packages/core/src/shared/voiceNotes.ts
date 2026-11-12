@@ -275,7 +275,7 @@ export function renderTranscript(lines: readonly TranscriptLine[]): string {
 export function parseTranscript(markdown: string): TranscriptLine[] {
   const out: TranscriptLine[] = []
   for (const raw of markdown.replace(/\r\n/g, '\n').split('\n')) {
-    if (raw.startsWith('  ') && out.length > 0) { out[out.length - 1].text += '\n' + raw.slice(2); continue }
+    if (raw.startsWith('  ') && !LINE.test(raw.trim()) && out.length > 0) { out[out.length - 1].text += '\n' + raw.slice(2); continue }
     const m = LINE.exec(raw.trim())
     if (m && m[5].trim()) out.push({ startMs: stampMs(m[1], m[2], m[3]), speaker: m[4].trim(), text: m[5].trim() })
   }
