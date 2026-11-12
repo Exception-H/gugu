@@ -43,7 +43,7 @@ export function createPortDetector(options: { tailChars?: number; maxPorts?: num
   return {
     push(chunk: string): number[] {
       const text = tail + chunk;
-      tail = text.slice(-tailChars);
+      tail = tailChars > 0 ? text.slice(-tailChars) : '';
       if (seen.size >= maxPorts) return [];
       const fresh = findLoopbackPorts(text, false).filter((port) => !seen.has(port)).slice(0, Math.max(0, maxPorts - seen.size));
       for (const port of fresh) seen.add(port);
