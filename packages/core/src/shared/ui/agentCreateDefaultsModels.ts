@@ -200,24 +200,6 @@ export function agentCreateDeviceBlockMessage(
 // ── 项目解析 ──────────────────────────────────────────────────────────────────
 
 /**
- * 规范：项目默认沿用所选设备最近使用的项目；没有合适项目时显示「未选择项目」；项目列表只展示所选
- * 设备可用的项目，切换设备导致当前项目不可用时清空项目。
- *
- * 记忆里的 id 不在可用列表里 → null（=「未选择项目」），❌ 不回落到列表第一个。
- */
-export function resolveAgentCreateProject(
-  defaults: AgentCreateDefaults,
-  deviceId: string | null,
-  availableProjectIds: readonly string[],
-  chatId?: string | null,
-): string | null {
-  if (!deviceId) return null
-  const remembered = rememberedAgentCreateProject(defaults, deviceId, chatId)
-  if (!remembered) return null
-  return availableProjectIds.includes(remembered) ? remembered : null
-}
-
-/**
  * 在这个对话里派任务记着的项目:这个对话选过的(哪台机器上的都算 —— 项目可以在别的机器上),否则 `localDeviceId` 这台上
  * 最近一次选的。返回(机器, 那台上的本地项目);由调用方认回账号上的项目。
  */
@@ -230,14 +212,4 @@ export function rememberedChatProject(
   if (inChat) return inChat
   const recent = defaults.projectByDevice[localDeviceId]
   return recent ? { deviceId: localDeviceId, projectId: recent } : null
-}
-
-/** 记着的那个项目(还没对照可用列表):这个对话在这台设备上选过的,否则这台设备上最近一次选的。 */
-export function rememberedAgentCreateProject(
-  defaults: AgentCreateDefaults,
-  deviceId: string,
-  chatId?: string | null,
-): string | null {
-  const inChat = chatId ? defaults.projectByChat[chatId] : undefined
-  return (inChat?.deviceId === deviceId ? inChat.projectId : defaults.projectByDevice[deviceId]) ?? null
 }

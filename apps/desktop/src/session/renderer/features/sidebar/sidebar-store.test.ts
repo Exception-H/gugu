@@ -1205,7 +1205,6 @@ describe('SidebarStore: 别的机器上的会话归到那台机器的项目下',
     store.sidebarProjects.forEach((project) => store.ensureProjectExpanded(project.id));
 
     expect(store.orderedProjects.map((p) => p.id)).toEqual(['mine']);
-    expect(store.homeLayout.homeRows.size).toBe(0);
     expect(store.standaloneSessionEntries.map((e) => e.sessionId)).toEqual(['lc-home']);
     sessionRegistry.release('lt-home');
   });

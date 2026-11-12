@@ -14,10 +14,6 @@ import type { ProjectManagerStore } from '@renderer/features/projects/stores/pro
 import { pageSessions } from '@renderer/features/sessions/stores/session-selectors';
 import { isWorkspaceProject } from '@renderer/features/sessions/session-home-project-constants';
 import { nameTwinIds } from '@renderer/features/projects/name-twins';
-import {
-  EMPTY_MACHINE_HOME_LAYOUT,
-  type MachineHomeLayout,
-} from '@renderer/features/remote-hosts/machine-home';
 import type { Snapshottable } from '@renderer/lib/stores/snapshottable';
 import type { SidebarListLayout, SidebarListPage, SidebarSnapshot, SidebarSessionSortBy } from '@shared/view-state';
 import { blockKey, type JoinedGroup, type SidebarJoin } from '@/lib/sidebarJoinedGroups';
@@ -390,11 +386,6 @@ export class SidebarStore implements Snapshottable<SidebarSnapshot> {
     }
 
     return nodes;
-  }
-
-  /** 主目录折叠(machine-home.ts)已不再产生行;留给还读它的几处(homeRows / standIns 恒空)。 */
-  get homeLayout(): MachineHomeLayout {
-    return EMPTY_MACHINE_HOME_LAYOUT;
   }
 
   /** 这一行代表的项目在各台机器上的本地项目(代表行在最前);不属于账号上任何项目 = 只有它自己。 */

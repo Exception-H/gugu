@@ -86,7 +86,7 @@ export class ActivityJournal {
     if (!row) throw new Error('Activity event does not exist on this machine');
     return activityEventSchema.parse(JSON.parse(row.data));
   }
-  /** `projects`: the local projects `project_id` stands for on this machine (a project id names a group, not one of them). */
+  /** `projects`: the local projects `project_id` stands for on this machine (a project id names a group, not one of them); the caller translates it. */
   list(input: ActivityQuery, projects?: readonly string[]) {
     if (this.fault) throw new Error('Activity capture failed in this process; coverage is incomplete. Check the host log.');
     const q = activityQuerySchema.parse(input);
@@ -107,7 +107,6 @@ export class ActivityJournal {
     const args: (string | number)[] = [after, high, Date.parse(q.since), Date.parse(q.until)];
     if (q.session_id) { conditions.push('session_id = ?'); args.push(q.session_id); }
     if (projects) { conditions.push(`project_id IN (${projects.map(() => '?').join(',') || 'NULL'})`); args.push(...projects); }
-    else if (q.project_id) { conditions.push('project_id = ?'); args.push(q.project_id); }
     const rows = this.sql.prepare(`SELECT seq, data FROM activity_events WHERE ${conditions.join(' AND ')} ORDER BY seq LIMIT ?`).all(...args, q.limit + 1) as Row[];
     const page = rows.slice(0, q.limit);
     // Current session metadata, not input/reply text and not an event-time title.

@@ -318,7 +318,6 @@ export {
   agentCreateDeviceBlockMessage,
   parseAgentCreateDefaults,
   resolveAgentCreateDevice,
-  resolveAgentCreateProject,
   EMPTY_AGENT_CREATE_DEFAULTS,
   type AgentCreateDefaults,
   type AgentCreateDeviceResolution

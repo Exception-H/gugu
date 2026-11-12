@@ -8,10 +8,10 @@ import {
   agentCreateDeviceBlockMessage,
   parseAgentCreateDefaults,
   resolveAgentCreateDevice,
-  resolveAgentCreateProject,
   EMPTY_AGENT_CREATE_DEFAULTS,
   type AgentCreateDefaults,
   mergeAgentCreateRunMachine,
+  rememberedChatProject,
 } from '@gugu/core/shared/ui/agentCreateDefaultsModels'
 import type { Device } from '@gugu/core/shared/types/chat'
 import { fakeSettingsClient } from '../../../support/userSettingsTestDouble'
@@ -144,31 +144,6 @@ describe('agent create defaults — 设备解析', () => {
   })
 })
 
-describe('agent create defaults — 项目解析（按设备过滤）', () => {
-  const remembered = defaults({
-    deviceId: 'dev-local',
-    projectByDevice: { 'dev-local': 'proj-a', 'dev-studio': 'proj-b' }
-  })
-
-  it('记忆命中所选设备的可用列表 → 沿用', () => {
-    expect(resolveAgentCreateProject(remembered, 'dev-local', ['proj-a', 'proj-c'])).toBe('proj-a')
-  })
-
-  it('切换设备后旧项目不在新设备的列表里 → 清空为「未选择项目」，❌ 不回落到列表第一个', () => {
-    expect(resolveAgentCreateProject(remembered, 'dev-local', ['proj-c', 'proj-d'])).toBeNull()
-  })
-
-  it('项目记忆按设备分桶，不串台', () => {
-    expect(resolveAgentCreateProject(remembered, 'dev-studio', ['proj-a'])).toBeNull()
-    expect(resolveAgentCreateProject(remembered, 'dev-studio', ['proj-b'])).toBe('proj-b')
-  })
-
-  it('没有设备 / 该设备没记过项目 → 未选择项目', () => {
-    expect(resolveAgentCreateProject(remembered, null, ['proj-a'])).toBeNull()
-    expect(resolveAgentCreateProject(remembered, 'dev-new', ['proj-a'])).toBeNull()
-  })
-})
-
 describe('agent create defaults — per-user 持久化', () => {
   it('没有行时读成"没有记忆"', async () => {
     const fake = fakeSettingsClient()
@@ -233,11 +208,8 @@ describe('agent create defaults — per-user 持久化', () => {
       'chat-design': { deviceId: 'dev-local', projectId: 'proj-a' },
       'chat-ops': { deviceId: 'dev-local', projectId: 'proj-b' },
     })
-    const available = ['proj-a', 'proj-b']
-    expect(resolveAgentCreateProject(read, 'dev-local', available, 'chat-design')).toBe('proj-a')
-    expect(resolveAgentCreateProject(read, 'dev-local', available, 'chat-new')).toBe('proj-b')
-    // 记的是另一台设备上的项目:这台设备上回落到最近一次
-    expect(resolveAgentCreateProject(read, 'dev-studio', ['proj-a'], 'chat-design')).toBeNull()
+    expect(rememberedChatProject(read, 'chat-design', 'dev-local')).toEqual({ deviceId: 'dev-local', projectId: 'proj-a' })
+    expect(rememberedChatProject(read, 'chat-new', 'dev-local')).toEqual({ deviceId: 'dev-local', projectId: 'proj-b' })
     await expect(readAgentCreateDefaults(fake.client, 'user-1')).resolves.toEqual(read)
   })
 
