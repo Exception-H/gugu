@@ -9,3 +9,5 @@ it('refuses a preview file that ends before its declared size',async()=>{const f
 it('discovers valid one-digit ports',()=>{expect(findLoopbackPorts('http://localhost:8/')).toEqual([8])})
 
 it('keeps occurrence order across different server output formats',()=>{expect(findLoopbackPorts('Serving HTTP on 0.0.0.0 port 8080\nlocalhost:3000/')).toEqual([8080,3000])})
+
+it('enforces maxPorts within a single push',()=>{const detector=createPortDetector({maxPorts:1});expect(detector.push('localhost:3000/ localhost:4000/')).toEqual([3000]);expect(detector.push('localhost:5000/')).toEqual([])})
