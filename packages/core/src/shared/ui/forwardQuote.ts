@@ -23,7 +23,8 @@ export function forwardQuote(items: readonly ForwardQuoteItem[], note = ''): str
 /** One line, at most `max` characters. */
 export function excerpt(text: string, max: number): string {
   const line = text.replace(/\s+/g, ' ').trim()
-  return line.length > max ? `${line.slice(0, max - 1)}…` : line
+  const characters = Array.from(line)
+  return characters.length > max ? `${characters.slice(0, max - 1).join('')}…` : line
 }
 
 function escapeInline(text: string): string {
