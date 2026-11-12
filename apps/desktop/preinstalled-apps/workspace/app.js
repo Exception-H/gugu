@@ -80,7 +80,6 @@ const STRINGS = {
     taskHomeNote: '没选项目的任务都在这个文件夹工作',
     folderMachineOffline: '{machine} 现在离线，上线后才能看这个文件夹。',
     folderGone: '这个文件夹在 {machine} 上找不到了。',
-    openOnMachine: '请在 {machine} 上打开这个文件。',
     taskHomeEmptyDetail: '没选项目的任务都在这个文件夹工作，agent 写的文件会出现在这里。',
     listing: '正在读取…',
     noMatch: '没有文件名含「{q}」的文件。',
@@ -319,7 +318,6 @@ const STRINGS = {
     taskHomeNote: 'Tasks without a project work in this folder',
     folderMachineOffline: '{machine} is offline. This folder can be read once it is back.',
     folderGone: 'This folder is no longer on {machine}.',
-    openOnMachine: 'Open this file on {machine}.',
     taskHomeEmptyDetail: 'Tasks without a project work in this folder; what their agents write shows up here.',
     listing: 'Loading…',
     noMatch: 'No file name contains “{q}”.',
@@ -2332,7 +2330,7 @@ async function openInHost(entry, ask = false, intent = 'navigate') {
     const viewState = { root: state.root, folder: state.folder, filter: state.filter, kind: state.kind, sort: state.sort, filters: state.filters, picked: [...state.picked], selecting: state.selecting, pickFrom: state.pickFrom, scrollTop: $('file-list').scrollTop }
     await gugu.files.openWith(entry, { intent, viewState, ...(ask ? { ask: true } : {}) })
   } catch (error) {
-    showBanner(error.code === 'elsewhere' && copyOf()?.machine ? fmt(state.t.openOnMachine, { machine: copyOf().machine }) : failureText(error), 'error')
+    showBanner(failureText(error), 'error')
   }
 }
 

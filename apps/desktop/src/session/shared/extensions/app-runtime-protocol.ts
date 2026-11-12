@@ -602,13 +602,14 @@ export interface ChatPeekFile {
 /**
  * What opens beside the page that asked (`files.openWith(file, { peek: true })`, `showSession(id, { peek: true })`, G1):
  * drawn by the host in that page's own slot, the page left as it is. A chat's file: who opens it there (`none`: the host's
- * preview). A file of a folder on this computer: its workspace and path there — who claims it is the window's to work
- * out, as a click in a session's files does. A session: its own session page — on a phone, the computer it is on
- * (`deviceId`), whose timeline the phone draws.
+ * preview). A file of a project's folder: its project, workspace and path on the machine the folder is on (`deviceId` when
+ * that is another one, whose project the window's calls are routed to) — who claims it is the window's to work out, as a
+ * click in a session's files does. A session: its own session page — on a phone, the computer it is on (`deviceId`), whose
+ * timeline the phone draws.
  */
 export type PeekTarget =
   | { kind: 'chat'; detail: AppOpenWithDetail }
-  | { kind: 'local'; place: WorkspacePlace; projectId: string; workspaceId: string; path: string; absolutePath: string; name: string; ask: boolean }
+  | { kind: 'folder'; place: WorkspacePlace; deviceId?: string; projectId: string; workspaceId: string; path: string; absolutePath: string; name: string; ask: boolean }
   | { kind: 'session'; sessionId: string; projectId: string; deviceId?: string };
 
 export const GROUP_FILE_NOT_OPENED = 'Not opened: the person at this computer is not in the chat this file belongs to';
