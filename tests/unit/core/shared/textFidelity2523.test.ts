@@ -10,3 +10,5 @@ it('keeps multiline sender names inside one quote heading', () => { expect(forwa
 it('writes widget preview fields first regardless of input property order', () => { const widget = { app: 'notes', view: 'main', text: 'Hello', v: 2 as const }; expect(widgetMessagePreview(serializeWidgetMessage(widget))).toBe('Hello') })
 
 it('accepts trailing horizontal whitespace on the opening frontmatter delimiter', () => { expect(readFrontmatter('--- \t\nname: Note\n---\nBody')).toEqual({ fields: { name: 'Note' }, body: 'Body' }) })
+
+it('reads doubled apostrophes inside YAML single-quoted metadata', () => { expect(readFrontmatter("---\nname: 'Lin''s note'\n---\nBody").fields.name).toBe("Lin's note") })
