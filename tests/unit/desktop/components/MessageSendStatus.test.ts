@@ -51,7 +51,7 @@ describe('MessageSendStatus', () => {
     expect(document.body.querySelector('.gg-ring-march')).not.toBeNull()
   })
   it('keeps an ambiguous attachment visibly unknown without a sending spinner or resend action', async () => {
-    const state = deriveMessageSendState({ seq: -1, local_send_state: 'unknown' } as MessageItem, {})
+    const state = deriveMessageSendState({ seq: -1, local_send_state: 'unknown' } as MessageItem, {}, { agentIds: new Set(), wakes: new Map() })
     await renderWithAppProviders(harness, createNode(MessageSendStatus, { state, messageId: 'message-1' }),
       { chat: { retrySend: vi.fn(), discardSend: vi.fn() } })
     expect(document.body.querySelector('[data-send-state="unknown"]')?.textContent).toContain('状态待确认')

@@ -100,7 +100,7 @@ async function renderConversation(width: number, naturallySeen = false, surface:
     const jump = () => {
       void navigation.jumpToUnreadEntry('long-chat', memory.scrollerRef.current).then(() => confirmed(`m${target}`), rejected)
     }
-    const rowProps: MessageListRowProps = { rows, messages, mobile: width < 720, memberReadSeqs: {}, deliveryWaits: new Map(), memberProfiles: {},
+    const rowProps: MessageListRowProps = { rows, messages, mobile: width < 720, memberReadSeqs: {}, deliveryWaits: new Map(), recipientFacts: { agentIds: new Set(), wakes: new Map() }, memberProfiles: {},
       isGroupChat: true, onReaction: noop, onQuote: noop, onForward: noop, onDelete: noop, onVisible: noop, selectMode: false,
       selectedIds: new Set(), onToggleSelect: noop, onEnterSelectMode: noop, flashMessageId, threeParty: undefined,
       readReceiptHandle: undefined, memberProfileOpener: undefined, onOpenTopic: undefined, topicAnchors: undefined, onOpenTopicAnchor: undefined,
