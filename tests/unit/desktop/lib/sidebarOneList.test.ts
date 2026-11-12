@@ -17,6 +17,7 @@ import { zhCNSampleProject } from '../../../../apps/desktop/src/session/renderer
 import { enUSSampleProject } from '../../../../apps/desktop/src/session/renderer/features/sample-project/content/en-US'
 import type { SampleProjectContent } from '../../../../apps/desktop/src/session/renderer/features/sample-project/content/types'
 import { chat } from '../../../support/testHarness'
+import { sidebarChatSignals } from '../../../../apps/desktop/src/lib/sidebarChatsBridge'
 
 const project = (id: string, kind?: 'workspace'): SessionpageProjectSummary => ({ id, name: id, path: `/${id}`, ...(kind ? { kind } : {}) })
 const session = (conversationId: string, projectId: string, agent: string | null, parent: string | null = null): SessionpageSessionSummary => ({
@@ -281,5 +282,17 @@ describe('the sample project row shows its transcript\'s last message', () => {
   it('fails loud on a transcript without messages, or on a file it does not carry', () => {
     expect(() => sampleProjectLastLine(content([]), 'Me')).toThrow()
     expect(() => sampleProjectLastLine(content([{ id: 'm1', kind: 'file', from: 'agent', time: '09:00', file: 'missing' }]), 'Me')).toThrow(/missing/)
+  })
+})
+
+describe('#2569 the chat list tells the task page which groups it has', () => {
+  const chats = [chat({ id: 'room', kind: 'group' }), chat({ id: 'project', kind: 'group' }), chat({ id: 'topic', kind: 'topic', source_chat_id: 'room' }), chat({ id: 'dm' })]
+
+  it('names every group once the list has loaded', () => {
+    expect([...(sidebarChatSignals(chats, new Set(['project'])).listedGroups ?? [])].sort()).toEqual(['project', 'room'])
+  })
+
+  it('names none (null) while it is loading', () => {
+    expect(sidebarChatSignals(chats, new Set(['project']), null, false).listedGroups).toBeNull()
   })
 })

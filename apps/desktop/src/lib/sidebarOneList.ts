@@ -216,6 +216,18 @@ export function oneListProjectLines(
 }
 
 /**
+ * #2569 This group has a row in the one list right now: the chat list draws it, or it is an account project the chat list
+ * does not have yet (a project line of its own, oneListProjectLines). Before the chat list has loaded, neither is drawn.
+ */
+export function groupHasRow(
+  chatId: string,
+  projects: readonly { readonly chatId: string }[],
+  listedGroups: ReadonlySet<string> | null,
+): boolean {
+  return listedGroups !== null && (listedGroups.has(chatId) || projects.some((project) => project.chatId === chatId))
+}
+
+/**
  * The conversation rows (newest activity first, `activityOf` = the list's own sort key in ms) with the project lines
  * placed among them by their time. A project line goes before the first row that is older; on an equal time after it.
  * A line whose time is not known yet goes after them all, in the account list's order.

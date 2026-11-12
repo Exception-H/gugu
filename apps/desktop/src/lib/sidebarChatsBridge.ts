@@ -22,6 +22,8 @@ export type SidebarChatSignals = {
   readonly groupUnread: ReadonlyMap<string, number>
   /** 项目群从哪个话题叫到了你:点项目行直接开它,读了 groupUnread 就减。没有叫到你的话题的群不在里面。 */
   readonly groupCallingTopic: ReadonlyMap<string, SidebarCallingTopic>
+  /** #2569 the group chats the chat list has (project groups included); null = the list has not loaded yet. */
+  readonly listedGroups: ReadonlySet<string> | null
 }
 
 export type SidebarCallingTopic = { readonly chatId: string; readonly name: string }
@@ -64,7 +66,8 @@ const TOUR_EVENT = 'gugu:product-tour-on-screen'
  * 壳:从聊天列表那一份算出两枚页签和项目行上的数。项目群(及从它开出来的话题)的未读记在那个群名下,其余记进「对话」;免打扰的不算(gugu-dev#181:
  * 「对话」页签挂对话那边的未读总数,项目行与「项目」页签挂项目群的未读;owner 10-28:话题只算叫到你的)。只读未读数,真读了它自己会减。
  */
-export function sidebarChatSignals(chats: readonly ChatItem[], projectGroupChats: ReadonlySet<string>, assistant: AssistantShellSnapshot | null = null): SidebarChatSignals {
+export function sidebarChatSignals(chats: readonly ChatItem[], projectGroupChats: ReadonlySet<string>, assistant: AssistantShellSnapshot | null = null, loaded = true): SidebarChatSignals {
+  const listedGroups = loaded ? new Set(chats.flatMap((chat) => (chat.kind === 'group' ? [chat.id] : []))) : null
   let chatsUnread = 0
   const groupUnread = new Map<string, number>()
   const groupCallingTopic = new Map<string, SidebarCallingTopic>()
@@ -78,7 +81,7 @@ export function sidebarChatSignals(chats: readonly ChatItem[], projectGroupChats
       if (count > 0 && chat.kind === 'topic' && !groupCallingTopic.has(line)) groupCallingTopic.set(line, { chatId: chat.id, name: chat.name ?? '' })
     } else chatsUnread += count
   }
-  return { chatsUnread, groupUnread, groupCallingTopic }
+  return { chatsUnread, groupUnread, groupCallingTopic, listedGroups }
 }
 
 const NO_VIEW: SidebarChatView = { focusedChatId: null, groups: [] }
@@ -125,6 +128,11 @@ export function useProductTourOnScreen(): boolean {
   return useSyncExternalStore(subscribeTour, () => read<boolean>(TOUR_KEY) ?? false, () => false)
 }
 
+function sameIds(current: ReadonlySet<string> | null, next: ReadonlySet<string> | null): boolean {
+  if (current === null || next === null) return current === next
+  return current.size === next.size && [...next].every((id) => current.has(id))
+}
+
 /** 壳:整份替换;没变不通知。 */
 export function publishSidebarChatSignals(next: SidebarChatSignals): void {
   const current = read<SidebarChatSignals>(SIGNALS_KEY)
@@ -134,9 +142,20 @@ export function publishSidebarChatSignals(next: SidebarChatSignals): void {
     current.groupUnread.size === next.groupUnread.size &&
     [...next.groupUnread].every(([chatId, count]) => current.groupUnread.get(chatId) === count) &&
     current.groupCallingTopic.size === next.groupCallingTopic.size &&
-    [...next.groupCallingTopic].every(([chatId, topic]) => current.groupCallingTopic.get(chatId)?.chatId === topic.chatId && current.groupCallingTopic.get(chatId)?.name === topic.name)
+    [...next.groupCallingTopic].every(([chatId, topic]) => current.groupCallingTopic.get(chatId)?.chatId === topic.chatId && current.groupCallingTopic.get(chatId)?.name === topic.name) &&
+    sameIds(current.listedGroups, next.listedGroups)
   ) return
   write(SIGNALS_KEY, SIGNALS_EVENT, next)
+}
+
+/** 会话页,在 React 之外(#2569 示例让位给它变成的项目那一下):此刻这一份;壳还没告诉过 = null。 */
+export function readSidebarChatSignals(): SidebarChatSignals | null {
+  return read<SidebarChatSignals>(SIGNALS_KEY)
+}
+
+/** 会话页,在 React 之外:壳每换一份就同步叫一次(叫的那一刻,侧栏还没按新的这一份重画)。 */
+export function subscribeSidebarChatSignals(listener: () => void): () => void {
+  return subscribeSignals(listener)
 }
 
 /** 会话页:壳还没告诉过 = null(还不知道,页签上先不挂数)。 */
