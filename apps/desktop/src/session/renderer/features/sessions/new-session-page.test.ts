@@ -726,6 +726,8 @@ describe('NewSessionPage', () => {
       const pick = (name: string) => Array.from(container.querySelectorAll('[role="menuitem"]')).find((item) => item.textContent?.trim() === name) as HTMLButtonElement;
       await act(async () => pick('project-1').click());
       expect(await runMachineOf('project-1')).toBeNull();
+      // The probe replaced the page in this root; the page opens again with the machine picked first.
+      remoteHostsStore.requestNewSession('device-9');
       await renderPage();
       await act(async () => pick('project-remote').click());
       expect(await runMachineOf('project-remote')).toBe('device-9');

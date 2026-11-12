@@ -277,7 +277,8 @@ describe('没连着的机器照账号上记着的那份', () => {
     const { machineRegistry } = await import('@renderer/lib/machine-routing');
     const store = new RemoteHostsStore();
     store.start();
-    const offline = device({ id: 'dev-acct-1', isOnline: false, projects: [record()], homeDir: '/home/alice' });
+    // Its own group: earlier tests leave their projects bound to the default one in the shared group store.
+    const offline = device({ id: 'dev-acct-1', isOnline: false, projects: [record({ chatId: 'chat-acct-1' })], homeDir: '/home/alice' });
     let listed = [offline];
     const listeners = new Set<() => void>();
     const off = installRemoteHostsBridge({
@@ -290,7 +291,7 @@ describe('没连着的机器照账号上记着的那份', () => {
         id: 'acct-proj-1', name: 'repo', path: '/srv/repo', repositoryWorkspaceId: 'ws-acct-root', createdAt: '2026-10-01 08:00:00',
       });
       expect(machineRegistry.machineOf('acct-proj-1')).toBe('dev-acct-1');
-      expect(projectGroupsStore.projectOfChat('chat-repo')).toBe('acct-proj-1');
+      expect(projectGroupsStore.projectOfChat('chat-acct-1')).toBe('acct-proj-1');
       expect(store.homeDir('dev-acct-1')).toBe('/home/alice');
       expect(store.accountFolders('dev-acct-1', 'acct-proj-1')?.map((folder) => [folder.workspaceId, folder.kind, folder.branch])).toEqual([
         ['ws-acct-root', 'root', null],
@@ -301,7 +302,7 @@ describe('没连着的机器照账号上记着的那份', () => {
       listeners.forEach((listener) => listener());
       expect(appState.projects.projects.has('acct-proj-1')).toBe(false);
       expect(appState.projects.projects.get('acct-proj-2')?.data?.name).toBe('next');
-      expect(projectGroupsStore.projectOfChat('chat-repo')).toBeUndefined();
+      expect(projectGroupsStore.projectOfChat('chat-acct-1')).toBeUndefined();
 
       // 账号上那份这一端还没读到(设备行上没带):❌ 拿空清单把侧栏里它的项目清掉。
       listed = [{ ...offline, projects: undefined }];

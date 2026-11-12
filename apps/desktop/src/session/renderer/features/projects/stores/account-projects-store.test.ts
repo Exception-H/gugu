@@ -183,6 +183,8 @@ describe('accountProjectsStore reading', () => {
     store.start('user-b', subscribe);
     expect(store.projects).toEqual([]);
     expect(store.status).toBe('loading');
+    // Its read lands in this test, not in the next one's mock.
+    await vi.waitFor(() => expect(read.list).toHaveBeenCalledTimes(6));
   });
 
   it('a refresh asked for while reading reads again afterwards; a read that lands after clear is dropped', async () => {
