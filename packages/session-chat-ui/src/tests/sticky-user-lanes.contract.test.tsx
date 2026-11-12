@@ -12,6 +12,7 @@ import { createChatContext } from '@session-chat/chat-context';
 import { createChatView } from '@session-chat/chat-view';
 import { UNIT_REGISTRY } from '@session-chat/components/engine/unit-registry';
 import { DEFAULT_THEME } from '@session-chat/core/theme';
+import { PIN_SUMMARY_GAP } from '@session-chat/layout-geometry';
 import { DEFAULT_CONFIG, buildChatTheme } from '@session-chat/core/config';
 import type { ChatItem, TranscriptTurn } from '@session-chat/model';
 import { createChatState } from '@session-chat/state/chat-state';
@@ -127,79 +128,59 @@ describe('sticky user lanes', () => {
     expect(t.pinTop('a-user')).toBeCloseTo(PIN_LINE, 0);
     expect(t.cardTop('a-user')!, 'the message itself scrolled away').toBeLessThan(0);
   });
-  it('draws a long message\'s summary only once the whole message is above the viewport', async () => {
-    const long: TranscriptTurn = { id: 'a', seq: 0, initiator: 'user', items: [
-      { kind: 'message', id: 'a-user', seq: 0, role: 'user', text: 'A long question that folds. '.repeat(60) },
-      // The agent conversation folds a turn's commentary into its process: one full final answer fills the turn.
-      { kind: 'message', id: 'a-final', seq: 1, role: 'assistant',
-        text: Array.from({ length: 150 }, (_, i) => `a reply ${i}. Lorem ipsum dolor sit amet.`).join('\n\n') },
-    ] as TranscriptTurn['items'] };
-    const theme = buildChatTheme(DEFAULT_CONFIG, { preset: 'double', userGutter: 72, agentConversation: true });
-    const t = await mount([long, longTurn('b', 1, 150)], undefined, theme);
-    t.host.querySelector<HTMLButtonElement>('[data-expand-user-card="a-final"]')!.click();
-    await untilStable('the full final answer is measured', () => t.scrollEl.scrollHeight);
-    const edge = () => t.scrollEl.getBoundingClientRect().top;
-    const shown = () => pinnedSummaryShown(t.summary('a-user')!);
-    const bottom = () => t.host.querySelector<HTMLElement>('[data-row-kind="message"][data-item-id="a-user"]')!.getBoundingClientRect().bottom - edge();
-    const check = async (expanded: boolean) => {
-      expect(t.card('a-user')!.getBoundingClientRect().height, 'several lines').toBeGreaterThan(100);
-      // Every position where some of the message is still on screen, down to its last pixel: no summary.
-      const frames = () => new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)));
-      for (const left of [200, 120, 60, 20, 4, 1]) {
-        t.scrollEl.scrollTop += bottom() - left;
-        await frames();
-        expect(bottom(), `${expanded} positioned`).toBeCloseTo(left, 0);
-        expect(shown(), `${expanded}: ${left}px of the message still on screen`).toBe(false);
-      }
-      t.scrollEl.scrollTop += bottom() + 1;
-      await frames();
-      expect(bottom(), `${expanded}: scrolled past the message`).toBeLessThan(0);
-      expect(shown(), `${expanded}: drawn once the message has left`).toBe(true);
-      expect(t.pinTop('a-user')).toBeCloseTo(PIN_LINE, 0);
-    };
-    await check(false);
-    await t.scrollTo(0);
-    t.card('a-user')!.click();
-    await until('a expanded', () => t.card('a-user')!.getBoundingClientRect().height, h => h > 400);
-    await t.scrollTo(0);
-    await check(true);
-  });
-
-  it('pushes a message that fits like a card, and pins one that folds only after it has gone', async () => {
-    // Either side of the transcript's own fold (展开全文): five short lines fit, six fold.
+  it('places the summary by one function of the scroll position, whatever the message\'s height and the scroll path', async () => {
+    // One line and two (the summary is the bubble), five (cut to two but not folded), six (folded), then unfolded.
     const lines = (n: number) => Array.from({ length: n }, (_, i) => `line ${i + 1}`).join('\n');
     const turn = (id: string, seq: number, text: string): TranscriptTurn => ({ id, seq, initiator: 'user', items: [
       { kind: 'message', id: `${id}-user`, seq: 0, role: 'user', text },
       { kind: 'message', id: `${id}-final`, seq: 1, role: 'assistant',
-        text: Array.from({ length: 150 }, (_, i) => `${id} reply ${i}. Lorem ipsum dolor sit amet.`).join('\n\n') },
+        text: Array.from({ length: 12 }, (_, i) => `${id} reply ${i}. Lorem ipsum dolor sit amet.`).join('\n\n') },
     ] as TranscriptTurn['items'] });
+    const ids = ['a', 'b', 'c', 'd'];
     const theme = buildChatTheme(DEFAULT_CONFIG, { preset: 'double', userGutter: 72, agentConversation: true });
-    const t = await mount([turn('a', 0, lines(5)), turn('b', 1, lines(6)), longTurn('c', 2, 150)], undefined, theme);
-    for (const id of ['a-final', 'b-final']) {
-      await until(`${id} mounted`, () => t.host.querySelector(`[data-expand-user-card="${id}"]`), el => el != null);
-      t.host.querySelector<HTMLButtonElement>(`[data-expand-user-card="${id}"]`)!.click();
-      await untilStable(`${id} measured`, () => t.scrollEl.scrollHeight);
-    }
+    const t = await mount([...[1, 2, 5, 6].map((n, i) => turn(ids[i]!, i, lines(n))), longTurn('z', 4, 150)], undefined, theme);
     const edge = () => t.scrollEl.getBoundingClientRect().top;
     const frames = () => new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)));
-    const row = (id: string) => t.host.querySelector<HTMLElement>(`[data-row-kind="message"][data-item-id="${id}"]`)!;
-    const placeTop = async (id: string, cardTop: number) => {
-      for (let i = 0; i < 40 && !t.card(id); i++) { t.scrollEl.scrollTop += 600; await frames(); }
-      t.scrollEl.scrollTop += t.card(id)!.getBoundingClientRect().top - edge() - cardTop;
-      await frames();
+    const sweep = async (id: string) => {
+      await t.view.scrollToItem(`${id}-user`);
+      await until(`${id} on screen`, () => t.card(`${id}-user`), el => el != null);
+      await untilStable(`${id} settled`, () => t.cardTop(`${id}-user`));
+      const lane = t.card(`${id}-user`)!.closest<HTMLElement>('[data-index]')!, summary = t.summary(`${id}-user`)!;
+      const h = summary.getBoundingClientRect().height;
+      const from = Math.round(t.scrollEl.scrollTop + t.cardTop(`${id}-user`)! - 40);
+      const to = Math.round(t.scrollEl.scrollTop + lane.getBoundingClientRect().bottom - edge() + 20);
+      const read = (st: number) => {
+        const card = t.card(`${id}-user`)!.getBoundingClientRect(), pin = summary.getBoundingClientRect();
+        const b = card.bottom - edge(), e = lane.getBoundingClientRect().bottom - edge();
+        // T = min(max(P, b - h), e - h - gap), read from the layout alone.
+        expect(pin.top - edge(), `${id} scrollTop=${st}: where the summary is`).toBeCloseTo(Math.min(Math.max(PIN_LINE, b - h), e - h - PIN_SUMMARY_GAP), 1);
+        expect([pin.left, pin.right], `${id} scrollTop=${st}: as wide as the bubble`).toEqual([card.left, card.right]);
+        // Whatever is left of the message below the pin line lies inside the summary's box: nothing shows beside it.
+        expect(card.bottom, `${id} scrollTop=${st}: the summary reaches the bubble's end`).toBeLessThanOrEqual(pin.bottom + 0.01);
+        return { top: pin.top - edge(), stuck: PIN_LINE > b - h + 0.5, shown: pinnedSummaryShown(summary) };
+      };
+      const seen = new Map<number, number>();
+      const down = Array.from({ length: to - from + 1 }, (_, i) => from + i);
+      // Every pixel down and back with no frame in between, then every 7th in an order no drag makes, a frame each.
+      for (const st of [...down, ...[...down].reverse()]) {
+        t.scrollEl.scrollTop = st;
+        const now = read(st);
+        expect(seen.get(st) ?? now.top, `${id} scrollTop=${st}: the same place both ways`).toBe(now.top);
+        seen.set(st, now.top);
+      }
+      for (const st of down.filter(st => st % 7 === 0).sort((x, y) => (x * 7919) % 101 - (y * 7919) % 101)) {
+        t.scrollEl.scrollTop = st;
+        await frames();
+        const now = read(st);
+        expect(now.top, `${id} scrollTop=${st}: the same place after a jump`).toBe(seen.get(st));
+        // Pushed above the scroller, there is nothing left to hit.
+        if (now.top >= 0) expect(now.shown, `${id} scrollTop=${st}: in front exactly while stuck`).toBe(now.stuck);
+      }
     };
-    expect(t.card('a-user')!.dataset.userCardExpandable, 'five lines do not fold').toBeUndefined();
-    await placeTop('a-user', -20);
-    expect(row('a-user').getBoundingClientRect().bottom - edge(), 'a is still partly on screen').toBeGreaterThan(20);
-    expect(pinnedSummaryShown(t.summary('a-user')!), 'a fitting message pins as its top reaches the line').toBe(true);
-    await placeTop('b-user', 200);
-    expect(t.card('b-user')!.dataset.userCardExpandable, 'six lines fold').toBe('true');
-    await placeTop('b-user', -20);
-    expect(row('b-user').getBoundingClientRect().bottom - edge(), 'b is still partly on screen').toBeGreaterThan(20);
-    expect(pinnedSummaryShown(t.summary('b-user')!), 'a folding message does not pin while any of it shows').toBe(false);
-    t.scrollEl.scrollTop += row('b-user').getBoundingClientRect().bottom - edge() + 1;
-    await frames();
-    expect(pinnedSummaryShown(t.summary('b-user')!), 'it pins once it has gone').toBe(true);
+    for (const id of ids) await sweep(id);
+    t.card('d-user')!.click();
+    await until('d unfolded', () => t.card('d-user')!.getBoundingClientRect().height, height => height > 150);
+    await sweep('d');
   });
 
   it('sticks the user row in the same frame as the scroll, deep inside a long turn', async () => {
