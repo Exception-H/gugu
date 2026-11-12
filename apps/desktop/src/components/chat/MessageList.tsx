@@ -90,9 +90,9 @@ export interface MessageListRowProps {
   /** #1708 命中「来源消息跳转」时高亮闪烁的消息 id。 */
   flashMessageId: string | null | undefined
   memberReadSeqs: Record<string, number>
-  /** My messages an agent has not taken yet (useDeliveryWaits): their bubbles say so until it reads them. */
+  /** My messages an agent has not taken yet (useMessageDelivery): their bubbles say so until it reads them. */
   deliveryWaits: ReadonlyMap<string, HeldMessage>
-  /** Who each of my messages is for (useMessageRecipientFacts): denominators of its read receipt. */
+  /** Who each of my messages is for (useMessageDelivery): denominators of its read receipt. */
   recipientFacts: MessageRecipientFacts
   // 私聊/AI 没有 thread surface；群聊 thread 由右侧 panel 承载。
   isGroupChat: boolean

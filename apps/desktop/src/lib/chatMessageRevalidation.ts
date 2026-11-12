@@ -83,15 +83,16 @@ const OVERLAY_IN_CHUNK = 64
 async function fetchOverlayRows<T>(
   table: 'message_reactions' | 'message_deliveries' | 'message_agent_wakes' | 'message_agent_delivery_blocks',
   columns: string,
-  messageIds: string[]
+  messageIds: string[],
+  /** Set for facts the caller cannot do without: a failed read throws with this message instead of coming back short. */
+  unavailable?: string,
 ): Promise<T[]> {
   const rows: T[] = []
   for (let i = 0; i < messageIds.length; i += OVERLAY_IN_CHUNK) {
     const chunk = messageIds.slice(i, i + OVERLAY_IN_CHUNK)
     const { data, error } = await chatDb.from(table).select(columns).in('message_id', chunk)
     if (error) {
-      if (table === 'message_agent_delivery_blocks') throw new Error(`Message refusal status is unavailable: ${error.message}`)
-      if (table === 'message_agent_wakes') throw new Error(`Message recipients are unavailable: ${error.message}`)
+      if (unavailable) throw new Error(`${unavailable}: ${error.message}`)
       console.warn(
         `[chat] ${table} overlay fetch failed (offset ${i}/${messageIds.length}): ${error.message}`
       )
@@ -105,7 +106,7 @@ async function fetchOverlayRows<T>(
 /** The agents each message wakes (chat.message_agent_wakes: decided once, when it was written). Every queried id gets an entry. */
 export async function loadMessageAgentWakes(messageIds: string[]): Promise<Map<string, Set<string>>> {
   const wakes = new Map(messageIds.map((id) => [id, new Set<string>()]))
-  const rows = await fetchOverlayRows<{ message_id: string; agent_user_id: string }>('message_agent_wakes', 'message_id, agent_user_id', messageIds)
+  const rows = await fetchOverlayRows<{ message_id: string; agent_user_id: string }>('message_agent_wakes', 'message_id, agent_user_id', messageIds, 'Message recipients are unavailable')
   for (const row of rows) wakes.get(row.message_id)?.add(row.agent_user_id)
   return wakes
 }
@@ -130,7 +131,7 @@ async function fetchMessageOverlays(
       'message_deliveries', 'message_id, status, device_id', messageIds,
     ),
     fetchOverlayRows<MessageOverlayRows['delivery_blocks'][number]>(
-      'message_agent_delivery_blocks', 'message_id, agent_user_id, reason', messageIds,
+      'message_agent_delivery_blocks', 'message_id, agent_user_id, reason', messageIds, 'Message refusal status is unavailable',
     ),
   ])
   return foldMessageOverlays(messageIds, userId, { reactions, deliveries, delivery_blocks: blocks })

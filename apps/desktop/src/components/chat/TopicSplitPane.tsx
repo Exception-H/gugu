@@ -34,6 +34,7 @@ import {
 import { ResizablePane } from '@/layouts/ResizablePane'
 import { prioritizeTopicParticipants } from './topicMentionModels'
 import { useReadReceiptPanel } from '@/hooks/useReadReceiptPanel'
+import { useMessageDelivery } from '@/hooks/useMessageDelivery'
 import { ReadReceiptPopover } from '../ReadReceiptPopover'
 import { ChatBottomDock } from './ChatBottomDock'
 import type { ChatConversation } from '@/store/useChatConversation'
@@ -231,8 +232,9 @@ export function TopicSplitPane({ viewportKey = 'topic', navigationTarget = false
     [mentionMembers, participantIds],
   )
   const [mentionToInsert, setMentionToInsert] = useState<{ id: string; name: string } | null>(null)
-  const { readReceiptHandle, receiptOf, recipientFacts, deliveryWaits } = useReadReceiptPanel({
-    chatId: topic.chatId, messages, memberReadSeqs, memberProfiles,
+  const { recipientFacts, deliveryWaits } = useMessageDelivery(messages, memberReadSeqs, memberProfiles)
+  const { readReceiptHandle, receiptOf } = useReadReceiptPanel({
+    chatId: topic.chatId, messages, memberReadSeqs, memberProfiles, recipientFacts,
   })
   // 宽度记在本机:拖过一次之后下次打开还是那个宽度(与会话列表同口径)。
   const [width, setWidth] = useState(() => readStoredTopicSplitWidth())

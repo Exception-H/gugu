@@ -4,6 +4,7 @@ import type { AccountRevisionCoordinator, AccountRevisionEvent, AccountRevisionL
 import { watchRendererRevisionReconcile } from '../lib/accountRevisionReconcile'
 import type { AccountImRepository } from '../lib/imRepository'
 import { rendererLogger } from '../lib/log'
+import { forgetMessageAgentWakes } from '../lib/messageAgentWakes'
 
 const revisionLog = rendererLogger('chat/account-revision')
 const storeLog = rendererLogger('chat/store')
@@ -58,6 +59,6 @@ export function useAccountStartBeat(userId: string | null | undefined, ports: {
       if (coordinator) coordinator.wake()
       else if (registrationsRef.current.size > 0) void getRevisionCoordinator().catch((error) => revisionLog.error({ error }, 'coordinator failed'))
     })
-    return () => { cancelled = true; stopBeat() }
+    return () => { cancelled = true; stopBeat(); forgetMessageAgentWakes() }
   }, [coordinatorRef, getImRepository, getRevisionCoordinator, loadChats, paintLocal, registrationsRef, setChats, setChatsLoad, userId])
 }
