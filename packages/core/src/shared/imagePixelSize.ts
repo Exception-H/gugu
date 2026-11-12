@@ -34,7 +34,10 @@ export function imagePixelSize(b: Uint8Array): { width: number; height: number }
         const o = exifOrientation(b, i + 4, i + 2 + u16be(i + 2))
         if (o !== null) turned = o >= 5 && o <= 8
       }
-      if (marker >= 0xc0 && marker <= 0xcf && marker !== 0xc4 && marker !== 0xc8 && marker !== 0xcc) return turned ? size(u16be(i + 5), u16be(i + 7)) : size(u16be(i + 7), u16be(i + 5))
+      if (marker >= 0xc0 && marker <= 0xcf && marker !== 0xc4 && marker !== 0xc8 && marker !== 0xcc) {
+        if (u16be(i + 2) < 8) return null
+        return turned ? size(u16be(i + 5), u16be(i + 7)) : size(u16be(i + 7), u16be(i + 5))
+      }
       i += 2 + u16be(i + 2)
     }
   }
