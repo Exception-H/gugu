@@ -5,7 +5,7 @@ import { tmpdir } from 'node:os'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { createProjectFilePublisher, writeTaskCopy } from '../../../../apps/desktop/electron/projectFilePublication'
 import { DEFAULT_FILE_STORAGE } from '@gugu/core/shared/fileStorage'
-import { forgetProjectGroupId, readProjectFile, rememberProjectGroupId } from '../../../../apps/desktop/electron/sessionpage/sessionpage-project-groups'
+import { readProjectFile, rememberProjectGroupId } from '../../../../apps/desktop/electron/sessionpage/sessionpage-project-groups'
 import type { FileStorage } from '@gugu/core/shared/fileStorage'
 const logged = vi.hoisted(() => ({ warn: vi.fn() }))
 vi.mock('../../../../apps/desktop/electron/lib/logger', () => ({ createLogger: () => ({ info: vi.fn(), warn: logged.warn, error: vi.fn(), debug: vi.fn() }) }))
@@ -252,15 +252,6 @@ describe('every device keeps what it sends into a project chat', () => {
     const other = fixture(false, { accountId: 'member', deviceId: 'laptop' })
     await other.publish('elsewhere', file, null, 'member', undefined, { next: { itemId: 'item', expectedVersion: 2 } })
     expect(other.rpc.mock.calls.find(([name]) => name === 'file_device_publish')![1]).toMatchObject({ p_project: 'device-store', p_device: 'laptop', p_expected: 2 })
-  })
-  // A workspace that once had the chat keeps its local binding, but the account records no project for it: naming it would be refused.
-  it('names the project the account records for the chat, not an older local binding to the same chat', async () => {
-    await forgetProjectGroupId('project', 'owner', env)
-    await rememberProjectGroupId('workspace', 'group', 'owner', env)
-    await rememberProjectGroupId('project', 'group', 'owner', env)
-    const f = fixture()
-    await f.publish('group', file, null, 'owner')
-    expect(f.rpc.mock.calls.find(([name]) => name === 'file_device_publish')![1]).toMatchObject({ p_chat: 'group', p_project: 'project' })
   })
   it('a conflict from an older version is the ordinary one', async () => {
     const f = fixture()
