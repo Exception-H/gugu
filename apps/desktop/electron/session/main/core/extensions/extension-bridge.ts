@@ -1382,7 +1382,8 @@ async function workspaceOf(binding: SurfaceBinding): Promise<ExtensionWorkspace 
     const { localRootOf } = await import('@main/core/extensions/app-files');
     const root = mayReachWorkspace ? await localRootOf({ workspace: id }).catch(() => null) : null;
     const projectId = 'project' in target ? target.project : root?.projectId;
-    return { id, ...(projectId ? { projectId } : {}), ...(root ? { root: root.workspaceRoot } : {}) };
+    const elsewhere = 'folder' in target && !(await (await import('@main/core/sessions/session-family')).otherMachines().isThisDevice(target.folder.deviceId));
+    return { id, ...(projectId ? { projectId } : {}), ...(root ? { root: root.workspaceRoot } : {}), ...(elsewhere ? { thisMachine: false as const } : {}) };
   }
   // A session on another machine: where it is, and what that machine's list says of it. Its path is that machine's.
   const elsewhere = await sessionMachineOf(sessionId);

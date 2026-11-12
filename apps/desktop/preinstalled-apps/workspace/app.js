@@ -2893,7 +2893,7 @@ async function openWhole(entry, token, maxBytes, first = null) {
   if (loaded.kind === 'binary') return showDownloadOnly(entry)
   if (loaded.kind === 'too-large') return showTooLarge(entry, loaded.totalSize)
   current.source = source
-  const readOnly = first?.exact === false || !canWrite()
+  const readOnly = first?.exact === false || !canWriteHere(entry)
   current.file = bufferFile(cm, entry, loaded.initial, readOnly, source)
   current.readOnlyNote = first?.exact === false
   current.jsonApply = () => saveWhole(current)
