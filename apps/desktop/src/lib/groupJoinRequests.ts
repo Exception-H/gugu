@@ -18,15 +18,15 @@ export function managedGroupChats(groupChats: readonly ContactGroupChat[]): Cont
 }
 
 /**
- * 读我管理的每个群的入群申请(含已处理的),等我处理的在前。
- * 库里只有「按单个群列」的 RPC(list_group_join_requests,内部再校验管理权限),所以这里逐群并发读;
- * 任何一个群读失败整体 fail-loud —— 少读一个群 = 让管理员以为「没人申请」而漏审(#1125)。
- * 管理的群很多时这是 N 次往返;真到那一步应在 gugu-supabase 补一个跨群一次读的 RPC。
+ * 读我管理的每个群的入群申请(含已处理的),等我处理的在前。一次读(list_managed_group_join_requests,
+ * 服务端按同一道管理权限逐群判定),只留调用方问到的这些群 —— 群信息从这里带上。
+ * 读失败整体 fail-loud —— 少读一个群 = 让管理员以为「没人申请」而漏审(#1125)。没有我管理的群就一发不打。
  */
 export async function listManagedGroupJoinRequests(groups: readonly ContactGroupChat[]): Promise<ManagedGroupJoinRequest[]> {
-  const perGroup = await Promise.all(groups.map(async (group) => {
-    const rows = await chatService.listGroupJoinRequests(group.id)
-    return rows.map((row) => ({ ...row, group: { id: group.id, name: group.name, avatar_url: group.avatar_url } }))
-  }))
-  return perGroup.flat().sort(pendingFirst)
+  if (groups.length === 0) return []
+  const byId = new Map(groups.map((group) => [group.id, group]))
+  return (await chatService.listManagedGroupJoinRequests()).flatMap((row) => {
+    const group = byId.get(row.chat_id)
+    return group ? [{ ...row, group: { id: group.id, name: group.name, avatar_url: group.avatar_url } }] : []
+  }).sort(pendingFirst)
 }
