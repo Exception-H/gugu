@@ -103,6 +103,23 @@ describe('warm start adopts the stored list', () => {
     expect(keysetReads()).toBe(0)
   })
 
+  it('a stored conversation whose chat and seat an operation reads still gets its preview and unread read (no partial row)', async () => {
+    rowsByKey.set('rpc:list_chat_previews', [{ chat_id: 'g-1', id: 'm-0', created_at: '2026-11-01T00:00:00Z', preview: 'stored line',
+      seq: 1, content_type: 'text', sender_user_id: PEER, client_message_id: 'm-0' }])
+    const stored = await storedList()
+    const before = stored.rows.find(row => row.id === 'g-1')!
+    expect(before.last_message_preview).toBeTruthy()
+    const projection = createChatProjection(VIEWER, { rows: () => stored.rows, identity: () => undefined, durable: () => stored })
+    await projection.hydrate('9', signal())
+    const rows = await projection.advance([
+      { revision: '10', event: 'chat_members_changed', chatId: 'g-1', entityId: null },
+      { revision: '11', event: 'chat_members_changed', chatId: 'g-1', entityId: VIEWER, own: true },
+    ], '11', signal())
+    expect(rows!.find(row => row.id === 'g-1')!.last_message_preview).toEqual(before.last_message_preview)
+    expect(calls.filter(call => call.key === 'rpc:list_chat_previews').flatMap(call => call.ids ?? [])).toContain('g-1')
+    expect(keysetReads()).toBe(0)
+  })
+
   it('a stored person is still read when an operation names them', async () => {
     const stored = await storedList()
     const projection = createChatProjection(VIEWER, { rows: () => stored.rows, identity: () => undefined, durable: () => stored })

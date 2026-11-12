@@ -66,6 +66,8 @@ import { messageAccessWrites } from './messageRevisionWrites'
 import { messagePreviewLines } from './messagePreviews'
 
 const log = rendererLogger('chat/projection')
+/** A stored value adopted at warm start: known, freshness unknown — older than any revision, so an operation naming it reads it. */
+const STORED_VALUE_STAMP = '0'
 
 /**
  * 一族一批的读函数:`ids` 已经是 `planWave` 切好的**有界批**(`FAMILY_BATCH_KEYS`),
@@ -256,14 +258,14 @@ export function createChatProjection(viewerId: string, held?: HeldObjects): Chat
    * published into those rows before the inbox acknowledged it, or still waits in the inbox and is replayed into
    * `advance`. So the warm start adopts it and only drains `sync_since`; the keyset read is for a list that was never
    * stored. Its rows are published rows, not cells: a conversation the journal touches is read whole before it is
-   * re-assembled (`incompleteTouched`). Stored people enter as cells stamped 0 — a known value whose freshness is
-   * unknown, so any operation naming one still reads it.
+   * re-assembled (`incompleteTouched`). Stored people enter as cells stamped STORED_VALUE_STAMP — a known value whose
+   * freshness is unknown, so any operation naming one still reads it.
    */
   const adoptDurable = (cursor: string): void => {
     if (snapshotAt !== null || cursor === '0') return
     const durable = held?.durable?.()
     if (!durable) return
-    const people = durable.identities.map(identity => [entityKey('identity', identity.id), { value: identity as unknown as EntityValue, stamp: '0' }] as const)
+    const people = durable.identities.map(identity => [entityKey('identity', identity.id), { value: identity as unknown as EntityValue, stamp: STORED_VALUE_STAMP }] as const)
     merge(people)
     for (const [key] of people) unpublished.delete(key)
     for (const row of durable.rows) {
@@ -279,11 +281,12 @@ export function createChatProjection(viewerId: string, held?: HeldObjects): Chat
     log.info({ head: cursor, chats: rows.length }, 'chat projection adopted the stored list')
   }
 
-  /** Conversations a settled key re-assembles whose own cells were never read: read their chat, my seat, preview, unread. */
+  /** Conversations a settled key re-assembles whose own cells were never read: read whichever of their chat, my seat,
+   * preview and unread is missing — each on its own, so an operation that read the chat and my seat does not leave the
+   * row without its preview. */
   const incompleteTouched = (settled: readonly EntityKey[]): EntityKey[] => {
     const missing: EntityKey[] = []
     for (const chatId of touchedChats(settled, userId => chatsByUser.get(userId) ?? [])) {
-      if (cache.has(entityKey('chat', chatId)) && cache.has(entityKey('membership', membershipId(chatId, viewerId)))) continue
       for (const key of [entityKey('chat', chatId), entityKey('membership', membershipId(chatId, viewerId)), entityKey('preview', chatId), entityKey('unread', chatId)]) {
         if (!cache.has(key)) missing.push(key)
       }
