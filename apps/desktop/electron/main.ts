@@ -2422,6 +2422,7 @@ const desktopFiles = createDesktopFileAccess({ auth: () => desktopAuthProvider()
   rpc: signedInFileRpc(() => desktopAuthProvider().getAuth(), makeChatClient),
   downloads: fileStoreDirectory(resolveGuguHome(process.env)), fetch: electronFetch, links: () => sshLinks,
   root: async projectId => { const bridge = loadEmdashBridge(); if (!bridge) throw new Error('Project registry is unavailable'); return bridge.emdashProjectRoot(projectId) },
+  project: async chatId => { const bridge = loadEmdashBridge(); if (!bridge) throw new Error('Project registry is unavailable'); return bridge.emdashProjectOfGroup(chatId) },
   deviceStore: join(resolveGuguHome(process.env), 'project-files'), identityDb: makeIdentityClient,
 })
 function drainProjectFiles() { void desktopFiles.drain().catch(error => createLogger('files').warn({ error: String(error) }, 'Project transfer reconciliation failed')) }

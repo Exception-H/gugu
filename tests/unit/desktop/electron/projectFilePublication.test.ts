@@ -5,7 +5,7 @@ import { tmpdir } from 'node:os'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { createProjectFilePublisher, writeTaskCopy } from '../../../../apps/desktop/electron/projectFilePublication'
 import { DEFAULT_FILE_STORAGE } from '@gugu/core/shared/fileStorage'
-import { readProjectFile, rememberProjectGroupId } from '../../../../apps/desktop/electron/sessionpage/sessionpage-project-groups'
+import { forgetProjectGroupId, readProjectFile, rememberProjectGroupId } from '../../../../apps/desktop/electron/sessionpage/sessionpage-project-groups'
 import type { FileStorage } from '@gugu/core/shared/fileStorage'
 const logged = vi.hoisted(() => ({ warn: vi.fn() }))
 vi.mock('../../../../apps/desktop/electron/lib/logger', () => ({ createLogger: () => ({ info: vi.fn(), warn: logged.warn, error: vi.fn(), debug: vi.fn() }) }))
@@ -140,7 +140,7 @@ describe('external selections become durable project-owned copies through the sa
 })
 const publishedPaths = (f: ReturnType<typeof fixture>) => f.rpc.mock.calls.filter(([name]) => name === 'file_device_publish').map(([, args]) => args.p_path as string)
 afterEach(async () => { expect(home.startsWith(join(tmpdir(), 'gugu-file-publication-153-'))).toBe(true); await rm(home, { recursive: true, force: true }) })
-/** `projectChat`: whether a device of this account binds the chat (here, any chat but 'ordinary'). */
+/** `project`: this device's project bound to the chat (here 'project' for 'group'); `projectChat`: whether a device of this account binds the chat (here, any chat but 'ordinary'). */
 function fixture(proactive = false, identity = { accountId: 'owner', deviceId: 'device' }, storage: Partial<FileStorage> = {}) {
   let accountId = identity.accountId
   const rpc = vi.fn(async (name: string, _args: Record<string, unknown>): Promise<unknown> => {
@@ -150,7 +150,7 @@ function fixture(proactive = false, identity = { accountId: 'owner', deviceId: '
   })
   const cloud = vi.fn(async () => row), requestCopy = vi.fn(async (_itemId: string, _version: number): Promise<unknown> => ({ status: 'pending' }))
   const publish = createProjectFilePublisher({ identity: async () => ({ accountId, deviceId: identity.deviceId }),
-    root: async id => id === 'project' ? root : id === 'device-store' ? store : null, rpc, env, requestCopy,
+    root: async id => id === 'project' ? root : id === 'device-store' ? store : null, project: async chat => chat === 'group' ? 'project' : undefined, rpc, env, requestCopy,
     storage: async () => ({ ...DEFAULT_FILE_STORAGE, proactive_upload: proactive, ...storage }), projectChat: async chat => chat !== 'ordinary' })
   return { publish, rpc, store: cloud, requestCopy, account: (value: string) => { accountId = value } }
 }
@@ -250,6 +250,15 @@ describe('every device keeps what it sends into a project chat', () => {
     const other = fixture(false, { accountId: 'member', deviceId: 'laptop' })
     await other.publish('elsewhere', file, null, 'member', undefined, { next: { itemId: 'item', expectedVersion: 2 } })
     expect(other.rpc.mock.calls.find(([name]) => name === 'file_device_publish')![1]).toMatchObject({ p_project: 'device-store', p_device: 'laptop', p_expected: 2 })
+  })
+  // A workspace that once had the chat keeps its local binding, but the account records no project for it: naming it would be refused.
+  it('names the project the account records for the chat, not an older local binding to the same chat', async () => {
+    await forgetProjectGroupId('project', 'owner', env)
+    await rememberProjectGroupId('workspace', 'group', 'owner', env)
+    await rememberProjectGroupId('project', 'group', 'owner', env)
+    const f = fixture()
+    await f.publish('group', file, null, 'owner')
+    expect(f.rpc.mock.calls.find(([name]) => name === 'file_device_publish')![1]).toMatchObject({ p_chat: 'group', p_project: 'project' })
   })
   it('a conflict from an older version is the ordinary one', async () => {
     const f = fixture()

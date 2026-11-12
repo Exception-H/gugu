@@ -21,16 +21,9 @@ import { listProjectGroupBindings } from './project-groups';
  * 绑定读不到就整份不出(抛):少了群的那一份记上去,别的端会把本该合成一行的项目拆开,比晚一点记上去更糟。
  */
 export async function listDeviceProjectRecords(): Promise<DeviceProject[]> {
-  const projects = await getProjects();
-  const bindings = await listProjectGroupBindings();
-  if (!bindings.success) {
-    throw new Error(`device projects: project group bindings unavailable (${bindings.error.type}: ${bindings.error.message})`);
-  }
-  const bindingOf = new Map(bindings.data.map((binding) => [binding.projectId, binding]));
+  const { projects, bindingOf } = await recordedProjects();
   const records: DeviceProject[] = [];
   for (const project of projects) {
-    // #609 workspace(任务工作区、~、助理与 App 的目录)不是项目:不记到账号上,别的端也就不会把它当项目列出来。
-    if (project.kind === 'workspace' || isImplicitSessionHomeProjectId(project.id)) continue;
     const folders = await listProjectFolderRefs(project.id);
     // 两次读之间刚被删掉的项目:它的删除事件会再触发一次,这一份不带它。
     if (!folders) continue;
@@ -45,6 +38,26 @@ export async function listDeviceProjectRecords(): Promise<DeviceProject[]> {
     });
   }
   return records;
+}
+
+/**
+ * 记到账号上的那一份里绑在这个群上的本地项目(没有 = undefined)。往群里发文件时拿它当 p_project:账号上没记的项目
+ * (workspace 从前留下的绑定、隐藏的项目)名义上发不出去,服务端会拒「This device keeps no project for this chat」。
+ */
+export async function recordedProjectOfGroup(chatId: string): Promise<string | undefined> {
+  const { projects, bindingOf } = await recordedProjects();
+  return projects.find((project) => bindingOf.get(project.id)?.chatId === chatId)?.id;
+}
+
+/** 记到账号上的项目与它们绑的群:清单同 `projects.getProjects()`(❌ 隐藏的项目),去掉 workspace。 */
+async function recordedProjects() {
+  const bindings = await listProjectGroupBindings();
+  if (!bindings.success) {
+    throw new Error(`device projects: project group bindings unavailable (${bindings.error.type}: ${bindings.error.message})`);
+  }
+  // #609 workspace(任务工作区、~、助理与 App 的目录)不是项目:不记到账号上,别的端也就不会把它当项目列出来。
+  const projects = (await getProjects()).filter((project) => project.kind !== 'workspace' && !isImplicitSessionHomeProjectId(project.id));
+  return { projects, bindingOf: new Map(bindings.data.map((binding) => [binding.projectId, binding])) };
 }
 
 /** 项目表的时间是 SQLite `CURRENT_TIMESTAMP`(UTC,`YYYY-MM-DD HH:MM:SS`,不带时区):记到账号上前写明是 UTC。 */
