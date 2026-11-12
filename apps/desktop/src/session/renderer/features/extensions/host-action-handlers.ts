@@ -6,6 +6,7 @@ import { readAppHostLayerBridge } from '@/lib/appHostLayerBridge';
 import { toast } from '@renderer/lib/hooks/use-toast';
 import { translateSessionMessage } from '@renderer/localization/locale-store';
 import { rpc } from '@renderer/lib/ipc';
+import { machineRegistry } from '@renderer/lib/machine-routing';
 import { desktopIpc } from '@/platform/desktopIpc';
 import { EXTENSION_BRIDGE_CHANNEL, type ExtensionBridgeResponse } from '@shared/extensions/bridge-protocol';
 import type { AppModalHostAction } from '@shared/extensions/app-modal';
@@ -321,6 +322,9 @@ function perform(sessionId: string | null, tabId: string, action: ExtensionHostA
     case 'peek': {
       const block = action.target.kind === 'session' ? blockOnScreen(action.target.sessionId) : null;
       if (block) return focusScreenBlock(block);
+      // A folder on another machine, as the account names it: its project's calls go there even before that machine's
+      // own project list has come in (machine-routing).
+      if (action.target.kind === 'folder' && action.target.deviceId) machineRegistry.register(action.target.deviceId, [action.target.projectId, action.target.workspaceId]);
       peekStore.open(sessionId, tabId, action.target);
       return;
     }

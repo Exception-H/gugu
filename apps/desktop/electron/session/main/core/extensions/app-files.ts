@@ -12,6 +12,7 @@ import {
   AppFileError,
   contentTypeOf,
   createAppFiles,
+  recordedProjectFolder,
   requireHandedOr,
   sourceMessageIdsOf,
   tooLargeError,
@@ -896,7 +897,7 @@ export async function openWithTarget(
 ): Promise<
   | { kind: 'chat'; target: { chatId: string; itemId: string; name: string; typedName: string; file: ChatPeekFile; opening?: PreparedChatFile } }
   | { kind: 'session'; target: { sessionId: string; projectId: string | null; deviceId: string | null; path: string; ask: boolean } }
-  | { kind: 'peek'; target: Extract<PeekTarget, { kind: 'local' }> }
+  | { kind: 'peek'; target: Extract<PeekTarget, { kind: 'folder' }> }
 > {
   const ref = fileRefOf(args.ref);
   if (isChat(ref)) return { kind: 'chat', target: await files.openTarget(chatSurface(page), { ref }) };
@@ -908,10 +909,21 @@ export async function openWithTarget(
     mayTouch(page, ref, ['files:read', 'files:write'], 'opening');
     return { kind: 'session', target: { sessionId: elsewhere.sessionId, projectId: elsewhere.projectId, deviceId: elsewhere.deviceId, path: name, ask } };
   }
-  // No session there to open it in, and this computer's previews read its own disk: the page says where it can be opened.
-  if (await folderElsewhere(ref)) {
+  // A project folder on another machine: the window opens it beside the page the way it opens one of this computer's, its
+  // bytes read on that machine (the window routes its project's calls there) — the project and path the account records.
+  const there = await folderElsewhere(ref);
+  if (there) {
     mayTouch(page, ref, ['files:read', 'files:write'], 'opening');
-    throw new AppFileError('elsewhere', 'This file can be opened on its own computer');
+    await elsewhereGated(page, ref);
+    const account = await signedIn();
+    if (!account) throw new AppFileError('denied', 'Nobody is signed in on this computer');
+    const { workspaceId } = workspaceFolder(ref)!;
+    const recorded = await recordedProjectFolder(account.token, account.userId, { deviceId: there.deviceId, workspaceId });
+    if (!recorded) throw new AppFileError('not-found', 'This folder is no longer in a project on that computer');
+    // That machine's own path: a Windows root keeps its separator.
+    const join = /^[A-Za-z]:\\/.test(recorded.path) ? path.win32.join : path.posix.join;
+    const absolutePath = join(recorded.path, name);
+    return { kind: 'peek', target: { kind: 'folder', place: { workspace: ref.workspace }, deviceId: there.deviceId, projectId: recorded.projectId, workspaceId, path: name, absolutePath, name: path.posix.basename(name), ask } };
   }
   await outsideOnlyAsOpened(page, ref);
   const copy = await localFolder(page, ref);
@@ -920,7 +932,7 @@ export async function openWithTarget(
   if (args.peek || !session) {
     if (!copy.workspaceId) throw new AppFileError('not-found', `${found.name} is in no workspace this computer has open`);
     const { place } = found;
-    return { kind: 'peek', target: { kind: 'local', place, projectId: copy.projectId, workspaceId: copy.workspaceId, path: found.path, absolutePath: path.join(copy.workspaceRoot, found.path), name: found.name, ask } };
+    return { kind: 'peek', target: { kind: 'folder', place, projectId: copy.projectId, workspaceId: copy.workspaceId, path: found.path, absolutePath: path.join(copy.workspaceRoot, found.path), name: found.name, ask } };
   }
   return { kind: 'session', target: { sessionId: session, projectId: copy.projectId, deviceId: null, path: found.path, ask } };
 }
