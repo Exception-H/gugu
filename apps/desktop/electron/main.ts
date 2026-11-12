@@ -112,7 +112,7 @@ import { detectLocalSigning, downloadDmg, pickMacDmgFile, shouldUseDmgPath } fro
 import type { LocalSigning } from './macDmgUpdater'
 import { createSelectAccountHandler, webAuthnKeychainGroup } from './macWebAuthn'
 import { isOAuthCallback } from '../shared/oauth-callback'
-import { OAuthCallbackInbox } from './oauth-callback-inbox'
+import { OpenedLinkMailbox } from './opened-link-mailbox'
 import { googleAuthorizationUrl, googleIdentityLinkUrl } from '../shared/google-authorization-url'
 import { isOAuthAttemptRedirect } from '../shared/oauth-attempt'
 import {
@@ -2399,9 +2399,9 @@ ipcMain.handle('updates:changelog', async (): Promise<unknown> => {
 })
 ipcMain.handle('app:get-version', () => app.getVersion())
 ipcMain.handle('auth:oauth-redirect', () => `${GUGU_LINK_SCHEME}://auth/callback`)
-ipcMain.handle('auth:take-callbacks', (event) => {
-  if (event.sender !== mainWindow?.webContents) throw new Error('OAuth callbacks are only available to the main window')
-  return oauthCallbacks.take()
+ipcMain.handle('opened-links:take', (event) => {
+  if (event.sender !== mainWindow?.webContents) throw new Error('Opened links are only available to the main window')
+  return openedLinks.take()
 })
 ipcMain.handle('auth:open-browser', async (event, raw: unknown) => {
   if (event.sender !== mainWindow?.webContents || typeof raw !== 'string') throw new Error('Invalid OAuth browser request')
@@ -3403,20 +3403,22 @@ app.on('open-url', (event, url) => {
  * 与 electron-builder.cjs 的 protocols、扩展侧 linkTo 用的是同一条规则(core 的 linkScheme.mjs)。
  */
 const GUGU_LINK_SCHEME = guguLinkScheme({ tier: process.env.GUGU_TIER, devLaunch: Boolean(process.defaultApp) })
-const oauthCallbacks = new OAuthCallbackInbox(() => {
-  if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send('auth:callback-available')
+// Every link the OS hands this app is also shown to the main renderer (its opened-links stream: login takes the OAuth
+// callbacks, the product watches every link). Opening a link stays here (handleGuguLink).
+const openedLinks = new OpenedLinkMailbox(() => {
+  if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send('opened-links:available')
 })
-// A cold Windows/Linux OAuth callback must reach login even if the session-page host cannot boot.
-const coldOAuthCallback = process.argv.find((arg) => arg.startsWith(`${GUGU_LINK_SCHEME}://`) && isOAuthCallback(arg))
-if (coldOAuthCallback) oauthCallbacks.push(coldOAuthCallback)
+// A cold Windows/Linux link must reach the renderer even if the session-page host cannot boot.
+const coldOpenedLink = process.argv.find((arg) => arg.startsWith(`${GUGU_LINK_SCHEME}://`))
+if (coldOpenedLink) openedLinks.push(coldOpenedLink)
 /** 会话页后端还没起来时到的链接,起来后按到达顺序处理。 */
 const pendingGuguLinks: string[] = []
 let guguLinksReady = false
 
 function handleGuguLink(url: string): void {
   if (!url.startsWith(`${GUGU_LINK_SCHEME}://`)) return
+  openedLinks.push(url)
   if (isOAuthCallback(url)) {
-    oauthCallbacks.push(url)
     focusMainWindow()
     return
   }
