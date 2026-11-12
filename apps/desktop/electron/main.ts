@@ -362,6 +362,7 @@ import { sessionPlatformModel } from './session/main/core/sessions/platform-mode
 import { providerSessionIdForSession } from './session/main/core/sessions/provider-session-id'
 import { SESSIONPAGE_SESSION_RELOAD_CHANNEL } from '../src/session/shared/core/agents/session-reload'
 import { SESSIONPAGE_PLATFORM_RETRY_CHANNEL } from '../src/session/shared/core/agents/platform-model'
+import { subscribeBackendRecovered } from '@gugu/core/cloud/backendReachability'
 import {
   VOICE_NOTE_MEETINGS_CHANNEL,
   VOICE_NOTE_MICROPHONE_CHANNEL,
@@ -2518,6 +2519,14 @@ handleShellChannel(SESSIONPAGE_PLATFORM_RETRY_CHANNEL, (_event, sessionId: unkno
   clearPlatformIssueBackoff(sessionId.trim())
 })
 
+// 后端恢复(这个宿主的心跳失败过又答上,见 backendReachability):起不来、还压着消息的会话各自重来一次,
+// 先清它的取票退避 —— 和人点重试同一条路。没有窗口的宿主也一样。
+subscribeBackendRecovered(() => {
+  if (!sessionLifeBooted) return
+  const started = bootedSessionLife().startAfterOutage(clearPlatformIssueBackoff)
+  if (started.length) createLogger('session-life').info({ started }, 'backend recovered; restarting failed sessions')
+})
+
 /**
  * 会话重开 —— 换了一个这条会话「活着换不了」的东西之后(咕咕的另一个模型 #5160 / MCP 开关 #5157)，
  * 或用户从标题菜单手动发起，确认框确认后才走到这里。
@@ -4347,10 +4356,17 @@ function loadEmdashBridge(): EmdashBridgeModule | null {
     // 占位凭据由宿主算(要用 engine-injection-contract 与 capability-bundle),注进会话页那侧的探针。
     emdashBridge.setProbePlatformEnvResolver(buildProbePlatformCredentials)
     // #2507 选中走模型注入的 API Key 连接(pi / opencode / CodeBuddy)时,目录照那把连接读:输入框列出并默认选中它的模型。
-    emdashBridge.setProbeConnectionModelResolver(createProbeConnectionCredentials(async (providerId) => {
-      const { resolveConnectionModel } = await import('./session/main/core/agents/harness-connections')
-      return resolveConnectionModel(providerId)
-    }))
+    emdashBridge.setProbeConnectionModelResolver(createProbeConnectionCredentials(
+      async (providerId) => {
+        const { resolveConnectionModel } = await import('./session/main/core/agents/harness-connections')
+        return resolveConnectionModel(providerId)
+      },
+      // key 走环境变量的家(Qwen、Copilot、ZCode、Hermes、Antigravity):菜单列出连接勾选的全部模型。
+      async (providerId) => {
+        const { currentConnectionMenuModels } = await import('./session/main/core/agents/harness-connections')
+        return currentConnectionMenuModels(providerId)
+      },
+    ))
     return emdashBridge
   } catch (err) {
     console.error('[sessionpage] FAILED to load session page module — session page backend disabled:', err)
@@ -5201,9 +5217,9 @@ app.whenReady().then(async () => {
       onHostResume: resumeAllCodexAppServerTurnWaiters,
       // #2507 不上平台时,这一家选中的那把「走模型注入」的 API Key 连接(pi / opencode / CodeBuddy)。
       // 动态 import:连接那一层在加载时读库,与 agent-run-context 里同一个理由。
-      connectionModel: async ({ providerId, surface }) => {
+      connectionModel: async ({ providerId, surface, sessionId }) => {
         const { resolveConnectionModel } = await import('./session/main/core/agents/harness-connections')
-        const connection = await resolveConnectionModel(providerId)
+        const connection = await resolveConnectionModel(providerId, sessionId)
         if (!connection) return null
         const { connectionModelLaunch } = await import('./sessionpage/connection-model-launch')
         createLogger('sessionpage/platform').info(
