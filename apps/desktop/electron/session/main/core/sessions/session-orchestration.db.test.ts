@@ -197,7 +197,7 @@ import { getPlugin } from '../agents/plugin-registry';
 import { appSettingsService } from '@main/core/settings/settings-service';
 import {
   messageSessionFrom,
-  outboundSessionAction,
+  assertOutboundProjectIds,
   runRemoteSessionAction,
   runSessionAction,
   sessionCallerFacts,
@@ -837,31 +837,17 @@ describe('session orchestration', () => {
       expect(workspaceOf(result.session_id)).toBe('workspace-home');
     });
 
-    // 项目与机器解耦:跨机器点名项目用项目群(发起方本机的本地项目 id 在这台机器上不指任何东西)。
-    it('runs a project named by its project group in this device’s folder for it', async () => {
-      project2Root();
-      setProjectGroupHost({
-        listBindings: async () => ok([{ projectId: 'project-2', chatId: 'named-group' }, { projectId: 'other', chatId: 'shared-project-group' }]),
-        ensureGroup: vi.fn(), bindToGroup: vi.fn(), unbind: vi.fn(),
-      });
-      const result = await runRemoteSessionAction({ ...remoteCaller, groupChatId: 'shared-project-group' }, { action: 'spawn', prompt: 'inspect', project_group: 'named-group' }) as { session_id: string; project_note: string };
-      expect(mocks.resolveProjectWorkspace).toHaveBeenCalledWith({ projectId: 'project-2', projectPath: '' });
-      expect(result).toMatchObject({ project_id: 'named-group', project_note: expect.stringContaining('named project') });
-      expect(workspaceOf(result.session_id)).toBe('workspace-p2');
-    });
-
-    // A project id is its project group on every device: it crosses machines as it is; a local id is refused here, naming the right one.
-    it('sends a project id to another device as it is, and refuses this machine’s local project id naming the project id', async () => {
+    // A project id is its project group on every device: it crosses machines as it is; a local id is refused at the exit, naming the right one.
+    it('lets a project id leave this machine as it is, and refuses this machine’s local project id naming the project id', async () => {
       bindings('project-2');
-      expect(await outboundSessionAction({ action: 'spawn', prompt: 'x', project_id: 'shared-project-group' })).toEqual({ action: 'spawn', prompt: 'x', project_group: 'shared-project-group' });
+      await expect(assertOutboundProjectIds({ project_id: 'shared-project-group' })).resolves.toBeUndefined();
       // A project with no folder here is still a project: the other device resolves it.
-      expect(await outboundSessionAction({ action: 'spawn', prompt: 'x', project_id: 'their-group' })).toEqual({ action: 'spawn', prompt: 'x', project_group: 'their-group' });
-      expect(await outboundSessionAction({ action: 'activity_list', project_id: 'their-group' })).toEqual({ action: 'activity_list', project_id: 'their-group' });
-      for (const action of [{ action: 'spawn', prompt: 'x', project_id: 'project-2' }, { action: 'activity_list', project_id: 'project-2' }, { action: 'project_get', project_id: 'project-2' }, { action: 'project_add_folder', source_project_id: 'project-2' }]) {
-        await expect(outboundSessionAction(action)).rejects.toThrow('use project:shared-project-group');
+      await expect(assertOutboundProjectIds({ project_id: 'their-group' })).resolves.toBeUndefined();
+      for (const action of [{ project_id: 'project-2' }, { source_project_id: 'project-2' }]) {
+        await expect(assertOutboundProjectIds(action)).rejects.toThrow('use project:shared-project-group');
       }
       bindings();
-      await expect(outboundSessionAction({ action: 'spawn', prompt: 'x', project_id: 'project-2' })).rejects.toThrow('which is in no project');
+      await expect(assertOutboundProjectIds({ project_id: 'project-2' })).rejects.toThrow('which is in no project');
     });
 
     it('refuses this machine’s local project id from a remote caller and in a local spawn, naming the project id', async () => {
@@ -874,7 +860,7 @@ describe('session orchestration', () => {
     it('refuses a named project group this device has no folder for, instead of the task workspace', async () => {
       taskWorkspace();
       bindings('project-2');
-      await expect(runRemoteSessionAction({ ...remoteCaller, groupChatId: 'shared-project-group' }, { action: 'spawn', prompt: 'inspect', project_group: 'unknown-group' }))
+      await expect(runRemoteSessionAction({ ...remoteCaller, groupChatId: 'shared-project-group' }, { action: 'spawn', prompt: 'inspect', project_id: 'unknown-group' }))
         .rejects.toThrow('project_add_device');
     });
 

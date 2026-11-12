@@ -3650,6 +3650,11 @@ function crossMachine(): CrossMachineSessions {
       })
     },
     requester,
+    outbound: async (action) => {
+      const bridge = loadEmdashBridge()
+      if (!bridge) throw new Error('Project registry is unavailable')
+      await bridge.assertOutboundProjectIds(action)
+    },
     // #7199 云电脑管家:地址同渲染层(开发实例的 GUGU_CLOUD_COMPUTER_URL,否则这套库的云端函数),带这台桌面登着的用户 JWT。
     cloudComputerState: async () => {
       try {
@@ -4840,8 +4845,6 @@ app.whenReady().then(async () => {
         : result
       if (record.action === 'devices') return crossMachine().listDeviceRows()
       if (record.action === 'activity_list') {
-        // A local project id is refused here, naming the project's id, before the query fans out to every device.
-        await emdash.outboundSessionAction(record as { action: string })
         const caller = await remoteCaller(auth, context)
         return listActivity(record, { scope: `${auth.userId}:${context.sessionId}`,
           devices: () => crossMachine().activityDevices(),
@@ -4906,7 +4909,6 @@ app.whenReady().then(async () => {
         return hoistDevicePictures(result)
       }
       if (record.action === 'project_add_device') {
-        await emdash.outboundSessionAction(record as { action: string })
         const caller = await remoteCaller(auth, context)
         const onDevice = async (device: string | undefined, step: Record<string, unknown>) =>
           device && !(await crossMachine().isThisDevice(device))
@@ -4918,7 +4920,7 @@ app.whenReady().then(async () => {
       if (typeof record.device === 'string') {
         const { device, ...rest } = record
         if (!(await crossMachine().isThisDevice(device as string))) {
-          return projectResult(await crossMachine().runOnDevice(device as string, await remoteCaller(auth, context), await emdash.outboundSessionAction(rest as { action: string }), signal))
+          return projectResult(await crossMachine().runOnDevice(device as string, await remoteCaller(auth, context), rest as { action: string }, signal))
         }
         record = rest
       }

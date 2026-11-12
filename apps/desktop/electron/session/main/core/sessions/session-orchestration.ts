@@ -164,11 +164,6 @@ export type SessionAction =
       title?: string;
       /** The `project` parameter, decoded at the host boundary: a project id (its project group chat id), or a folder on this machine. */
       project_id?: string;
-      /**
-       * The named project as it travels to another machine (outboundSessionAction; older hosts read this field): the
-       * target runs in its own local project bound to this group. Never set by an agent.
-       */
-      project_group?: string;
       project_path?: string;
       parent_session_id?: string | null;
       transport?: SessionRuntime;
@@ -2221,15 +2216,13 @@ async function runTargetAction(
 }
 
 /**
- * A session action leaving this machine (or fanning out from it). Project ids are already account-level (the project
- * group, project-public-id.ts), so nothing is translated; a local project id of this machine is refused here, where
- * its right id is known. spawn carries the project as `project_group`, the field every host version reads.
+ * A session action leaving this machine (the one exit, cross-machine-sessions.ts `call`). Project ids are already
+ * account-level (the project group, project-public-id.ts), so nothing is translated; a local project id of this machine
+ * is refused here, where its right id is known.
  */
-export async function outboundSessionAction<A extends { action: string; project_id?: unknown; source_project_id?: unknown }>(action: A): Promise<A> {
-  for (const id of [action.project_id, action.source_project_id]) if (typeof id === 'string') await machineLocalProjectsOf(id);
-  if (action.action !== 'spawn' || typeof action.project_id !== 'string') return action;
-  const { project_id, ...rest } = action;
-  return { ...rest, project_group: project_id } as unknown as A;
+export async function assertOutboundProjectIds(action: object): Promise<void> {
+  const { project_id, source_project_id } = action as { project_id?: unknown; source_project_id?: unknown };
+  for (const id of [project_id, source_project_id]) if (typeof id === 'string') await machineLocalProjectsOf(id);
 }
 
 /** 本机发起方在跨机器请求里的自述;机器与 Agent ID 由宿主补。 */
@@ -2328,25 +2321,21 @@ async function spawnForRemoteCaller(
   // 与本机同一条默认(spawnedBy):挂在发起会话下面(它在别的机器上,记在 config 里),点没点名项目都一样。
   const named = await namedPlacement(action);
 
-  // 点名了项目(发起方原样带来它的项目群):这台机器上绑在这个群上的本地项目,落在根工作区;这台没有它的文件夹就说清。
-  const groupNamed = !named && action.project_group ? { project_id: await machineLocalProjectOf(action.project_group) } : null;
   // 跨机默认与人在项目里选设备一样,按同一项目群找本机项目,落在根工作区。
   // 没有关联仍走原任务工作区,但回执要说清原因与关联入口。
   let matchedProjectId: string | undefined;
-  if (!named && !groupNamed && caller.groupChatId) {
+  if (!named && caller.groupChatId) {
     [matchedProjectId] = await machineLocalProjectsOf(caller.groupChatId);
   }
   const { projectId, workspaceId } = await projectRootPlacement(
-    named ?? groupNamed ?? (matchedProjectId ? { project_id: matchedProjectId } : {}),
-    named ? `project ${action.project_path ?? action.project_id} on this machine` : groupNamed ? 'the named project on this machine' : 'default project on this machine',
+    named ?? (matchedProjectId ? { project_id: matchedProjectId } : {}),
+    named ? `project ${action.project_path ?? action.project_id} on this machine` : 'default project on this machine',
   );
   let projectNote: string | undefined;
   if (!named) {
     const project = await getProjectById(projectId);
     if (!project) throw new Error(`Project not found: ${projectId}`);
-    projectNote = groupNamed
-      ? `Project "${project.name}" (root workspace of this device's folder for the named project).`
-      : matchedProjectId
+    projectNote = matchedProjectId
       ? `Project "${project.name}" (root workspace, matched the caller's project group).`
       : caller.groupChatId
         ? `Task workspace "${project.name}": this device has no local project associated with the caller's project group. Use project_add_device to associate a folder first.`
