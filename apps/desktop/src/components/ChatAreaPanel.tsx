@@ -11,7 +11,7 @@ import { useActiveChatIdentity, useChatStore, useChatsWhile } from '../store/cha
 import { ChatLineScope } from '../store/chatLineScope'
 import { useAuth } from '../store/auth'
 import type { AgentConversationActivity, GroupCollabSnapshot, MessageItem } from '@gugu/core/shared/types/chat'
-import { useUnreadLocatorNavigation } from '../hooks/useUnreadLocatorNavigation'; import { useDeliveryWaits } from '../hooks/useDeliveryWaits'
+import { useUnreadLocatorNavigation } from '../hooks/useUnreadLocatorNavigation'; import { useDeliveryWaits } from '../hooks/useDeliveryWaits'; import { useMessageRecipientFacts } from '../hooks/useMessageRecipientFacts'
 import { useSourceMessageReveal } from '../hooks/useSourceMessageReveal'
 import { useChatHistoryPagination } from './chat/useChatHistoryPagination'
 import { useGroupCollabLoader, EMPTY_GROUP_COLLAB } from '../hooks/useGroupCollabLoader'
@@ -364,8 +364,7 @@ function ChatAreaSurface({ viewportKey = 'chats', imPage = false, navigationTarg
     })
   }, [deleteMessage])
 
-  const { rows: chatListRows, listedMessages, notice: taskChatNotice, threeParty } = useTaskChatRows(messages, user?.id, activeChat?.peer_user_id, surfaceVisible); const deliveryWaits = useDeliveryWaits(messages, memberReadSeqs)
-  const chatResetKey = `${activeChatId ?? ''}#${openNonce ?? 0}#${messageWindow?.viewVersion ?? 0}`
+  const { rows: chatListRows, listedMessages, notice: taskChatNotice, threeParty } = useTaskChatRows(messages, user?.id, activeChat?.peer_user_id, surfaceVisible);   const chatResetKey = `${activeChatId ?? ''}#${openNonce ?? 0}#${messageWindow?.viewVersion ?? 0}`
   const { scrollerEl, scrollerRef, setScrollerRef, prepareForSavedPosition, isPreservingPosition, forgetSavedPosition, openLocation, revealMessage } = useConversationScrollMemory({ listRef,
     chatId: activeChatId, viewportKey, activationKey: activeChatId ?? '', enabled: true, discardSaved: !!unreadEntry,
     messageIds: chatListRows.map((row) => row.message.id), isAtBottomRef, setFollowingTail, loadMessageAnchor,
@@ -433,8 +432,10 @@ function ChatAreaSurface({ viewportKey = 'chats', imPage = false, navigationTarg
 
   // @@@1577 phase3 — canonical (chat,thread) 键单一派生(消手拼 chatId:rootId)。
   // @@@acp-stream (#966)/@@@1577 — 流式首 chunk 引导 started activity（#2115 god-file 抽取,行为不变,详见 hook 头注）。
+  const recipientFacts = useMessageRecipientFacts(messages, messageMemberProfiles)
+  const deliveryWaits = useDeliveryWaits(messages, memberReadSeqs, recipientFacts.wakes)
   const { readReceiptHandle, receiptOf } = useReadReceiptPanel({
-    chatId: activeChatId, messages, memberReadSeqs, memberProfiles: messageMemberProfiles,
+    chatId: activeChatId, messages, memberReadSeqs, memberProfiles: messageMemberProfiles, recipientFacts,
   })
   const groupSettings = useGroupChatSettings(isRoomChatSurface ? activeChatId : null, groupRoleRevision(groupCollabSnapshot), authorityRevision)
   const messageListenEditControlsFor = useListenModeEditControls({ chatId: isRoomChatSurface ? activeChatId : null, currentUserId: user?.id ?? null, settings: groupSettings.settings, onAuthorityReload: groupSettings.reload, onReload: loadGroupCollab })
@@ -448,7 +449,7 @@ function ChatAreaSurface({ viewportKey = 'chats', imPage = false, navigationTarg
     threeParty,
     mobile,
     flashMessageId,
-    memberReadSeqs, deliveryWaits,
+    memberReadSeqs, deliveryWaits, recipientFacts,
     isGroupChat: isRoomChatSurface,
     memberProfiles: messageMemberProfiles,
     onReaction: handleReaction,
@@ -478,7 +479,7 @@ function ChatAreaSurface({ viewportKey = 'chats', imPage = false, navigationTarg
     flashMessageId,
     listedMessages, threeParty,
     mobile,
-    memberReadSeqs, deliveryWaits,
+    memberReadSeqs, deliveryWaits, recipientFacts,
     isRoomChatSurface,
     messageMemberProfiles,
     handleReaction,

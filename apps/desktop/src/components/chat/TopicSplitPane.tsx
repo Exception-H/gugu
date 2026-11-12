@@ -9,6 +9,7 @@ import type { ChatItem, MessageItem } from '@gugu/core/shared/types/chat'
 import { visibleDeliveryMessages } from '@gugu/core/shared/ui/systemNotice'
 import { projectTurnFailureMessages } from '../../lib/projectTurnFailureMessages'
 import { useDeliveryWaits } from '../../hooks/useDeliveryWaits'
+import { useMessageRecipientFacts } from '../../hooks/useMessageRecipientFacts'
 import type { GroupRosterCandidate } from '@/lib/mention'
 import type { AgentStatusById } from './agentMentionStatusModels'
 import type { MemberProfileCardModel } from '../MemberProfileCard'
@@ -232,8 +233,9 @@ export function TopicSplitPane({ viewportKey = 'topic', navigationTarget = false
     [mentionMembers, participantIds],
   )
   const [mentionToInsert, setMentionToInsert] = useState<{ id: string; name: string } | null>(null)
+  const recipientFacts = useMessageRecipientFacts(messages, memberProfiles)
   const { readReceiptHandle, receiptOf } = useReadReceiptPanel({
-    chatId: topic.chatId, messages, memberReadSeqs, memberProfiles,
+    chatId: topic.chatId, messages, memberReadSeqs, memberProfiles, recipientFacts,
   })
   // 宽度记在本机:拖过一次之后下次打开还是那个宽度(与会话列表同口径)。
   const [width, setWidth] = useState(() => readStoredTopicSplitWidth())
@@ -261,7 +263,7 @@ export function TopicSplitPane({ viewportKey = 'topic', navigationTarget = false
   // 列表行与主线共用历史窗口和分页;分栏没有多选。
   // 已读环有 —— 水位由 useChatConversation 按**这条话题**自己拉,拉不到时是空表(空表就不出环)。
   useChatSearch(topic.chatId, visible !== false, paneRef)
-  const deliveryWaits = useDeliveryWaits(messages, memberReadSeqs)
+  const deliveryWaits = useDeliveryWaits(messages, memberReadSeqs, recipientFacts.wakes)
   const rows = useMemo<ChatListRowItem[]>(
     () => projectTurnFailureMessages(visibleDeliveryMessages(messages)).map((message) => ({ type: 'message' as const, message })),
     [messages],
@@ -310,7 +312,7 @@ export function TopicSplitPane({ viewportKey = 'topic', navigationTarget = false
     rows,
     messages,
     mobile,
-    memberReadSeqs, deliveryWaits,
+    memberReadSeqs, deliveryWaits, recipientFacts,
     // 话题是多人线 ⇒ 与群同口径,收到的气泡上方显发送者名。
     isGroupChat: true,
     memberProfiles,
@@ -336,7 +338,7 @@ export function TopicSplitPane({ viewportKey = 'topic', navigationTarget = false
     onToggleSelect: noop,
     onEnterSelectMode: undefined,
     flashMessageId,
-  }), [showMessage, rows, messages, mobile, memberReadSeqs, deliveryWaits, memberProfiles, memberProfileOpener, onOpenAttachment, readReceiptHandle, onReaction, onForward, onDelete, onQuote, flashMessageId, history, visible])
+  }), [showMessage, rows, messages, mobile, memberReadSeqs, deliveryWaits, recipientFacts, memberProfiles, memberProfileOpener, onOpenAttachment, readReceiptHandle, onReaction, onForward, onDelete, onQuote, flashMessageId, history, visible])
 
   // 手机上话题是来源页的一枚页签:在前面时,返回先回到来源那一枚。
   useBackLayer(onClose, mobile && visible !== false)

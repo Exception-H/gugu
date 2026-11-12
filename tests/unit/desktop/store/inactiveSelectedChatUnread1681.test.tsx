@@ -202,7 +202,7 @@ function Probe() {
   const rows = useMemo(() => messages.map(message => ({ type: 'message' as const, message })), [messages])
   const noop = () => undefined
   const rowProps: MessageListRowProps = { rows, messages, mobile: false,
-    flashMessageId: null, memberReadSeqs: {}, deliveryWaits: new Map(),
+    flashMessageId: null, memberReadSeqs: {}, deliveryWaits: new Map(), recipientFacts: { agentIds: new Set(), wakes: new Map() },
     isGroupChat: false, threeParty: undefined, memberProfiles: {}, onVisible: markMessageVisible,
     onReaction: noop, readReceiptHandle: undefined, onQuote: noop, onForward: noop, onDelete: noop,
     memberProfileOpener: undefined, onOpenTopic: undefined, topicAnchors: undefined, onOpenTopicAnchor: undefined,
