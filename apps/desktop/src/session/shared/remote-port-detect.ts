@@ -19,15 +19,19 @@ const PYTHON_SERVER = /Serving HTTP on (?:127\.0\.0\.1|0\.0\.0\.0|::|\[::\]) por
 export function findLoopbackPorts(text: string, complete = true): number[] {
   const clean = text.replace(ANSI, '');
   const found: number[] = [];
+  const positions = new Map<number, number>();
   for (const pattern of [LOOPBACK_PORT, PYTHON_SERVER]) {
     pattern.lastIndex = 0;
     for (let match = pattern.exec(clean); match; match = pattern.exec(clean)) {
       if (!complete && match.index + match[0].length >= clean.length) continue;
       const port = Number(match[1]);
-      if (Number.isInteger(port) && port > 0 && port < 65536 && !found.includes(port)) found.push(port);
+      if (Number.isInteger(port) && port > 0 && port < 65536) {
+        positions.set(port, Math.min(positions.get(port) ?? Infinity, match.index));
+        if (!found.includes(port)) found.push(port);
+      }
     }
   }
-  return found;
+  return found.sort((a, b) => positions.get(a)! - positions.get(b)!);
 }
 
 /** 输出是一段一段来的:留上一段的尾巴(地址可能被切成两半),只报这条流里第一次出现的端口。 */
