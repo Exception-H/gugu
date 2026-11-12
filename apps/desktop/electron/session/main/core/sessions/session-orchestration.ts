@@ -14,7 +14,6 @@ import { parseConversationLink } from '@gugu/core/shared/ui/guguLink';
 import { readCurrentActivitySource } from './session-activity-source';
 import { receiveAssistantWorkReport, workReportSchema, type WorkReport } from '../../../../sessionpage/assistant-work';
 import { isProjectAgentAction, runProjectAgentAction, type ProjectAgentAction } from '../projects/project-agent-actions';
-import { localProjectOfGroup } from '../projects/operations/project-groups';
 import { machineLocalProjectOf, machineLocalProjectsOf, machineOutwardProjectIds } from '../projects/project-public-id';
 import { getProjectById } from '../projects/operations/getProjects';
 import { isLibraryAgentAction, runLibraryAgentAction, type LibraryAgentAction } from '../app/user-library';
@@ -2335,9 +2334,7 @@ async function spawnForRemoteCaller(
   // 没有关联仍走原任务工作区,但回执要说清原因与关联入口。
   let matchedProjectId: string | undefined;
   if (!named && !groupNamed && caller.groupChatId) {
-    const matched = await localProjectOfGroup(caller.groupChatId);
-    if (!matched.success) throw new Error(matched.error.message);
-    matchedProjectId = matched.data;
+    [matchedProjectId] = await machineLocalProjectsOf(caller.groupChatId);
   }
   const { projectId, workspaceId } = await projectRootPlacement(
     named ?? groupNamed ?? (matchedProjectId ? { project_id: matchedProjectId } : {}),

@@ -144,7 +144,7 @@ import {
 } from '@main/core/browser/browser-partition-cleanup'
 import { projectSettingsService } from '@main/core/projects/settings/project-settings-service'
 import { getProjectById, getProjects } from '@main/core/projects/operations/getProjects'
-import { recordedProjectOfGroup } from '@main/core/projects/operations/device-project-records'
+import { machineLocalProjectsOf } from '@main/core/projects/project-public-id'
 import { resolveAgentSessionProject } from '@main/core/projects/operations/resolve-agent-session-project'
 import { resolveAssistantSessionWorkspace } from '@main/core/projects/operations/task-directory-workspace'
 import { runPendingAssistantProjectCleanup } from '@main/core/projects/operations/assistant-project-cleanup'
@@ -2073,8 +2073,8 @@ export async function emdashProjectName(projectId: string): Promise<string | nul
   return project?.name ?? null
 }
 export async function emdashProjectRoot(projectId: string): Promise<string | null> { return (await getProjectById(projectId))?.path ?? null }
-/** This device's project bound to a chat, as the account records it (device_projects). */
-export async function emdashProjectOfGroup(chatId: string): Promise<string | undefined> { return recordedProjectOfGroup(chatId) }
+/** This device's project for a chat, as the account records it (device_projects): the same pick an agent's project:<chat> gets. */
+export async function emdashProjectOfGroup(chatId: string): Promise<string | undefined> { return (await machineLocalProjectsOf(chatId))[0] }
 /** The chat a conversation's agent was born in, taken at its first mint (birth-groups.ts). */
 export async function emdashTakeBirthGroup(sessionId: string): Promise<BirthGroup | null> {
   return (await import('@main/core/sessions/birth-groups')).takeBirthGroup(sessionId)

@@ -5,9 +5,9 @@ import type { ProjectGroupBinding } from '@shared/core/projects/project-groups';
  *
  * A project is account-level and its id is its project group chat id; agents write it `project:<chat_id>`. A local
  * project id only names "this machine's folder binding" and never leaves the machine. Every host translates at its
- * own boundary with these two functions, reading the same binding table as `localProjectOfGroup`:
- * - inward: chat id -> the local projects bound to it here (several when another project's root joined the group;
- *   the first is the one new folders and sessions go to, the same pick as `localProjectOfGroup`);
+ * own boundary with these two functions:
+ * - inward: chat id -> the local projects bound to it here and recorded on the account (several when another project's
+ *   root joined the group; the first is the one new folders, sessions and published files go to);
  * - outward: local project -> its chat id, or null for a local project in no project group (no outward id).
  * A local id passed in is refused, naming the right `project:<chat_id>`: there is no second path where it still works.
  */
@@ -42,21 +42,18 @@ export function outwardProjectIds(bindings: readonly ProjectGroupBinding[]): (lo
   return (localId) => byProject.get(localId) ?? null;
 }
 
+/** Inward: only the bindings this machine records on the account (no workspace's or hidden project's leftover binding). */
 async function machineDeps(): Promise<Deps> {
-  const [{ listProjectGroupBindings }, { getProjectById }] = await Promise.all([import('./operations/project-groups'), import('./operations/getProjects')]);
-  return {
-    bindings: async () => {
-      const read = await listProjectGroupBindings();
-      if (!read.success) throw new Error(read.error.message);
-      return read.data;
-    },
-    get: getProjectById,
-  };
+  const [{ recordedProjectGroupBindings }, { getProjectById }] = await Promise.all([import('./operations/device-project-records'), import('./operations/getProjects')]);
+  return { bindings: recordedProjectGroupBindings, get: getProjectById };
 }
 
 /** This machine's bindings, read once for a batch of outward ids. */
 export async function machineOutwardProjectIds(): Promise<(localId: string) => string | null> {
-  return outwardProjectIds(await (await machineDeps()).bindings());
+  const { listProjectGroupBindings } = await import('./operations/project-groups');
+  const read = await listProjectGroupBindings();
+  if (!read.success) throw new Error(read.error.message);
+  return outwardProjectIds(read.data);
 }
 
 export async function machineLocalProjectsOf(id: string): Promise<string[]> {

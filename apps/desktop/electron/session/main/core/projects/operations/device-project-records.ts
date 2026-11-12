@@ -9,6 +9,7 @@ import {
   projectGroupBindingChangedChannel,
   projectVisibilityChangedChannel,
 } from '@shared/core/projects/projectEvents';
+import type { ProjectGroupBinding } from '@shared/core/projects/project-groups';
 import { sessionCreatedChannel } from '@shared/core/sessions/sessionEvents';
 import { getProjects } from './getProjects';
 import { listProjectFolderRefs } from './project-folders';
@@ -42,12 +43,13 @@ export async function listDeviceProjectRecords(): Promise<DeviceProject[]> {
 }
 
 /**
- * 记到账号上的那一份里绑在这个群上的本地项目(没有 = undefined)。往群里发文件时拿它当 p_project:账号上没记的项目
- * (workspace 从前留下的绑定、隐藏的项目)名义上发不出去,服务端会拒「This device keeps no project for this chat」。
+ * 这台机器记到账号上的项目绑的群(按绑定原序)。「群 → 本机项目」只认这一份(project-public-id):workspace 从前留下的绑定、
+ * 隐藏的项目的绑定账号上没有,发文件拿它当 p_project 会被拒「This device keeps no project for this chat」,spawn 落进去也不对。
  */
-export async function recordedProjectOfGroup(chatId: string): Promise<string | undefined> {
-  const { projects, bindingOf } = await recordedProjects();
-  return projects.find((project) => bindingOf.get(project.id)?.chatId === chatId)?.id;
+export async function recordedProjectGroupBindings(): Promise<ProjectGroupBinding[]> {
+  const { projects, bindings } = await recordedProjects();
+  const recorded = new Set(projects.map((project) => project.id));
+  return bindings.filter((binding) => recorded.has(binding.projectId));
 }
 
 /** 记到账号上的项目与它们绑的群:清单同 `projects.getProjects()`(❌ 隐藏的项目),去掉 workspace。 */
@@ -58,7 +60,7 @@ async function recordedProjects() {
   }
   // #609 workspace(任务工作区、~、助理与 App 的目录)不是项目:不记到账号上,别的端也就不会把它当项目列出来。
   const projects = (await getProjects()).filter((project) => project.kind !== 'workspace' && !isImplicitSessionHomeProjectId(project.id));
-  return { projects, bindingOf: new Map(bindings.data.map((binding) => [binding.projectId, binding])) };
+  return { projects, bindings: bindings.data, bindingOf: new Map(bindings.data.map((binding) => [binding.projectId, binding])) };
 }
 
 /** 项目表的时间是 SQLite `CURRENT_TIMESTAMP`(UTC,`YYYY-MM-DD HH:MM:SS`,不带时区):记到账号上前写明是 UTC。 */
