@@ -8,3 +8,5 @@ it('keeps complete Unicode characters in forward excerpts', () => { expect(excer
 it('keeps multiline sender names inside one quote heading', () => { expect(forwardQuote([{ sender: 'Lin\nQ', text: 'Hello' }])).toBe('> **Lin Q**\n>\n> Hello') })
 
 it('writes widget preview fields first regardless of input property order', () => { const widget = { app: 'notes', view: 'main', text: 'Hello', v: 2 as const }; expect(widgetMessagePreview(serializeWidgetMessage(widget))).toBe('Hello') })
+
+it('accepts trailing horizontal whitespace on the opening frontmatter delimiter', () => { expect(readFrontmatter('--- \t\nname: Note\n---\nBody')).toEqual({ fields: { name: 'Note' }, body: 'Body' }) })

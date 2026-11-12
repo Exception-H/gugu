@@ -2,18 +2,20 @@ import { OWNER_PROFILE_MEMORY_FILE } from './assistantPolicy';
 /** 文件开头 `---` 之间那几行里的简单键值(name / description / type,也认 metadata 下缩进的 type)。 */
 export function readFrontmatter(text: string): { fields: Record<string, string>; body: string } {
   const normalized = text.replace(/^\uFEFF/, '').replace(/\r\n/g, '\n');
-  if (!normalized.startsWith('---\n')) return { fields: {}, body: normalized.trim() };
-  const close = /^---[ \t]*(?:\n|$)/m.exec(normalized.slice(4));
+  const opening = /^---[ \t]*\n/.exec(normalized);
+  if (!opening) return { fields: {}, body: normalized.trim() };
+  const offset = opening[0].length;
+  const close = /^---[ \t]*(?:\n|$)/m.exec(normalized.slice(offset));
   if (!close) return { fields: {}, body: normalized.trim() };
   const fields: Record<string, string> = Object.create(null) as Record<string, string>;
-  for (const line of normalized.slice(4, 4 + close.index).split('\n')) {
+  for (const line of normalized.slice(offset, offset + close.index).split('\n')) {
     const match = /^\s*([A-Za-z_][\w-]*):\s*(.*)$/.exec(line);
     if (!match) continue;
     const [, key, raw] = match;
     const value = raw.trim().replace(/^(['"])(.*)\1$/, '$2');
     if (value && !(key in fields)) fields[key] = value;
   }
-  return { fields, body: normalized.slice(4 + close.index + close[0].length).trim() };
+  return { fields, body: normalized.slice(offset + close.index + close[0].length).trim() };
 }
 
 /** Claude Code 的记忆分四种;「关于你 / 关于助理」对应前两种。 */
