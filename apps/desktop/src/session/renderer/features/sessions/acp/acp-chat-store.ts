@@ -498,7 +498,7 @@ export class AcpChatStore {
    */
   get recordedPermissionTier(): GuguPermissionMode | null {
     if (this.isTransient) return null;
-    // Only the recorded tier is shown. A record without one (a host from before migration 0050) shows none: the
+    // Only the recorded tier is shown. A record without one (a host from before migration 0051) shows none: the
     // start path reads it through resolveSessionPermissionMode and fails loudly; the view ❌ guesses a tier.
     return this._sessionRecord()?.permissionMode ?? null;
   }

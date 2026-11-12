@@ -155,7 +155,7 @@ describe.skipIf(!ANTIGRAVITY_SESSION_TUI_ENABLED)('antigravity 终端腿(agy,#63
     const build = agy().behavior.prompt!.buildCommand;
     const fresh = build({ cli: '/bin/agy', permissionMode: 'edit', initialPrompt: 'hi', cliSessionId: 's', model: '' });
     expect(fresh.command).toBe('/bin/sh');
-    // 没记档位的会话不起(每条会话都记着档,迁移 0050 补齐存量),❌ 按默认档猜
+    // 没记档位的会话不起(每条会话都记着档,迁移 0051 补齐存量),❌ 按默认档猜
     expect(() => build({ cli: '/bin/agy', initialPrompt: 'hi', cliSessionId: 's', model: '' })).toThrow('no permission tier');
     expect(fresh.args).toEqual(['-c', ANTIGRAVITY_LAUNCH_SCRIPT, '/bin/agy', '--mode', 'accept-edits', '-i', 'hi']);
 
