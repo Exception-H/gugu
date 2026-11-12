@@ -3,8 +3,8 @@ import { dirname, join, resolve } from 'node:path'
 import { homedir } from 'node:os'
 import { AssistantFileError } from '@gugu/core/shared/assistantFileError'
 import {
-  ASSISTANT_COMPUTER_WORKDIR_NAME, ASSISTANT_GUIDE_BEGIN, ASSISTANT_GUIDE_END, assistantBrief, assistantGuide,
-  assistantHomePaths, upsertAssistantGuide, withDeniedTools, type AssistantHomeKind,
+  ASSISTANT_COMPUTER_WORKDIR_NAME, assistantBrief, assistantGuide,
+  assistantHomePaths, upsertAssistantGuide, withoutAssistantGuide, withDeniedTools, type AssistantHomeKind,
 } from '@gugu/core/shared/assistantPolicy'
 import type { AssistantProductRules } from '@gugu/core/shared/assistantRulesFormat'
 import type { AssistantEngine } from '../../src/lib/assistantHomeIpc'
@@ -28,7 +28,10 @@ export async function refreshAssistantContext(cwd: string, guguHome: string, kin
   const gate = Promise.withResolvers<void>()
   refreshes.set(key, gate.promise)
   if (previous) await previous
-  try { await writeAssistantContext(cwd, kind, home, engine, using) }
+  try {
+    if (kind === 'computer' && process.env.GUGU_SERVER_MODE === '1') await reclaimServerLayoutOnce(home, cwd, engine)
+    await writeAssistantContext(cwd, kind, home, engine, using)
+  }
   finally {
     gate.resolve()
     if (refreshes.get(key) === gate.promise) refreshes.delete(key)
@@ -43,7 +46,6 @@ async function writeAssistantContext(cwd: string, kind: AssistantHomeKind, home:
   const brief = assistantBrief(kind, reference, paths.memoryDir, rules)
   const instructions = paths.instructions
   const current = await readAssistantFile(instructions) ?? ''
-  if (kind === 'computer') await reclaimCloudLayout(home, paths.claudeMemoryDir, paths.memoryDir, engine)
   const settings = kind === 'computer' && engine === 'claude' ? [[paths.settings, await localAssistantSettings(paths.settings, cwd, rules.defaults.deniedTools)]] : []
   // Install the complete reference first, so the brief never points to an absent file.
   for (const [path, content] of [[reference, full], [instructions, upsertAssistantGuide(current, brief)], ...settings]) {
@@ -82,25 +84,28 @@ async function localAssistantSettings(path: string, cwd: string, deniedTools: re
 }
 
 /**
- * @@@server-home-reclaim 旧版本在人自己的 Linux server 上按云电脑布局跑助理(判据是启动方式,不是 GUGU_CLOUD_COMPUTER):
- * 说明段写进了 `~/.claude/CLAUDE.md`(这个 Linux 用户自己开的每个 Claude Code 会话都读),Codex 助理的笔记记在
- * `~/.claude/projects/<目录名>/memory` 的真目录里。住本机时把两样收回:只删我们那一段(人写的照留,删空了就删文件),
- * 笔记搬回它家里(Claude 助理那一夹本来就是链到家里的链接,不用搬)。
+ * @@@server-home-reclaim One-time migration for a self-hosted Linux gugu-server only. Builds before the cloud-computer
+ * identity decided the layout ran the assistant there with the cloud layout: its guide went into the Linux user's own
+ * `~/.claude/CLAUDE.md` (read by every Claude Code session that user opens), and a Codex assistant's notes into a real
+ * `~/.claude/projects/<dir>/memory` folder. Desktops never did this. Once per assistant home: remove only our section
+ * (current or legacy marks; the person's text stays, an emptied file goes), move the notes home (a Claude assistant's
+ * folder is the link into its home and stays), then record it beside the home's settings.
+ * Delete this, and the record, once the oldest gugu-server allowed to connect carries the identity-based layout.
  */
-async function reclaimCloudLayout(home: string, claudeMemoryDir: string, memoryDir: string, engine: AssistantEngine): Promise<void> {
+async function reclaimServerLayoutOnce(home: string, cwd: string, engine: AssistantEngine): Promise<void> {
+  const paths = assistantHomePaths(home, cwd, 'computer')
+  const record = join(dirname(paths.settings), 'server-layout-reclaimed')
+  if (await readAssistantFile(record) !== null) return
   const personal = join(home, '.claude', 'CLAUDE.md')
   const current = await readAssistantFile(personal)
-  const start = current?.indexOf(ASSISTANT_GUIDE_BEGIN) ?? -1
-  const end = start < 0 ? -1 : current!.indexOf(ASSISTANT_GUIDE_END, start)
-  if (current !== null && start >= 0 && end >= 0) {
-    const rest = `${current.slice(0, start).replace(/\n+$/, '')}\n\n${current.slice(end + ASSISTANT_GUIDE_END.length).replace(/^\n+/, '')}`.trim()
-    if (rest) await writeAssistantFile(personal, `${rest}\n`)
-    else await rm(personal)
-  }
-  if (engine === 'codex' && (await lstat(claudeMemoryDir).catch((error: NodeJS.ErrnoException) => {
+  const rest = current === null ? null : withoutAssistantGuide(current)
+  if (rest) await writeAssistantFile(personal, `${rest}\n`)
+  else if (rest === '') await rm(personal)
+  if (engine === 'codex' && (await lstat(paths.claudeMemoryDir).catch((error: NodeJS.ErrnoException) => {
     if (error.code === 'ENOENT') return null
     throw error
-  }))?.isDirectory()) await adoptMemoryEntries(claudeMemoryDir, memoryDir)
+  }))?.isDirectory()) await adoptMemoryEntries(paths.claudeMemoryDir, paths.memoryDir)
+  await writeAssistantFile(record, `${new Date().toISOString()}\n`)
 }
 
 /** 把一夹记忆搬进它家里(家里已有同名的保留家里那份),搬完删掉原夹。 */

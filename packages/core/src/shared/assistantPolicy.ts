@@ -59,19 +59,33 @@ export function assistantGuide(kind: AssistantHomeKind, rules: AssistantProductR
  * 把说明写进那份文件(Claude Code 的 CLAUDE.md、Pi 的 AGENTS.md)的全文:有标记(新 / 旧)就只换标记那一段,
  * 早期整份都是管家写的(以「# 你是谁」开头)就整份换,否则接在末尾。与管家 POLICY_PY 的 put() 同一规则。
  */
-export function upsertAssistantGuide(old: string, guide: string): string {
-  const marks: Array<[string, string]> = [
-    [ASSISTANT_GUIDE_BEGIN, ASSISTANT_GUIDE_END],
-    [LEGACY_ASSISTANT_GUIDE_BEGIN, LEGACY_ASSISTANT_GUIDE_END],
-  ]
-  const hit = marks.find(([begin, end]) => old.includes(begin) && old.includes(end))
-  if (hit) {
-    const start = old.indexOf(hit[0])
-    const end = old.indexOf(hit[1], start) + hit[1].length
-    return old.slice(0, start) + guide.replace(/\n+$/, '') + old.slice(end)
+const GUIDE_MARKS: ReadonlyArray<readonly [string, string]> = [
+  [ASSISTANT_GUIDE_BEGIN, ASSISTANT_GUIDE_END],
+  [LEGACY_ASSISTANT_GUIDE_BEGIN, LEGACY_ASSISTANT_GUIDE_END],
+]
+
+/** The host-maintained section in a text (current or legacy marks): where it starts and where it ends. */
+function guideSection(text: string): { start: number; end: number } | null {
+  for (const [begin, finish] of GUIDE_MARKS) {
+    const start = text.indexOf(begin)
+    const close = start < 0 ? -1 : text.indexOf(finish, start)
+    if (close >= 0) return { start, end: close + finish.length }
   }
+  return null
+}
+
+export function upsertAssistantGuide(old: string, guide: string): string {
+  const hit = guideSection(old)
+  if (hit) return old.slice(0, hit.start) + guide.replace(/\n+$/, '') + old.slice(hit.end)
   if (old.startsWith('# 你是谁')) return guide
   return (old.trim() ? `${old.replace(/\n+$/, '')}\n\n` : '') + guide
+}
+
+/** The text without the host-maintained section (the text around it kept, trimmed); null when it has none. */
+export function withoutAssistantGuide(text: string): string | null {
+  const hit = guideSection(text)
+  if (!hit) return null
+  return `${text.slice(0, hit.start).replace(/\n+$/, '')}\n\n${text.slice(hit.end).replace(/^\n+/, '')}`.trim()
 }
 
 /** 引导中填写的「称呼和基本信息」保存为记忆(Claude Code frontmatter + 正文),与管家写的同名同格式。 */
