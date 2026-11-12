@@ -6461,7 +6461,10 @@ app.whenReady().then(async () => {
             for (const projectId of localProjectIds) await forgetProjectGroupId(projectId, ownerUserId)
           },
           warn: (message, fields) => createLogger('device-projects').warn(fields, message),
-          onPublished: () => emdash.projectFoldersPublished(),
+          onPublished: () => {
+            emdash.projectFoldersPublished()
+            emdash.deviceProjectsPublished()
+          },
         })
         try {
           emdash.onDeviceProjectsMaybeChanged(() => deviceProjectsPublisher?.notify())

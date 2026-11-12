@@ -9,10 +9,11 @@ import { ProjectGroupsStore } from './project-groups-store';
 
 const mocks = vi.hoisted(() => ({
   answers: new Map<string, () => Promise<unknown>>(),
+  handlers: new Map<string, () => void>(),
 }));
 
 vi.mock('@renderer/lib/ipc', () => ({
-  events: { on: () => () => {} },
+  events: { on: (channel: { name: string }, handler: () => void) => { mocks.handlers.set(channel.name, handler); return () => {}; } },
   rpcOn: (machine: string | null) => ({
     projects: {
       listProjectGroupBindings: () => (mocks.answers.get(machine ?? 'local') ?? (() => Promise.reject(new Error('offline'))))(),
@@ -62,6 +63,21 @@ describe('ProjectGroupsStore', () => {
     new ProjectGroupsStore().start(() => [], () => [], () => ['z-target']);
     await settle();
     expect(localStorage.length).toBe(0);
+  });
+
+  // A project made on this computer is in the account list only once this machine's publish lands (offline: after the
+  // reconnect). That publish, not the project's creation, is when this window reads the account list again.
+  it('reads the account projects again when this machine\'s projects are published, not when one is created', async () => {
+    const { accountProjectsStore } = await import('./account-projects-store');
+    const refresh = vi.spyOn(accountProjectsStore, 'refresh').mockResolvedValue();
+    answer('local', []);
+    new ProjectGroupsStore().start(() => [], () => [], () => []);
+    await settle();
+    refresh.mockClear();
+    expect(mocks.handlers.has('project:created')).toBe(false);
+    mocks.handlers.get('project:device-projects-published')!();
+    expect(refresh).toHaveBeenCalledTimes(1);
+    refresh.mockRestore();
   });
 
   it('publishes project agents across devices and reacts to identities and project rebinding', async () => {
