@@ -8,7 +8,7 @@ import type { ProjectFolder } from '@shared/core/projects/project-folders';
 import { SessionLocalizationProvider } from '@renderer/localization/localization-provider';
 import { ProjectFolderCard, shortHome, FAN_MAX_ROWS, FAN_ROW_MAX, fanPlace } from './project-folder-card';
 import { UNANSWERED_AFTER_MS, useProjectFolders, type ProjectFoldersState } from './project-folders';
-import { foldersInScope } from './project-device-scope';
+import { foldersInScope } from './project-run-machine';
 import { machineRegistry } from '@renderer/lib/machine-routing';
 
 const mocks = vi.hoisted(() => ({

@@ -15,7 +15,7 @@ import { accountProjectsStore } from '@renderer/features/projects/stores/account
 import { machineRegistry } from '@renderer/lib/machine-routing';
 import { remoteHostsStore } from '@renderer/features/remote-hosts/remote-hosts-store';
 import { useEnsureMounted } from '@renderer/features/projects/hooks/use-ensure-mounted';
-import { foldersInScope, machineOfKey, scopeKey, useProjectRunMachine } from './project-device-scope';
+import { foldersInScope, machineOfKey, scopeKey, useProjectRunMachine } from './project-run-machine';
 import { ProjectFolderCard, shortHome, type AttachMachine, type FolderCardMachine } from './project-folder-card';
 import { linkFolderOnMachine, planAttach } from '@shared/core/projects/project-attach-flow';
 import { projectLinkDeps } from '@renderer/features/projects/project-link-deps';

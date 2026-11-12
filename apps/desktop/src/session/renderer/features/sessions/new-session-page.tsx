@@ -16,7 +16,7 @@ import { useNewSessionMachine } from '@renderer/features/remote-hosts/use-new-se
 import { accountProjectsStore } from '@renderer/features/projects/stores/account-projects-store';
 import { sidebarStore } from '@renderer/lib/stores/app-state';
 import { machineRegistry } from '@renderer/lib/machine-routing';
-import { rememberRunMachine } from '@renderer/features/projects/components/main-panel/project-device-scope';
+import { rememberRunMachine } from '@renderer/features/projects/components/main-panel/project-run-machine';
 import { useWakeCloudOnInput } from '@renderer/features/remote-hosts/use-wake-cloud-once';
 import { machineLibraryHost } from '@renderer/features/library/library-host';
 import { ComposerTray } from './composer-tray';
