@@ -10,7 +10,6 @@ import { attachmentStage } from '@gugu/core/local/files/attachmentDiagnostics'
 import { DEVICE_STORE, createFileResolver, type FileContext, type FileRef, type FileRevision } from '@gugu/core/shared/fileResolver'
 import { parseFileStorage } from '@gugu/core/shared/fileStorage'
 import { readUserSettingsConfig, type SettingsTableClient } from '@gugu/core/cloud/userSettings'
-import { listAccountProjects, type AccountProjectsRpcClient } from '@gugu/core/cloud/deviceProjects'
 import { PROJECT_FILE_READ, createProjectFileReader, localProjectFileProvider } from './projectFileHost'
 import { ownSshFileProvider, type HeldFileSshLinks } from './projectFileSsh'
 import { createProjectTransferHost } from './projectFileTransferHost'
@@ -102,7 +101,10 @@ export function createDesktopFileAccess(deps: {
     // The account's projects are its project groups (chat.project_groups), with or without a folder on any machine.
     async projectChat(chatId) {
       const { db } = await identityDb()
-      return (await listAccountProjects(db as unknown as AccountProjectsRpcClient)).some((project) => project.chatId === chatId)
+      const { data, error } = await db.rpc('is_my_project', { p_chat_id: chatId })
+      if (error) throw new Error(`is_my_project: ${error.message}`)
+      if (typeof data !== 'boolean') throw new Error('is_my_project: unexpected answer')
+      return data
     },
   })
   return { providers, resolve, resolveAccount, read, drain, publish,

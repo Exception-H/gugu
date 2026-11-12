@@ -309,9 +309,9 @@ describe('a project chat is one of the account\'s projects, as the backend lists
     const asked: string[] = []
     const settings = { select: () => settings, eq: () => settings, maybeSingle: async () => ({ data: null, error: null }) }
     const db = {
-      rpc: async (fn: string) => {
+      rpc: async (fn: string, args: { p_chat_id: string }) => {
         asked.push(fn)
-        return { data: [{ chat_id: 'folderless-project', name: 'p', status: 'active', bindings: [] }], error: null }
+        return { data: args.p_chat_id === 'folderless-project', error: null }
       },
       from: (table: string) => { asked.push(table); return settings },
     }
@@ -320,6 +320,6 @@ describe('a project chat is one of the account\'s projects, as the backend lists
       deviceStore: store, identityDb: () => db as never })
     expect(await access.publish.local('folderless-project')).toBe(true)
     expect(await access.publish.local('a-dm')).toBe(false)
-    expect(asked.filter((name) => name !== 'user_settings')).toEqual(['list_my_projects', 'list_my_projects'])
+    expect(asked.filter((name) => name !== 'user_settings')).toEqual(['is_my_project', 'is_my_project'])
   })
 })
