@@ -11,3 +11,5 @@ it('rejects PNG dimensions above the signed 31-bit format limit', () => { const 
 it('rejects WebP size fields outside the declared chunk', () => { expect(imagePixelSize(webp('VP8L',1,[47,36,128,2,0]))).toBeNull();expect(imagePixelSize(webp('VP8X',1,[0,0,0,0,36,0,0,10,0,0]))).toBeNull() })
 
 it('rejects unsupported VP8L version bits', () => {expect(imagePixelSize(webp('VP8L',5,[47,36,128,2,224]))).toBeNull()})
+
+it('rejects nonzero VP8X reserved bits and bytes', () => {expect(imagePixelSize(webp('VP8X',10,[1,0,0,0,36,0,0,10,0,0]))).toBeNull();expect(imagePixelSize(webp('VP8X',10,[0,1,0,0,36,0,0,10,0,0]))).toBeNull()})
