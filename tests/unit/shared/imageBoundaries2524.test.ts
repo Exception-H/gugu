@@ -39,9 +39,10 @@ it('rejects unsupported VP8L version bits', () => {
   expect(imagePixelSize(webp('VP8L', 5, [47, 36, 128, 2, 224]))).toBeNull()
 })
 
-it('rejects nonzero VP8X reserved bits and bytes', () => {
-  expect(imagePixelSize(webp('VP8X', 10, [1, 0, 0, 0, 36, 0, 0, 10, 0, 0]))).toBeNull()
-  expect(imagePixelSize(webp('VP8X', 10, [0, 1, 0, 0, 36, 0, 0, 10, 0, 0]))).toBeNull()
+it('ignores nonzero VP8X reserved bits and bytes when reading dimensions', () => {
+  for (const reserved of [[1, 0, 0, 0], [64, 0, 0, 0], [128, 0, 0, 0], [0, 1, 0, 0], [0, 0, 1, 0], [0, 0, 0, 1], [193, 255, 255, 255]]) {
+    expect(imagePixelSize(webp('VP8X', 10, [...reserved, 36, 0, 0, 10, 0, 0]))).toEqual({ width: 37, height: 11 })
+  }
 })
 
 it('retains an orientation when a later EXIF segment names none', () => {

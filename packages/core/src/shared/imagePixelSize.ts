@@ -18,7 +18,8 @@ export function imagePixelSize(b: Uint8Array): { width: number; height: number }
     if ((chunk === 'VP8L' && chunkBytes < 5) || ((chunk === 'VP8 ' || chunk === 'VP8X') && chunkBytes < 10)) return null
     if (chunk === 'VP8 ' && b.length >= 30 && (b[20]! & 1) === 0 && ascii(23, 26) === '\x9d\x01\x2a') return size(u16le(26) & 0x3fff, u16le(28) & 0x3fff)
     if (chunk === 'VP8L' && b[20] === 0x2f && (b[24]! & 0xe0) === 0) { const bits = (b[21]! | (b[22]! << 8) | (b[23]! << 16) | (b[24]! << 24)) >>> 0; return size((bits & 0x3fff) + 1, ((bits >>> 14) & 0x3fff) + 1) }
-    if (chunk === 'VP8X' && b.length >= 30 && (b[20]! & 0xc1) === 0 && b[21] === 0 && b[22] === 0 && b[23] === 0) return size(u24le(24) + 1, u24le(27) + 1)
+    // RFC 9649 要求读取器忽略 VP8X 保留位，尺寸只取画布字段。
+    if (chunk === 'VP8X' && b.length >= 30) return size(u24le(24) + 1, u24le(27) + 1)
     return null
   }
   if (b.length >= 4 && b[0] === 0xff && b[1] === 0xd8 && b[2] === 0xff) {
