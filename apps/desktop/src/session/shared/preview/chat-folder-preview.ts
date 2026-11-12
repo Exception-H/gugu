@@ -141,7 +141,7 @@ export async function answerBesideDocument(
   const body = new Uint8Array(end - start + 1);
   for (let offset = start; offset <= end; ) {
     const piece = await file.read(offset, Math.min(READ_BYTES, end - offset + 1));
-    if (piece.byteLength === 0) break;
+    if (piece.byteLength === 0) throw new Error('Preview file ended before its declared size');
     body.set(piece, offset - start);
     offset += piece.byteLength;
   }
