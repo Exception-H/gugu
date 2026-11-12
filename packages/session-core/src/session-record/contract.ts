@@ -492,6 +492,14 @@ export type PendingRequest = {
   origin?: AskOrigin;
 };
 
+/** An answered `Settlement`, as the session list carries it: which kind of ask, the option taken, who answered and when. */
+export type AnsweredAsk = Pick<Settlement, 'itemId' | 'kind' | 'optionId' | 'resolvedBy' | 'resolvedAt'> & {
+  /** Absent for a harness's own approval, which carries no origin. */
+  source?: AskSource;
+  /** The chosen option as it was offered; null when the answer is not one of them (a question's answers). */
+  option: SettlementOption | null;
+};
+
 export type SettleResult = { ok: true; settlement: Settlement } | { ok: false; existing: Settlement };
 
 export interface SessionTimeline {
@@ -786,6 +794,11 @@ export type SessionpageSessionSummary = {
   spawnedByConversationId?: string | null;
   /** Original request links persisted by session_spawn / session_message. Absent on older hosts. */
   activitySourceLinks?: readonly string[];
+  /**
+   * The last approval or question a person answered here, kept until the session starts its next turn — the same span an
+   * error stays listed. The notification list shows it as handled below what still waits. Absent on older hosts.
+   */
+  lastAnswered?: AnsweredAsk | null;
   /** 这条会话的 agent(本机名录的绑定,没有身份 = null)。只带 id:显示名只在云端 `identity.users`,看的一端按 id 取。老宿主不带。 */
   agent?: { userId: string } | null;
   /** 宿主提供的真实咕咕私聊；手机 Agent 可通过它继续任务，独立于 workspace 转录支持。 */

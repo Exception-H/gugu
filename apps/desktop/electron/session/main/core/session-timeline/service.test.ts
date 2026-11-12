@@ -188,6 +188,14 @@ vi.mock('./live-options', () => ({
   setSessionOption: async () => ({ mode: null, model: null, effort: null }),
 }));
 
+// 已答审批的记录:真实现读 kv 表,这里只要一张账。
+const answeredAsks = vi.hoisted(() => new Map<string, unknown>());
+vi.mock('../asks/answered-asks', async (importOriginal) => ({
+  answeredAskOf: (await importOriginal<typeof import('../asks/answered-asks')>()).answeredAskOf,
+  recordAnsweredAsk: (id: string, answered: unknown) => answeredAsks.set(id, answered),
+  readAnsweredAsks: () => new Map(answeredAsks),
+}));
+
 // 起会话失败的原因码:真实现读 kv 表,这里只要一张账。
 const startFailures = vi.hoisted(() => new Map<string, string>());
 vi.mock('./start-failures', () => ({
@@ -396,6 +404,7 @@ function makeTimeline(onCatchUp: () => void = () => undefined) {
 describe('session timeline service', () => {
   beforeEach(() => {
     persistedQuestions.clear();
+    answeredAsks.clear();
     service.resetSessionTimelineService();
     service.setSessionTimelineFactory(null);
     service.setConnectionConfigRootResolver(null);
@@ -863,6 +872,8 @@ describe('session timeline service', () => {
       value: { accepted: false, settlement: { resolvedBy: 'phone' } },
     });
     expect(state.deliverPermission).toHaveBeenCalledTimes(1);
+    // The list learns of the one answer that won, with who gave it.
+    expect(answeredAsks.get('conv-1')).toMatchObject({ itemId: 'req-1', optionId: 'allow-once', resolvedBy: 'phone' });
   });
 
   it('投递失败时把结算放回去，并把 provider 的 code 原样带出来', async () => {

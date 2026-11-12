@@ -31,6 +31,8 @@ export const sessionChangedChannel = defineEvent<{
     /** A proactive owner message committed to this session's native record. */
     nativeOwnerNotificationSeq?: true;
     nativeOwnerNotificationEpoch?: true;
+    /** The session's answered-Ask record was written or cleared; list subscribers reread the summary. */
+    lastAnswered?: true;
     /**
      * 这条会话的 provider 会话 id。**`null` = 清空**(这条会话现在没有可续的 provider 会话)。
      *
