@@ -15,8 +15,6 @@ import { blockPlainText } from '@session-chat/core/markdown/plain-text';
 import type { SegmentCtx } from '@session-chat/core/units';
 import { defineUnit } from '@session-chat/core/units';
 import { useChatTranslator } from '@session-chat/localization';
-import { pxTokens } from '@session-chat/styles/px-tokens';
-import { assignInlineVars } from '@vanilla-extract/dynamic';
 import { For, Show, createMemo } from 'solid-js';
 import { ScheduledPrompt, isScheduledPrompt, scheduledPromptHeight, scheduledPromptParts } from './ScheduledPrompt';
 import type { ChatMessage } from '@session-chat/model';
@@ -58,7 +56,6 @@ import {
 import {
   assistantOuter,
   assistantRoot,
-  assistantVars,
   footerRow,
   messageText,
   questionAnswerRow,
@@ -245,7 +242,7 @@ function AssistantRender(props: { data: ChatMessage; ctx: RenderCtx; vars: Messa
   return (
     <div
       class={`${assistantOuter} ${messageText({ role: role() })} ${assistantRoot}`}
-      style={assignInlineVars(assistantVars, pxTokens({ height: totalH() }))}
+      style={{ height: `${totalH()}px` }}
     >
       <div class={srOnly} role="note" aria-label={plainText()} />
       <StreamContext.Provider value={props.data.streaming ? streamAnimation : null}>
