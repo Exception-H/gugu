@@ -2,18 +2,19 @@ import type { AccountProject } from '@gugu/core/cloud/deviceProjects';
 import type { SessionpageSessionSummary } from '@gugu/session-core/session-record/contract';
 import { rowOpens } from '@/session/shared/remote-sessions/session-directory';
 import { LOCAL_IMPORT_DEVICE } from '@renderer/features/session-import/import-source';
-import type {
-  SessionHistoryDirectoryRow,
-  SessionHistoryRow,
-  SessionHistorySort,
-  SessionHistorySource,
-  SessionHistoryStatus,
+import {
+  compareSessionHistoryRows,
+  compareSessionHistorySections,
+  projectSectionKey,
+  type SessionHistoryDirectoryRow,
+  type SessionHistoryRow,
+  type SessionHistorySort,
 } from '@shared/core/session-history/session-history';
 
 // 任务历史跨机器合并(项目与机器解耦 §5):项目是账号级的,机器只是每一行的属性。
-// 每台问得到的机器各自给一份排好序的目录页(主进程已按项目归节、排好、截好);离线的机器只有心跳摘要里那 ≤50 条。
-// 这里按同一个排序键把各台的有序列表归并(❌ 重排:单台时顺序与主进程给的逐条相同),再按「节」聚到一起 ——
-// 同一个项目在几台机器上的目录落进同一节。哪一行 / 哪个目录归哪一节由调用方给(它认账号上的项目,accountProjectsStore)。
+// 每台问得到的机器各自给一份排好序的目录页(主进程已按账号项目归节 —— 节 key `project:<群>` —— 排好、截好);
+// 离线的机器只有心跳摘要里那 ≤50 条。这里用主进程同一个比较函数(@shared)把各台的有序列表归并(❌ 重排:单台时
+// 顺序与主进程给的逐条相同),再按节 key 聚到一起 —— 同一个项目在几台机器上的节落进同一节。
 
 /** 一行 + 它在哪台机器上。离线机器的行来自心跳摘要:`opens` 照侧栏 / 手机同一条 rowOpens。 */
 export type HistoryEntry = SessionHistoryRow & { machine: string; offline: boolean; opens: boolean };
@@ -36,32 +37,11 @@ export type HistorySection = SectionRef & {
 
 /** 一个账号项目的那一节:键 = 项目群,名字 = 项目名(各台机器上的本地项目都归这一节)。 */
 export function historyProjectSection(project: Pick<AccountProject, 'chatId' | 'name'>): SectionRef {
-  return { key: `project:${project.chatId}`, label: project.name, path: null, machine: null };
+  return { key: projectSectionKey(project.chatId), label: project.name, path: null, machine: null };
 }
 
-type Sortable = { updatedAt: number; lastPromptAt: number | null; addedAt: number | null };
-
-/** 与主进程 list-session-history 同一套排序:时间倒序、没有那个时间的排最后、字母正序;并列按更新时间倒序。 */
-export function compareBy<T extends Sortable>(sort: SessionHistorySort, nameOf: (row: T) => string) {
-  const byTime = (pick: (row: T) => number | null) => (a: T, b: T) => {
-    const av = pick(a);
-    const bv = pick(b);
-    if (av === null && bv === null) return b.updatedAt - a.updatedAt;
-    if (av === null) return 1;
-    if (bv === null) return -1;
-    return bv - av || b.updatedAt - a.updatedAt;
-  };
-  switch (sort) {
-    case 'lastPrompt':
-      return byTime((row) => row.lastPromptAt);
-    case 'added':
-      return byTime((row) => row.addedAt);
-    case 'title':
-      return (a: T, b: T) => nameOf(a).localeCompare(nameOf(b)) || b.updatedAt - a.updatedAt;
-    case 'updated':
-      return byTime((row) => row.updatedAt);
-  }
-}
+/** 一行归哪一节、节按什么排:目录页上的那三样(主进程给);离线的摘要行由调用方按同一口径给。 */
+export type SectionKeyed = Pick<SessionHistoryDirectoryRow, 'key' | 'directory' | 'projectName'>;
 
 /** 把几份各自有序的列表归并成一份;每份内部的先后不变。 */
 export function mergeSorted<T>(lists: ReadonlyArray<readonly T[]>, compare: (a: T, b: T) => number): T[] {
@@ -110,53 +90,42 @@ export function digestEntry(machine: string, session: SessionpageSessionSummary)
   };
 }
 
-/** 摘要行在渲染侧按同一套筛选过一遍(主进程看不到它们):来源 / 状态 / 关键词(空格分词全部命中)。 */
-export function digestMatches(
-  entry: HistoryEntry,
-  filters: { source?: SessionHistorySource; status?: SessionHistoryStatus; query?: string }
-): boolean {
-  if (filters.source && filters.source !== entry.source) return false;
-  if (filters.status && filters.status !== entry.status) return false;
-  const haystack = [entry.title, entry.directory ?? '', entry.gugu?.sessionId ?? ''].join('\n').toLowerCase();
-  return (filters.query ?? '')
-    .toLowerCase()
-    .split(/\s+/)
-    .filter(Boolean)
-    .every((term) => haystack.includes(term));
-}
-
-type Item = Sortable & { ref: SectionRef; online?: { machine: string; row: SessionHistoryDirectoryRow }; offline?: HistoryEntry };
+type Item = Pick<SessionHistoryDirectoryRow, 'updatedAt' | 'lastPromptAt' | 'addedAt' | 'directory' | 'projectName'> & {
+  ref: SectionRef;
+  online?: { machine: string; row: SessionHistoryDirectoryRow };
+  offline?: HistoryEntry;
+};
 
 /**
  * 各台的目录页 + 离线行 → 一节一个项目。节的先后 = 归并后它第一次出现的位置;节内的行按同一排序归并。
- * `sectionOfDirectory` 给在线目录定节,`sectionOfEntry` 给离线行定节(同一个「项目 → 侧栏项目行」的判据)。
+ * 在线的每一行就是主进程给的一节,离线的每一行由 `keyOfEntry` 按同一口径给出它那一节;两种都经 `sectionOf`
+ * (机器 + 节 key → 节)落到同一个节上。在线一行是一节、离线一行是一条,排序时都按「它那一节」比
+ * (`compareSessionHistorySections`,主进程排目录页用的就是它)—— 各路同一把尺子、各自有序,归并才成立。
  */
 export function buildSections({
   sort,
   pages,
   offline,
-  sectionOfDirectory,
-  sectionOfEntry,
+  keyOfEntry,
+  sectionOf,
 }: {
   sort: SessionHistorySort;
   pages: ReadonlyArray<{ machine: string; rows: readonly SessionHistoryDirectoryRow[] }>;
   offline: readonly HistoryEntry[];
-  sectionOfDirectory: (machine: string, row: SessionHistoryDirectoryRow) => SectionRef;
-  sectionOfEntry: (entry: HistoryEntry) => SectionRef;
+  keyOfEntry: (entry: HistoryEntry) => SectionKeyed;
+  sectionOf: (machine: string, keyed: SectionKeyed) => SectionRef;
 }): HistorySection[] {
-  const compareRows = compareBy<HistoryEntry>(sort, (row) => row.title);
-  // 节的先后:在线的是目录、离线的是单条,两种东西只有「它归哪一节」是同一种 —— 按标题排时就按节名(项目名)比,
-  // ❌ 拿目录路径与会话标题互相比(归并的前提「各路同一把尺子、各自有序」就不成立了):那时各路先按这把尺子排好再归并。
-  // 按时间排时主进程给的就是这把尺子排好的,照它的顺序(❌ 再排一遍:时间相同的会被换位);只有一路(一台在线、没有离线的)
-  // 也照主进程的顺序 —— 没有要归并的,渲染层不自己排。
-  const compareItems = compareBy<Item>(sort, (item) => item.ref.label);
+  const compareRows = compareSessionHistoryRows(sort);
+  const compareItems = compareSessionHistorySections(sort);
   const onlineItems = pages.map(({ machine, rows }) =>
-    rows.map((row): Item => ({ ...pickSortable(row), ref: sectionOfDirectory(machine, row), online: { machine, row } })));
+    rows.map((row): Item => ({ ...itemOf(row), ref: sectionOf(machine, row), online: { machine, row } })));
   const offlineItems = offline
-    .map((entry): Item => ({ ...pickSortable(entry), ref: sectionOfEntry(entry), offline: entry }))
+    .map((entry): Item => {
+      const keyed = keyOfEntry(entry);
+      return { ...itemOf({ ...entry, ...keyed }), ref: sectionOf(entry.machine, keyed), offline: entry };
+    })
     .sort(compareItems);
   const lists = [...onlineItems, offlineItems].filter((list) => list.length > 0);
-  if (sort === 'title' && lists.length > 1) for (const list of onlineItems) list.sort(compareItems);
 
   const sections = new Map<string, HistorySection & { previews: HistoryEntry[][] }>();
   for (const item of mergeSorted(lists, compareItems)) {
@@ -180,6 +149,6 @@ export function buildSections({
   return [...sections.values()].map(({ previews, ...section }) => ({ ...section, preview: mergeSorted(previews, compareRows) }));
 }
 
-function pickSortable(row: Sortable): Sortable {
-  return { updatedAt: row.updatedAt, lastPromptAt: row.lastPromptAt, addedAt: row.addedAt };
+function itemOf(row: Omit<Item, 'ref' | 'online' | 'offline'>): Omit<Item, 'ref' | 'online' | 'offline'> {
+  return { updatedAt: row.updatedAt, lastPromptAt: row.lastPromptAt, addedAt: row.addedAt, directory: row.directory, projectName: row.projectName };
 }

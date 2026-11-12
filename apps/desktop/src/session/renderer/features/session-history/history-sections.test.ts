@@ -1,74 +1,70 @@
 import { describe, expect, it } from 'vitest';
 import type { SessionHistoryDirectoryRow } from '@shared/core/session-history/session-history';
-import { runInAction } from 'mobx';
-import { AccountProjectsStore } from '@renderer/features/projects/stores/account-projects-store';
-import { buildSections, historyProjectSection, mergeSorted, type HistoryEntry, type SectionRef } from './history-sections';
+import { buildSections, mergeSorted, type HistoryEntry, type SectionKeyed, type SectionRef } from './history-sections';
 
-const dir = (directory: string, updatedAt: number): SessionHistoryDirectoryRow => ({
-  key: directory, directory, projectName: null, sessionCount: 1, countsBySource: {} as never, countsByStatus: {} as never,
+// A directory page row as the main process gives it: `key` is its section (`project:<chat>` or a directory).
+const dir = (key: string, updatedAt: number, projectName: string | null = null): SessionHistoryDirectoryRow => ({
+  key, directory: key, projectName, sessionCount: 1, countsBySource: {} as never, countsByStatus: {} as never,
   providers: [], updatedAt, lastPromptAt: null, addedAt: null, sessions: [],
 }) as unknown as SessionHistoryDirectoryRow;
 const offline = (title: string, project: string, updatedAt: number): HistoryEntry => ({
   key: title, title, updatedAt, lastPromptAt: null, addedAt: null, machine: 'wen', offline: true, opens: false,
   directory: `/${project}`, gugu: { projectId: project, sessionId: title, runtime: 'acp' },
 }) as unknown as HistoryEntry;
-// Sections are projects; a directory and an offline task both land in the project they belong to.
-const ref = (project: string): SectionRef => ({ key: project, label: project, path: null, machine: null });
-const projectOfDirectory = (directory: string) => ({ '/srv/zzz-dir': 'alpha', '/srv/aaa-dir': 'zulu' } as Record<string, string>)[directory] ?? directory.slice(1);
+// Offline rows: local project `<name>` on wen belongs to account project `project:<name>` named `<name>`.
+const keyOfEntry = (entry: HistoryEntry): SectionKeyed =>
+  ({ key: `project:${entry.gugu!.projectId}`, directory: `project:${entry.gugu!.projectId}`, projectName: entry.gugu!.projectId });
+// The renderer only maps a section key to a section; it never looks inside the sessions.
+const sectionOf = (machine: string, keyed: SectionKeyed): SectionRef => keyed.key.startsWith('project:')
+  ? { key: keyed.key, label: keyed.projectName ?? '', path: null, machine: null }
+  : { key: `dir:${machine}:${keyed.directory ?? ''}`, label: keyed.directory ?? '', path: keyed.directory, machine };
 
 describe('history sections across machines', () => {
-  // #2412 review ⑤: by title, online directories and offline task rows must be compared on the same key (the section).
-  it('orders sections by project name under the title sort, whatever directory path or task title they hold', () => {
+  // The main process orders its page by project name under the title sort; offline rows are ordered by the same
+  // shared comparator on their section, so the lists merge without the renderer re-sorting the online page.
+  it('orders sections by project name under the title sort, merging online and offline by the same comparator', () => {
     const sections = buildSections({
       sort: 'title',
-      // Main-process order on that machine: by directory path.
-      pages: [{ machine: 'gpu', rows: [dir('/srv/aaa-dir', 1), dir('/srv/zzz-dir', 2)] }],
+      pages: [{ machine: 'gpu', rows: [dir('project:alpha', 2, 'alpha'), dir('project:zulu', 1, 'zulu')] }],
       offline: [offline('a task title', 'mid', 3), offline('zz last title', 'alpha', 4)],
-      sectionOfDirectory: (_machine, row) => ref(projectOfDirectory(row.directory ?? '')),
-      sectionOfEntry: (entry) => ref(entry.gugu!.projectId),
+      keyOfEntry,
+      sectionOf,
     });
-    expect(sections.map((section) => section.key)).toEqual(['alpha', 'mid', 'zulu']);
-    expect(sections.find((section) => section.key === 'alpha')!.offline.map((row) => row.title)).toEqual(['zz last title']);
+    expect(sections.map((section) => section.key)).toEqual(['project:alpha', 'project:mid', 'project:zulu']);
+    expect(sections.find((section) => section.key === 'project:alpha')!.offline.map((row) => row.title)).toEqual(['zz last title']);
   });
 
   it('keeps time order across machines when sorting by update time', () => {
     const sections = buildSections({
       sort: 'updated',
-      pages: [{ machine: 'gpu', rows: [dir('/srv/zzz-dir', 5), dir('/srv/aaa-dir', 1)] }],
+      pages: [{ machine: 'gpu', rows: [dir('project:alpha', 5, 'alpha'), dir('project:zulu', 1, 'zulu')] }],
       offline: [offline('t', 'mid', 3)],
-      sectionOfDirectory: (_machine, row) => ref(projectOfDirectory(row.directory ?? '')),
-      sectionOfEntry: (entry) => ref(entry.gugu!.projectId),
+      keyOfEntry,
+      sectionOf,
     });
-    expect(sections.map((section) => section.key)).toEqual(['alpha', 'mid', 'zulu']);
+    expect(sections.map((section) => section.key)).toEqual(['project:alpha', 'project:mid', 'project:zulu']);
   });
 
-  // 项目与机器解耦:一节 = 账号上的一个项目,键是项目群、名字是项目名;各台机器上的本地项目归同一节。
-  it('keys project sections by the account project (chatId), named by it, across machines', () => {
-    const accounts = new AccountProjectsStore();
-    runInAction(() => {
-      accounts.list = [{ chatId: 'chat-paper', name: 'Paper', archived: false, bindings: [
-        { deviceId: 'gpu', localProjectId: 'gpu-paper' }, { deviceId: 'wen', localProjectId: 'wen-paper' },
-      ] }];
-      accounts.status = 'ready';
-    });
-    const row = { ...dir('/root/paper', 2), sessions: [{ gugu: { projectId: 'gpu-paper', sessionId: 's1', runtime: 'acp' } }] } as unknown as SessionHistoryDirectoryRow;
-    const sectionOf = (machine: string, projectId: string, directory: string | null): SectionRef => {
-      const project = accounts.projectOfLocal(projectId, machine);
-      return project ? historyProjectSection(project) : { key: `dir:${machine}:${directory ?? ''}`, label: directory ?? '', path: directory, machine };
-    };
+  // One account project = one section, whatever machine and directory its tasks are on; a directory key stays per machine.
+  it('merges the same project key from several machines into one section; directory keys stay per machine', () => {
     const sections = buildSections({
       sort: 'updated',
-      pages: [{ machine: 'gpu', rows: [row, dir('/srv/loose', 1)] }],
-      offline: [offline('t', 'wen-paper', 3)],
-      sectionOfDirectory: (machine, directoryRow) => sectionOf(machine, directoryRow.sessions[0]?.gugu?.projectId ?? '', directoryRow.directory),
-      sectionOfEntry: (entry) => sectionOf(entry.machine, entry.gugu!.projectId, entry.directory),
+      pages: [
+        { machine: 'gpu', rows: [dir('project:paper', 4, 'Paper'), dir('/srv/loose', 1)] },
+        { machine: 'mac', rows: [dir('project:paper', 3, 'Paper'), dir('/srv/loose', 2)] },
+      ],
+      offline: [offline('t', 'paper', 5)],
+      keyOfEntry,
+      sectionOf,
     });
     expect(sections.map((section) => [section.key, section.label, section.machine])).toEqual([
-      ['project:chat-paper', 'Paper', null],
+      ['project:paper', 'paper', null],
+      ['dir:mac:/srv/loose', '/srv/loose', 'mac'],
       ['dir:gpu:/srv/loose', '/srv/loose', 'gpu'],
     ]);
+    expect(sections[0]!.members).toEqual([{ machine: 'gpu', directory: 'project:paper' }, { machine: 'mac', directory: 'project:paper' }]);
     expect(sections[0]!.offlineMachines).toEqual(['wen']);
-    expect(sections[0]!.members).toEqual([{ machine: 'gpu', directory: '/root/paper' }]);
+    expect(sections[0]!.onlineCount).toBe(2);
   });
 
   it('merges already sorted lists into one sorted list', () => {

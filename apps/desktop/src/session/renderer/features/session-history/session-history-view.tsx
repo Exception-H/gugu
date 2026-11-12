@@ -23,7 +23,6 @@ import { PageContent, PageLayout } from '@renderer/lib/components/page-layout';
 import { ShellTitlebar } from '@renderer/lib/components/titlebar/shell-titlebar';
 import { toast } from '@renderer/lib/hooks/use-toast';
 import { onMachineEvent, rpcOn } from '@renderer/lib/ipc';
-import { machineRegistry } from '@renderer/lib/machine-routing';
 import { accountProjectsStore } from '@renderer/features/projects/stores/account-projects-store';
 import { useDebounce } from '@renderer/lib/hooks/useDebounce';
 import { openLink } from '@/lib/guguLinks';
@@ -47,6 +46,10 @@ import {
   SESSION_HISTORY_SOURCES,
   SESSION_HISTORY_STATUSES,
   SESSION_HOME_SECTION_KEY,
+  compareSessionHistoryRows,
+  matchesSessionHistoryFilters,
+  projectSectionChatId,
+  projectSectionKey,
   type SessionHistoryGuguRef,
   type SessionHistorySort,
   type SessionHistorySource,
@@ -55,14 +58,13 @@ import {
 import { sessionChangedChannel } from '@shared/core/sessions/sessionEvents';
 import {
   buildSections,
-  compareBy,
   digestEntry,
-  digestMatches,
   entryOf,
   historyProjectSection,
   mergeSorted,
   type HistoryEntry,
   type HistorySection,
+  type SectionKeyed,
   type SectionRef,
 } from './history-sections';
 import { STATUS_MESSAGE_KEY, SessionHistoryRow, historyOptionId, sourceLabel } from './session-history-row';
@@ -119,7 +121,7 @@ const SORT_OPTIONS: readonly SessionHistorySort[] = ['updated', 'added', 'title'
 /** 在小窗里滚出来的那几批(在线那几台的):按节 key 存,换筛选即清。`matched` 是那几台给的这一节总数。 */
 type SectionPage = { rows: HistoryEntry[]; matched: number };
 
-/** rpcOn / onMachineEvent / openLink 里本机写 null。 */
+/** rpcOn / onMachineEvent / openLink / accountProjectsStore 里本机写 null。 */
 function machineArg(machine: string): string | null {
   return machine === LOCAL_IMPORT_DEVICE ? null : machine;
 }
@@ -211,35 +213,41 @@ export const SessionHistoryMainPanel = observer(function SessionHistoryMainPanel
     reachable
   );
 
-  // 一节 = 账号上的一个项目(accountProjectsStore.projectOfLocal:各台机器上的本地项目归同一节);任务工作区一节;
-  // 对不上项目的按「机器 · 目录」各一节。
-  const projects = getProjectManagerStore().projects;
+  // 一节 = 主进程给的节 key:`project:<群>` 是账号上的一个项目(几台机器上的并成一节,名字照账号上的项目);
+  // 任务那一节;别的按「机器 · 目录」各一节。
+  // @@@old-host-sections - 旧版本的远端主机还按目录给节(没有 `project:` key):它的行照目录各一节、不并进项目那一节,
+  // 升级后自然并上。这是跨版本的已知差别,不是兜底 —— 新主机的行都带着它的项目 key。
   const homeRef: SectionRef = { key: SESSION_HOME_SECTION_KEY, label: translate('sessionHistory.taskHomeSection'), path: null, machine: null };
-  const hostOf = (machine: string) => (machine === LOCAL_IMPORT_DEVICE ? null : machine);
-  const directoryRef = (machine: string, directory: string | null): SectionRef => {
-    if (directory === SESSION_HOME_SECTION_KEY) return homeRef;
-    // 未导入的原件落在那台机器上某个项目的文件夹里:进那个项目的一节。
-    const local = directory
-      ? [...projects.values()].find((p) => p.data?.path === directory && (machineRegistry.machineOf(p.id) ?? LOCAL_IMPORT_DEVICE) === machine)
-      : undefined;
-    const account = local ? accountProjectsStore.projectOfLocal(local.id, hostOf(machine)) : undefined;
-    if (account) return historyProjectSection(account);
+  const sectionOf = (machine: string, keyed: SectionKeyed): SectionRef => {
+    if (keyed.key === SESSION_HOME_SECTION_KEY) return homeRef;
+    const chatId = projectSectionChatId(keyed.key);
+    // 节名照账号上的项目(与侧栏同一个名字);账号项目表还没读到时用那台机器上的项目名。
+    if (chatId) return historyProjectSection({ chatId, name: accountProjectsStore.project(chatId)?.name ?? keyed.projectName ?? '' });
     return {
-      key: `dir:${machine}:${directory ?? ''}`,
-      label: directory ? baseName(directory) : translate('sessionHistory.noDirectory'),
-      path: directory,
+      key: `dir:${machine}:${keyed.directory ?? ''}`,
+      label: keyed.directory ? baseName(keyed.directory) : translate('sessionHistory.noDirectory'),
+      path: keyed.directory,
       machine,
     };
   };
-  const projectRef = (machine: string, projectId: string, directory: string | null): SectionRef => {
-    const store = projects.get(projectId);
-    if (isImplicitSessionHomeProject({ id: projectId }) || (store && isWorkspaceProject(store))) return homeRef;
-    const account = accountProjectsStore.projectOfLocal(projectId, hostOf(machine));
-    return account ? historyProjectSection(account) : directoryRef(machine, directory);
+  // 离线机器的摘要行主进程看不到:按它自己的本地项目 → 账号项目,给出与主进程同一口径的节 key。
+  const projects = getProjectManagerStore().projects;
+  const keyOfEntry = (entry: HistoryEntry): SectionKeyed => {
+    const projectId = entry.gugu?.projectId;
+    const store = projectId ? projects.get(projectId) : undefined;
+    if (projectId && (isImplicitSessionHomeProject({ id: projectId }) || (store && isWorkspaceProject(store)))) {
+      return { key: SESSION_HOME_SECTION_KEY, directory: SESSION_HOME_SECTION_KEY, projectName: null };
+    }
+    const account = projectId ? accountProjectsStore.projectOfLocal(projectId, machineArg(entry.machine)) : undefined;
+    if (account) {
+      const key = projectSectionKey(account.chatId);
+      return { key, directory: key, projectName: account.name };
+    }
+    return { key: entry.directory ?? '', directory: entry.directory, projectName: null };
   };
   const offlineEntries = unreachable
     .flatMap((machine) => remoteHostsStore.sessionsOf(machine).sessions.map((session) => digestEntry(machine, session)))
-    .filter((entry) => digestMatches(entry, filters));
+    .filter((entry) => matchesSessionHistoryFilters(entry, filters));
   const sections = buildSections({
     sort,
     pages: reachable.flatMap((machine) => {
@@ -247,20 +255,14 @@ export const SessionHistoryMainPanel = observer(function SessionHistoryMainPanel
       return page ? [{ machine, rows: page.rows }] : [];
     }),
     offline: offlineEntries,
-    sectionOfDirectory: (machine, row) => {
-      const gugu = row.sessions.find((session) => session.gugu)?.gugu;
-      return gugu && row.directory !== SESSION_HOME_SECTION_KEY
-        ? projectRef(machine, gugu.projectId, row.directory)
-        : directoryRef(machine, row.directory);
-    },
-    sectionOfEntry: (entry) =>
-      entry.gugu ? projectRef(entry.machine, entry.gugu.projectId, entry.directory) : directoryRef(entry.machine, entry.directory),
+    keyOfEntry,
+    sectionOf,
   });
   // 只有一台机器的行时不标机器(与侧栏「跟上面那一行比」同一个道理:全是一台就不用说)。
   const spansMachines =
     new Set(sections.flatMap((section) => [...section.members.map((member) => member.machine), ...section.offlineMachines])).size > 1;
 
-  const compareRows = compareBy<HistoryEntry>(sort, (row) => row.title);
+  const compareRows = compareSessionHistoryRows(sort);
   const isSectionOpen = (section: HistorySection) => openSections.has(section.key);
   const sessionCount = (section: HistorySection) => section.onlineCount + section.offline.length;
   // 一节眼下有哪些行:点开了、并且已经要来过更多的,就用那一批(它的头一截与目录页带回的逐条相同 —— 同一个排序,
@@ -374,10 +376,7 @@ export const SessionHistoryMainPanel = observer(function SessionHistoryMainPanel
           if (generation !== sectionGeneration.current) return;
           // 在路上时这一节被收起了:这批不要了,❌ 攥在内存里。
           if (!openSectionsRef.current.has(section.key)) return;
-          const merged = mergeSorted(
-            pages.map((page) => page.rows),
-            compareBy<HistoryEntry>(sort, (row) => row.title)
-          ).slice(0, want);
+          const merged = mergeSorted(pages.map((page) => page.rows), compareSessionHistoryRows(sort)).slice(0, want);
           // 回来的没有比手上多 ⇒ 这一节已经到底(以回来的条数为准),不再要。
           const total = pages.reduce((sum, page) => sum + page.matched, 0);
           const matched = merged.length > have ? total : merged.length;

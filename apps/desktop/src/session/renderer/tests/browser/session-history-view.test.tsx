@@ -154,6 +154,8 @@ function seedAccounts(): void {
 const NOW = Date.now();
 const WEBAPP = '/Users/me/work/webapp';
 const BILLING = '/Users/me/work/billing-service';
+/** 主进程给的节 key:webapp 在项目群 chat-webapp 里。 */
+const WEBAPP_SECTION = 'project:chat-webapp';
 
 function gugu(overrides: Partial<SessionHistoryRow> & { key: string }): SessionHistoryRow {
   const sessionId = overrides.key.replace('gugu:', '');
@@ -233,7 +235,7 @@ function dir(overrides: Partial<SessionHistoryDirectoryRow> & { key: string }): 
 
 const DIRS: SessionHistoryDirectoryRow[] = [
   dir({
-    key: WEBAPP,
+    key: WEBAPP_SECTION,
     projectName: 'webapp',
     countsBySource: { gugu: 2, 'claude-code': 0, codex: 0 },
     countsByStatus: { active: 1, archived: 1, 'not-imported': 0 },
@@ -246,7 +248,7 @@ const DIRS: SessionHistoryDirectoryRow[] = [
 ];
 
 const DIRECTORIES = [
-  { directory: WEBAPP, projectName: 'webapp', count: 2 },
+  { directory: WEBAPP_SECTION, projectName: 'webapp', count: 2 },
   { directory: BILLING, projectName: null, count: 2 },
 ];
 
@@ -456,7 +458,7 @@ describe('会话历史(按目录分节)核心合同', () => {
     // 显示更多:当场按这一节要下一批(同一套筛选 + 这一节,limit 放大,走本机索引缓存),这一节变成限高、能滚的小窗。
     (sectionAt(0).getByTestId('session-history-section-show-more').element() as HTMLElement).click();
     await vi.waitFor(() => expect(firstRows()).toHaveLength(8));
-    expect(listParams().map((p) => [p.directory, p.limit, p.mode, p.source])).toEqual([[WEBAPP, 55, 'cached', 'gugu']]);
+    expect(listParams().map((p) => [p.directory, p.limit, p.mode, p.source])).toEqual([[WEBAPP_SECTION, 55, 'cached', 'gugu']]);
     expect(getComputedStyle(boxOf(0)).maxHeight).toBe('320px');
     expect(getComputedStyle(boxOf(0)).overflowY).toBe('auto');
     expect(getComputedStyle(boxOf(0)).getPropertyValue('scrollbar-width')).toBe('thin');
@@ -531,9 +533,9 @@ describe('会话历史(按目录分节)核心合同', () => {
     await vi.waitFor(() => expect(webappRows()).toHaveLength(120));
     // 每批 = 同一套筛选 + 这一节,limit 放大,走本机索引缓存。
     expect(listParams().map((p) => [p.directory, p.limit, p.mode, p.source])).toEqual([
-      [WEBAPP, 55, 'cached', 'gugu'],
-      [WEBAPP, 105, 'cached', 'gugu'],
-      [WEBAPP, 155, 'cached', 'gugu'],
+      [WEBAPP_SECTION, 55, 'cached', 'gugu'],
+      [WEBAPP_SECTION, 105, 'cached', 'gugu'],
+      [WEBAPP_SECTION, 155, 'cached', 'gugu'],
     ]);
     // 全部带回:哨兵收起,不再要。
     await vi.waitFor(() => expect(screen.getByTestId('session-history-section-loading').all()).toHaveLength(0));
@@ -687,15 +689,14 @@ describe('会话历史(按目录分节)核心合同', () => {
   });
 
   it('全部机器一起读:同一个项目在本机与 d22 上的任务进同一节,行上标机器;离线那台不去问', async () => {
-    // d22 上的 webapp 是另一台上的本地项目 rp1,与本机 p1 绑在同一个项目群上 ⇒ 侧栏并成 p1 那一行。
+    // d22 上的 webapp 是另一台上的本地项目 rp1,与本机 p1 绑在同一个项目群上 ⇒ d22 的主进程也给 project:chat-webapp 这一节。
     world.bound = [{ deviceId: 'dev-d22', localProjectId: 'rp1' }];
     seedAccounts();
-    world.projects = new Map([['p1', { id: 'p1', name: 'webapp', data: { path: WEBAPP } }]]);
     const remoteRow = gugu({ key: 'gugu:remote-w', title: 'd22 上的 webapp 任务', directory: '/home/alice/webapp', updatedAt: NOW - 5 * 60 * 60 * 1000, gugu: { projectId: 'rp1', sessionId: 'remote-w', runtime: 'acp' } });
     mocks.remoteListDirectories.mockImplementation((machine: string) =>
       Promise.resolve(
         machine === 'dev-d22'
-          ? directoryPageOf([dir({ key: '/home/alice/webapp', projectName: 'webapp', sessionCount: 1, providers: ['claude'], updatedAt: remoteRow.updatedAt, sessions: [remoteRow] })])
+          ? directoryPageOf([dir({ key: WEBAPP_SECTION, projectName: 'webapp', sessionCount: 1, providers: ['claude'], updatedAt: remoteRow.updatedAt, sessions: [remoteRow] })])
           : directoryPageOf([], { directories: [] })
       )
     );
