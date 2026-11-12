@@ -38,6 +38,9 @@ import { accountDataDir, applyAccountEnv, clearSignedOutMark, emailFromAccessTok
 
 type StartResponse = { device_code: string; user_code: string; expires_in: number; interval: number }
 
+/** 人在对话框前等这一个结果:连接卡住(半开)时必须自己收场,❌ 一直转。 */
+const LOGIN_FETCH_TIMEOUT_MS = 15_000
+
 function functionsUrl(path: string): string {
   return `${getSupabaseUrl().replace(/\/$/, '')}/functions/v1/server-login${path}`
 }
@@ -72,6 +75,7 @@ async function postJson(url: string, body: unknown): Promise<{ status: number; d
   const response = await fetch(url, {
     method: 'POST',
     headers: { 'content-type': 'application/json', apikey: getSupabaseAnonKey() },
+    signal: AbortSignal.timeout(LOGIN_FETCH_TIMEOUT_MS),
     body: JSON.stringify(body),
   })
   const data = (await response.json().catch(() => ({}))) as Record<string, unknown>
@@ -83,6 +87,7 @@ async function exchangeTokenHash(tokenHash: string, type: string): Promise<{ acc
   const response = await fetch(`${getSupabaseUrl().replace(/\/$/, '')}/auth/v1/verify`, {
     method: 'POST',
     headers: { 'content-type': 'application/json', apikey: getSupabaseAnonKey() },
+    signal: AbortSignal.timeout(LOGIN_FETCH_TIMEOUT_MS),
     body: JSON.stringify({ type, token_hash: tokenHash }),
   })
   const data = (await response.json().catch(() => ({}))) as { access_token?: string; refresh_token?: string; msg?: string }

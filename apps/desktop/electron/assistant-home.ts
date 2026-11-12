@@ -8,6 +8,7 @@ import { ASSISTANT_HOME_CHANNELS, type PrepareLocalHomeInput } from '../src/lib/
 import { prepareLocalAssistantHome, wipeLocalAssistantHome } from './assistant-home-prepare'
 import { createAssistantSetupPreparation } from './assistant-setup-preparation'
 import { createLogger } from './lib/logger'
+import { getMainWindow } from './ipc-bridge'
 
 export function installAssistantHome(): void {
   // Resolve lazily: GUGU_HOME is established after static imports.
@@ -30,6 +31,12 @@ export function installAssistantHome(): void {
     changed: (id, state) => { const owner = owners.get(id); if (owner && !owner.isDestroyed()) owner.send(ASSISTANT_HOME_CHANNELS.preparationChanged, { id, ...state }) } })
   const owned = (event: Electron.IpcMainInvokeEvent, id: string) => {
     if (owners.get(id) !== event.sender) throw new Error('This assistant preparation belongs to another window')
+  }
+  // prepare / wipe 没有 attempt id 可认:它们会建、也会 `rm -rf` 本机助理的家,只认主窗口 ——
+  // 会话页与咕咕同文档同窗口,不是另一扇窗;preload 又是通用桥,❌ 任意拿到 channel 的渲染层都能清。
+  const fromMainWindow = (event: Electron.IpcMainInvokeEvent) => {
+    const main = getMainWindow()
+    if (!main || event.sender !== main.webContents) throw new Error('This assistant home belongs to the main window')
   }
   ipcMain.handle(ASSISTANT_HOME_CHANNELS.preparationStart, event => {
     const id = crypto.randomUUID()
@@ -57,6 +64,12 @@ export function installAssistantHome(): void {
     await preparation.release(id)
     owners.delete(id)
   })
-  ipcMain.handle(ASSISTANT_HOME_CHANNELS.prepare, (_event, input: PrepareLocalHomeInput | undefined) => prepareLocalAssistantHome(input ?? {}))
-  ipcMain.handle(ASSISTANT_HOME_CHANNELS.wipe, () => wipeLocalAssistantHome())
+  ipcMain.handle(ASSISTANT_HOME_CHANNELS.prepare, (event, input: PrepareLocalHomeInput | undefined) => {
+    fromMainWindow(event)
+    return prepareLocalAssistantHome(input ?? {})
+  })
+  ipcMain.handle(ASSISTANT_HOME_CHANNELS.wipe, (event) => {
+    fromMainWindow(event)
+    return wipeLocalAssistantHome()
+  })
 }

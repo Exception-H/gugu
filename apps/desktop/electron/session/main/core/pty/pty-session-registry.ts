@@ -191,10 +191,20 @@ export class PtySessionRegistry {
       }
     });
 
+    // 进程刚退出、fd 已关时人还在敲键盘,node-pty 的 write 会抛(EBADF / "Cannot write to closed pty")。
+    // 这一发是从 events.emit 里出来的:抛出去就是渲染层一条 rejected invoke + 这次按键丢失,而 agent 已经没了 ——
+    // 与 resize() 吞掉同一类 errno 的处理对齐,每条会话只记一次,❌ 让键盘把进程退出的噪音放大成每条按键一条日志。
+    let writeFailureLogged = false;
     const off = events.on(
       ptyInputChannel,
       (data) => {
-        pty.write(data);
+        try {
+          pty.write(data);
+        } catch (error) {
+          if (writeFailureLogged) return;
+          writeFailureLogged = true;
+          log.error('PtySessionRegistry:pty write failed', { ptySessionId, error: error instanceof Error ? error.message : String(error) });
+        }
       },
       ptySessionId
     );

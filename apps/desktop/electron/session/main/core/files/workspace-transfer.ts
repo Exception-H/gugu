@@ -128,25 +128,64 @@ export async function readWorkspaceChunk(
 }
 
 type PendingUpload = {
+  /** `目标路径 + uploadId`:uploadId 由客户端给,不按路径隔离时两次保存恰好同名就会串成同一次上传。 */
+  key: string;
   path: string;
   total: number;
   expectedEtag: string | null;
   received: number;
   chunks: Buffer[];
   timer: ReturnType<typeof setTimeout>;
+  touchedAt: number;
 };
+
+/** 同一时刻最多留几份没传完的保存(memory,不是磁盘:每份都攒着已收到的字节)。 */
+const DEFAULT_MAX_PENDING_UPLOADS = 4;
 
 /**
  * 按块收一次上传;半截的保存留两分钟等下一段(一次保存的各段带同一个 uploadId)。`maxBytes` 是一份文件的上限(默认工作副本的;
  * 另一台机器发来的 App 包用它自己的,received-packages.ts)。
+ *
+ * 挂起上传必须**有上限**:失败重试的客户端每次换一个 uploadId 就会多留一份已收到的字节,连续重试 20 次就能在 2 分钟 TTL 内
+ * 攒到几 GB 就把主进程撑爆。满了先丢最久没动的那一份(它再传回来会得到既有的 `upload_lost`,让客户端从头再存)。
  */
-export function createWorkspaceUploads(options: { idleMs?: number; maxBytes?: number } = {}) {
+export function createWorkspaceUploads(
+  options: { idleMs?: number; maxBytes?: number; maxPendingUploads?: number; maxPendingBytes?: number } = {}
+) {
   const uploads = new Map<string, PendingUpload>();
   const idleMs = options.idleMs ?? UPLOAD_IDLE_MS;
   const maxBytes = options.maxBytes ?? REMOTE_WORKSPACE_MAX_FILE_BYTES;
-  const touch = (uploadId: string, upload: PendingUpload) => {
+  const maxPendingUploads = options.maxPendingUploads ?? DEFAULT_MAX_PENDING_UPLOADS;
+  const maxPendingBytes = options.maxPendingBytes ?? maxBytes * 2;
+  let pendingBytes = 0;
+  const drop = (key: string) => {
+    const upload = uploads.get(key);
+    if (!upload) return;
     clearTimeout(upload.timer);
-    upload.timer = setTimeout(() => uploads.delete(uploadId), idleMs);
+    pendingBytes -= upload.received;
+    uploads.delete(key);
+  };
+  /** 丢最久没动的那一份(不丢 `keepKey` 自己)。还有可丢的就返回 true。 */
+  const dropOldest = (keepKey: string): boolean => {
+    let oldest: PendingUpload | null = null;
+    for (const upload of uploads.values()) {
+      if (upload.key === keepKey) continue;
+      if (!oldest || upload.touchedAt < oldest.touchedAt) oldest = upload;
+    }
+    if (!oldest) return false;
+    drop(oldest.key);
+    return true;
+  };
+  const makeRoom = (incomingBytes: number, keepKey: string, newEntry: boolean) => {
+    while (pendingBytes + incomingBytes > maxPendingBytes || (newEntry && uploads.size >= maxPendingUploads)) {
+      if (!dropOldest(keepKey)) throw new WorkspaceTransferError('too_large', 'too many saves are in progress; save again');
+      newEntry = false;
+    }
+  };
+  const touch = (upload: PendingUpload) => {
+    upload.touchedAt = Date.now();
+    clearTimeout(upload.timer);
+    upload.timer = setTimeout(() => drop(upload.key), idleMs);
     upload.timer.unref?.();
   };
   return {
@@ -157,19 +196,23 @@ export function createWorkspaceUploads(options: { idleMs?: number; maxBytes?: nu
       }
       const bytes = Buffer.from(request.data, 'base64');
       if (bytes.length > REMOTE_WORKSPACE_CHUNK_BYTES) throw new WorkspaceTransferError('invalid_payload', 'chunk too large');
-      let upload = uploads.get(request.uploadId);
+      const key = `${file}\0${request.uploadId}`;
+      let upload = uploads.get(key);
       if (!upload) {
         // 第一段丢了 / 这台机器中途重启过:这次保存接不上,从头再存一遍。
         if (request.offset !== 0) throw new WorkspaceTransferError('upload_lost', 'this save lost its earlier parts; save again');
+        makeRoom(0, key, true);
         upload = {
+          key,
           path: file,
           total: request.total,
           expectedEtag: request.expectedEtag,
           received: 0,
           chunks: [],
           timer: setTimeout(() => undefined, 0),
+          touchedAt: Date.now(),
         };
-        uploads.set(request.uploadId, upload);
+        uploads.set(key, upload);
       }
       if (upload.path !== file || upload.total !== request.total) {
         throw new WorkspaceTransferError('invalid_payload', 'save parts disagree about the file');
@@ -180,13 +223,14 @@ export function createWorkspaceUploads(options: { idleMs?: number; maxBytes?: nu
       if (upload.received + bytes.length > upload.total) {
         throw new WorkspaceTransferError('invalid_payload', 'more bytes than announced');
       }
-      touch(request.uploadId, upload);
+      makeRoom(bytes.length, key, false);
+      touch(upload);
       upload.chunks.push(bytes);
       upload.received += bytes.length;
+      pendingBytes += bytes.length;
       if (!request.final) return { received: upload.received };
 
-      uploads.delete(request.uploadId);
-      clearTimeout(upload.timer);
+      drop(key);
       if (upload.received !== upload.total) {
         throw new WorkspaceTransferError('upload_lost', `received ${upload.received} of ${upload.total} bytes`);
       }

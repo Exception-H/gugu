@@ -19,6 +19,8 @@ afterEach(() => {
 });
 
 const b64 = (text: string) => Buffer.from(text).toString('base64');
+/** 淘汰按 touchedAt 比新旧,同毫秒内的两份上传顺序不定;隔开一拍让「最久没动」可判。 */
+const waitForNextTouch = () => new Promise<void>((resolve) => setTimeout(resolve, 5));
 
 describe('路径只能落在这个工作区里', () => {
   it('`..` 与绝对路径逃不出去', async () => {
@@ -106,5 +108,53 @@ describe('按块写,按「打开时那一版」核对', () => {
     await expect(
       uploads.write(root, { path: 'c.txt', uploadId: 'u5', offset: 3, data: b64('def'), total: 6, final: true, expectedEtag: null })
     ).rejects.toMatchObject({ code: 'upload_lost' });
+  });
+});
+
+describe('挂起上传按「目标路径 + uploadId」隔离,并有数量 / 字节上限', () => {
+  it('同一个 uploadId 用在两个文件上,各自接各自的段,❌ 串成同一次上传', async () => {
+    const uploads = createWorkspaceUploads();
+    const part = { uploadId: 'shared', total: 4, expectedEtag: null };
+    await uploads.write(root, { ...part, path: 'a.txt', offset: 0, data: b64('ab'), final: false });
+    await uploads.write(root, { ...part, path: 'b.txt', offset: 0, data: b64('cd'), final: false });
+    await uploads.write(root, { ...part, path: 'a.txt', offset: 2, data: b64('ef'), final: true });
+    await uploads.write(root, { ...part, path: 'b.txt', offset: 2, data: b64('gh'), final: true });
+    expect(readFileSync(path.join(root, 'a.txt'), 'utf8')).toBe('abef');
+    expect(readFileSync(path.join(root, 'b.txt'), 'utf8')).toBe('cdgh');
+  });
+
+  it('挂起的保存数量有上限:满了丢最久没动的那一份,它再传回来是从头再存', async () => {
+    const uploads = createWorkspaceUploads({ maxPendingUploads: 2, maxBytes: 10, maxPendingBytes: 100 });
+    const part = (uploadId: string) => ({ path: `${uploadId}.txt`, uploadId, total: 4, expectedEtag: null });
+    await uploads.write(root, { ...part('u1'), offset: 0, data: b64('ab'), final: false });
+    await waitForNextTouch();
+    await uploads.write(root, { ...part('u2'), offset: 0, data: b64('cd'), final: false });
+    await waitForNextTouch();
+    await uploads.write(root, { ...part('u3'), offset: 0, data: b64('ef'), final: false });
+    await expect(uploads.write(root, { ...part('u1'), offset: 2, data: b64('gh'), final: true })).rejects.toMatchObject({
+      code: 'upload_lost',
+    });
+    await uploads.write(root, { ...part('u2'), offset: 2, data: b64('ij'), final: true });
+    expect(readFileSync(path.join(root, 'u2.txt'), 'utf8')).toBe('cdij');
+  });
+
+  it('挂起的字节总量有上限:超了先丢最久没动的那一份', async () => {
+    const uploads = createWorkspaceUploads({ maxPendingUploads: 10, maxBytes: 4, maxPendingBytes: 4 });
+    const part = (uploadId: string) => ({ path: `${uploadId}.txt`, uploadId, total: 4, expectedEtag: null });
+    await uploads.write(root, { ...part('u1'), offset: 0, data: b64('ab'), final: false });
+    await waitForNextTouch();
+    await uploads.write(root, { ...part('u2'), offset: 0, data: b64('cd'), final: false });
+    await waitForNextTouch();
+    // u3 这一段要 2 字节,再加就 6 > 4:丢掉最久没动的 u1。
+    await uploads.write(root, { ...part('u3'), offset: 0, data: b64('ef'), final: false });
+    await expect(uploads.write(root, { ...part('u1'), offset: 2, data: b64('gh'), final: true })).rejects.toMatchObject({
+      code: 'upload_lost',
+    });
+    // u2 收尾那 2 字节要进来,总量又超了:这回丢的是 u3。
+    await uploads.write(root, { ...part('u2'), offset: 2, data: b64('ij'), final: true });
+    await expect(uploads.write(root, { ...part('u3'), offset: 2, data: b64('kl'), final: true })).rejects.toMatchObject({
+      code: 'upload_lost',
+    });
+    expect(readFileSync(path.join(root, 'u2.txt'), 'utf8')).toBe('cdij');
   });
 });

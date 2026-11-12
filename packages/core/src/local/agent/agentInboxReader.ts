@@ -254,6 +254,8 @@ export function readAgentInboxBatchAuditForTest(): Array<{ agentUserId: string; 
 }
 
 const PULL_LIMIT = 80
+/** pull 是 single-flight 的:半开连接(合盖/切网/代理挂住)不结算就会一直占着这个 agent 的槽,新消息全进不来。 */
+const PULL_FETCH_TIMEOUT_MS = 15_000
 
 // ── 缺省云端实现 ────────────────────────────────────────────────────────────────
 async function fetchUnreadViaRpc(
@@ -269,6 +271,7 @@ async function fetchUnreadViaRpc(
       'Accept-Profile': 'identity',
       'Content-Profile': 'identity',
     },
+    signal: AbortSignal.timeout(PULL_FETCH_TIMEOUT_MS),
     body: JSON.stringify({
       p_agent_user_id: input.agentUserId,
       p_chat_id: input.chatId ?? null,
