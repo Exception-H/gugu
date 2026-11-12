@@ -111,8 +111,9 @@ export class SessionCoordinator {
   private refreshFlight: Promise<void> | null = null
   private validationFlight: { kind: 'automatic' | 'automatic-with-trailing-foreground' | 'foreground'; work: Work; promise: Promise<void> } | null = null
   private recoveryFlight: Promise<void> | null = null
-  private restoring = false
-  private restoreFlight: { accessToken: string; settled: Promise<void> } | null = null
+  /** The restore in flight; `accessToken` is the candidate it shows, once one is shown. Cleared with the generation. */
+  private restoreFlight: { accessToken: string | null; settled: Promise<void> } | null = null
+  private get restoring(): boolean { return this.restoreFlight !== null }
   private terminalFlight: Promise<boolean> | null = null
   private generationAbort = new AbortController()
   private generation = 0
@@ -303,14 +304,14 @@ export class SessionCoordinator {
    */
   private async restore(generation = this.nextGeneration()): Promise<void> {
     const handoff = this.beginAuthHandoff()
-    this.restoring = true
     let settle!: () => void
     const settled = new Promise<void>((resolve) => { settle = resolve })
+    const flight: { accessToken: string | null; settled: Promise<void> } = { accessToken: null, settled }
+    this.restoreFlight = flight
     // 恢复的结果一落地(发布了新会话,或失败转入重试/过期)就放行等它的请求;❌ 不跟 generation 走,
     // 因为发布新会话本身就会换代,而换代之前那一小段请求仍然拿着候选证。
     const release = () => {
-      if (this.generationIsCurrent(generation)) this.restoring = false
-      if (this.restoreFlight?.settled === settled) this.restoreFlight = null
+      if (this.restoreFlight === flight) this.restoreFlight = null
       settle(); handoff()
     }
     try {
@@ -323,7 +324,7 @@ export class SessionCoordinator {
         this.setSnapshot({ status: 'degraded', session: candidate, user: userFromSession(candidate), error: null })
       }
       const shown = this.snapshot.session
-      if (shown) this.restoreFlight = { accessToken: shown.access_token, settled }
+      if (shown) flight.accessToken = shown.access_token
       const { data, error } = await withAuthBudget('getSession', this.deps.getSession())
       if (!this.generationIsCurrent(generation)) return
       if (error) { await this.restoreFailed(error, generation); return }
@@ -567,7 +568,7 @@ export class SessionCoordinator {
   }
   private nextGeneration(): number {
     this.generationAbort.abort(); this.generationAbort = new AbortController()
-    this.generation += 1; this.terminalFlight = null; this.recoveryFlight = null; this.refreshFlight = null; this.validationFlight = null; this.restoring = false
+    this.generation += 1; this.terminalFlight = null; this.recoveryFlight = null; this.refreshFlight = null; this.validationFlight = null; this.restoreFlight = null
     this.retries.forEach(({ timer }) => { if (timer) clearTimeout(timer) }); this.retries.clear()
     if (this.refreshTimer) clearTimeout(this.refreshTimer); this.refreshTimer = null
     return this.generation
@@ -608,6 +609,8 @@ async function clearHostMirror(reason: 'signed-out' | 'lost'): Promise<void> {
   await refreshSshMachines().catch(() => undefined)
 }
 export const sessionCoordinator = new SessionCoordinator({
+  // The coordinator's own refresh: the one place a bare getSession is the point (@@@single-refresher, .eslintrc.cjs).
+  // eslint-disable-next-line no-restricted-syntax
   getSession: () => phoneHostGetSession(() => supabase.auth.getSession()),
   getUser: (accessToken) => supabase.auth.getUser(accessToken),
   refreshSession: (session) => phoneHostRefreshSession(session.refresh_token, async () => {
