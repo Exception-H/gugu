@@ -34,6 +34,11 @@ export interface PtySessionMetadata {
  * (`…\x1b[?25` | `l…`),截下的前半截接到下一块前面一起认。
  */
 const FLUSH_INTERVAL_MS = 16;
+/**
+ * 只认「这个 PTY 已经没了」的确切证词:errno / node-pty 的关闭文案。
+ * ❌ 加 `Napi::Error` 这类通用包装前缀:它也会包住非关闭类错误,一并吞掉就把真故障藏了。
+ */
+const PTY_CLOSED_ERROR = /EBADF|ENOTTY|EIO|EPIPE|not open|closed pty|Cannot write/;
 const FRAME_TOGGLE = /\x1b\[\?(2026|25)([hl])/g;
 /** 一块末尾若是这两种序列之一的前半截(还差最后一个字母),返回它,接到下一块前面。 */
 function trailingTogglePrefix(text: string): string {
@@ -191,10 +196,26 @@ export class PtySessionRegistry {
       }
     });
 
+    // 进程刚退出、fd 已关时人还在敲键盘,node-pty 的 write 会抛(EBADF / "Cannot write to closed pty")。
+    // 这一发是从 events.emit 里出来的:抛出去就是渲染层一条 rejected invoke + 这次按键丢失,而 agent 已经没了 ——
+    // 与 resize() 吞掉同一类 errno 的处理对齐,每条会话只记一次,❌ 让键盘把进程退出的噪音放大成每条按键一条日志。
+    // 只吞这一类「进程没了」的错误;其它错误照旧抛回调用方并每次都记 —— ❌ 把非预期写入错误一起吞掉。
+    let closedWriteLogged = false;
     const off = events.on(
       ptyInputChannel,
       (data) => {
-        pty.write(data);
+        try {
+          pty.write(data);
+        } catch (error) {
+          const message = error instanceof Error ? error.message : String(error);
+          if (!PTY_CLOSED_ERROR.test(message)) {
+            log.error('PtySessionRegistry:pty write failed', { ptySessionId, error: message });
+            throw error;
+          }
+          if (closedWriteLogged) return;
+          closedWriteLogged = true;
+          log.error('PtySessionRegistry:pty write after close', { ptySessionId, error: message });
+        }
       },
       ptySessionId
     );
