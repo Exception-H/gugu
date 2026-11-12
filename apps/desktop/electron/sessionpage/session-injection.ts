@@ -173,7 +173,11 @@ export class SessionpageLocalDeliveryRouter {
    * - 其余 ⇒ 指数退避,有上限;
    * - 期间的唤醒直接拿上次的原因失败,❌ 再起进程。成功 / 会话 live ⇒ 清掉。
    */
-  private readonly wakeFailures = new Map<string, { error: SessionWakeError; failures: number; retryAt: number }>()
+  private readonly wakeFailures = new Map<string, {
+    error: SessionWakeError; reason: string; failures: number; retryAt: number;
+    /** 已经记进日志的原因:同一个原因只记一行,之后静默;原因变了再记。 */
+    loggedReason?: string;
+  }>()
 
   constructor(
     private readonly targets: readonly SessionpageDeliveryTarget[],
@@ -250,11 +254,20 @@ export class SessionpageLocalDeliveryRouter {
       const wakeError = new SessionWakeError(sessionId, parked
         ? `${said} Not retried until this session is opened again after the fix.`
         : `${said} Next wake attempt not before ${new Date(retryAt).toISOString()}.`)
-      this.wakeFailures.set(sessionId, { error: wakeError, failures, retryAt })
+      this.wakeFailures.set(sessionId, { error: wakeError, reason: said, failures, retryAt, ...(last?.loggedReason ? { loggedReason: last.loggedReason } : {}) })
       throw wakeError
     }
     this.wakeFailures.delete(sessionId)
     return 'reopened'
+  }
+
+  private warnWakeFailureOnce(error: SessionWakeError, fields: Record<string, unknown>, msg: string): void {
+    const remembered = error.sessionId ? this.wakeFailures.get(error.sessionId) : undefined
+    if (remembered?.error === error) {
+      if (remembered.loggedReason === remembered.reason) return
+      remembered.loggedReason = remembered.reason
+    }
+    deliveryLogger().warn({ ...fields, error: error.message }, msg)
   }
 
   /** 这条会话 live 了(人打开了它、或别的路起来了):之前叫不醒的事实作废。 */
@@ -289,7 +302,7 @@ export class SessionpageLocalDeliveryRouter {
     const first = await attempt()
     if (first !== 'not-live') return first
     const fail = (error: SessionWakeError): never => {
-      deliveryLogger().warn({ sessionId, error: error.message }, 'session-direct target not live after wake')
+      this.warnWakeFailureOnce(error, { sessionId }, 'session-direct target not live after wake')
       throw error
     }
     let outcome: 'reopened' | 'already-running'
@@ -387,7 +400,8 @@ export class SessionpageLocalDeliveryRouter {
     const accepted = await this.tryInjectSessionMessage(sessionId, message)
     if (accepted === false) {
       void this.wakeSession(sessionId).catch((error: unknown) => {
-        deliveryLogger().warn({ sessionId, messageId: message.id, error: error instanceof Error ? error.message : String(error) }, 'session-message wake failed')
+        if (error instanceof SessionWakeError) this.warnWakeFailureOnce(error, { sessionId, messageId: message.id }, 'session-message wake failed')
+        else deliveryLogger().warn({ sessionId, messageId: message.id, error: error instanceof Error ? error.message : String(error) }, 'session-message wake failed')
       })
     }
     return accepted
@@ -407,6 +421,8 @@ export class SessionpageLocalDeliveryRouter {
     const owner = await this.deliveryTargetForSession(sessionId)
     const capability = owner ? await sessionInjectionCapabilityForSession(owner.target, owner.deliveryKey) : null
     if (!owner || !capability) {
+      // 门里记着这条会话叫不醒:不在册就是那个原因,那一行已经记过了。
+      if (this.wakeFailures.has(sessionId)) return false
       deliveryLogger().warn(
         { ...log, sessionId, deliveryKey: owner?.deliveryKey ?? null, messageId: message.id },
         'session 在注入权威处无登记,拒绝注入(消息留在来源侧,等登记出现的边界再投)',

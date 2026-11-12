@@ -1,4 +1,15 @@
 import { describe, expect, it, vi } from 'vitest'
+
+const warn = vi.hoisted(() => vi.fn())
+vi.mock('../../../../apps/desktop/electron/lib/logger', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../../../../apps/desktop/electron/lib/logger')>()
+  return {
+    ...actual,
+    createLogger: (scope: string) => scope === 'sessionpage/deliver'
+      ? { warn, info: vi.fn(), error: vi.fn(), debug: vi.fn() }
+      : actual.createLogger(scope),
+  }
+})
 import {
   SessionWakeError,
   SessionpageLocalDeliveryRouter,
@@ -13,8 +24,9 @@ const SESSION = 'wake-gate-session'
 function rig(options: { upgradeRequired?: boolean } = {}) {
   let clock = 1_000_000
   let fail = true
+  let said = 'claude tui requires harness runtime 2.1.69 or newer; found 1.8.3'
   const wakeSession = vi.fn(async () => {
-    if (fail) throw new Error('claude tui requires harness runtime 2.1.69 or newer; found 1.8.3')
+    if (fail) throw new Error(said)
   })
   const router = new SessionpageLocalDeliveryRouter([], {
     wakeSession,
@@ -26,6 +38,7 @@ function rig(options: { upgradeRequired?: boolean } = {}) {
     wakeSession,
     advance: (ms: number) => { clock += ms },
     heal: () => { fail = false },
+    say: (next: string) => { said = next },
     wake: () => router.wakeSession(SESSION),
   }
 }
@@ -88,5 +101,30 @@ describe('wake gate', () => {
     release()
     await expect(Promise.all(asks)).resolves.toEqual(Array(21).fill('reopened'))
     expect(wakeSession).toHaveBeenCalledTimes(1)
+  })
+
+  it('logs a remembered failure once per reason: silent while it repeats, again when the reason changes', async () => {
+    warn.mockClear()
+    const r = rig()
+    // The real attempt: no owner has this session registered, so injection refuses and the wake runs.
+    const attempt = async () => (await r.router.tryInjectSessionMessage(SESSION, { id: 'm1', text: 't' })) === false ? 'not-live' as const : true
+    const deliver = () => r.router.injectWithWake(SESSION, attempt).catch(() => undefined)
+    const logged = () => warn.mock.calls.filter(([, msg]) => msg === 'session-direct target not live after wake').length
+    await deliver()
+    expect(logged()).toBe(1)
+    // Every minute for two hours: replays inside the window and real retries with the same reason stay silent.
+    for (let minute = 1; minute <= 120; minute++) {
+      r.advance(60_000)
+      await deliver()
+    }
+    expect(r.wakeSession.mock.calls.length).toBeGreaterThan(1)
+    expect(logged()).toBe(1)
+
+    r.say('provider resume failed')
+    r.advance(WAKE_RETRY_MAX_MS)
+    await deliver()
+    expect(logged()).toBe(2)
+    // The "not registered" line belongs to the same cause: only the very first attempt, before any wake failed, writes it.
+    expect(warn.mock.calls.filter(([, msg]) => String(msg).includes('无登记'))).toHaveLength(1)
   })
 })
