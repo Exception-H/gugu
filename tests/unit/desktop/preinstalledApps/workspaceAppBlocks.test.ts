@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
-// 群文件夹的分块(owner 11-12):最上层放的文件和聊天里发的(「附件」)各在自己的标题下;云端副本已到期清除的文件收进最底下
-// 一个合着的「已过期 N」,点开才列出,每行标着「已过期」。页面跑在假的 window.gugu 上。
+// 群文件夹的分块(owner 11-12):最上层放的文件和聊天附件(「附件」里的)各在自己的标题下;云端副本已到期清除的文件收进最底下
+// 一个合着的「已过期 N」,点开才列出,每行标着「已过期」;没点开过的文件夹显示列表带来的项数,里面一有增减就重读它所在的那一层。
+// 页面跑在假的 window.gugu 上。
 import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
 import { beforeAll, afterAll, describe, expect, test, vi } from 'vitest'
@@ -24,6 +25,7 @@ const ENTRIES = [
   entry('gone', 'gone.pdf', { parentId: 'att', path: '附件/gone.pdf', expiredAt: ago(3600) }),
 ]
 
+let filesChanged = (_change: { kind: 'entries'; entries: unknown[]; gone: string[] }) => {}
 const menu = fakeSharedMenu()
 const gugu = {
   showContextMenu: menu.showContextMenu,
@@ -38,7 +40,7 @@ const gugu = {
     canDelete: vi.fn(async (files: unknown) => [files].flat().map(() => true)),
     viewPreferences: vi.fn(async () => ({ showAppData: false })),
     list: vi.fn(async (place?: { folder?: string }) => listedIn(ENTRIES, place)),
-    onChanged: vi.fn(() => () => {}),
+    onChanged: vi.fn((_place: unknown, fn: typeof filesChanged) => { filesChanged = fn; return () => {} }),
     openWith: vi.fn(async () => {}),
     download: vi.fn(async () => true),
     keep: vi.fn(async () => {}),
@@ -91,5 +93,15 @@ describe('the top of a chat folder', () => {
     expect(document.querySelector('[data-id="docs"] [data-cell="size"]')?.textContent).toBe('4 项')
     // The list counts up to 1000: 1000 means 1000 or more.
     expect(document.querySelector('[data-id="big"] [data-cell="size"]')?.textContent).toBe('999+ 项')
+  })
+
+  test('an item that comes into a folder not entered yet: the list that folder is in is read again, and its count follows', async () => {
+    const note = entry('note', 'note.md', { parentId: 'docs', path: 'Docs/note.md', keep: null })
+    ENTRIES.push(note)
+    Object.assign(ENTRIES.find((e) => e.id === 'docs')!, { childCount: 5 })
+    const reads = gugu.files.list.mock.calls.length
+    filesChanged({ kind: 'entries', entries: [note], gone: [] })
+    await until('Docs says 5', () => document.querySelector('[data-id="docs"] [data-cell="size"]')?.textContent === '5 项')
+    expect(gugu.files.list.mock.calls.slice(reads).map(([place]) => (place as { folder?: string }).folder)).toEqual([''])
   })
 })

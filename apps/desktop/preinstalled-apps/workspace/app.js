@@ -1004,7 +1004,20 @@ function take(change) {
   const fresh = new Map(change.entries.map((entry) => [entry.id, 'keep' in entry || !before.has(entry.id) || !('keep' in before.get(entry.id)) ? entry : { ...entry, ...listed(before.get(entry.id)) }]))
   state.entries = [...state.entries.filter((entry) => !fresh.has(entry.id) && !change.gone.includes(entry.id)), ...fresh.values()]
   if (!listsKeep) return []
-  return [...fresh.values()].filter((entry) => !('keep' in entry) && entry.type !== 'folder').map((entry) => entry.parentId ?? '')
+  // An item come into, moved in or out of, or gone from a folder not read yet changes the count its row says
+  // (childCount): the folder that row is listed in is read again.
+  const recount = (entry) => {
+    const folder = entry?.parentId && !state.listed.has(entry.parentId) ? before.get(entry.parentId) : null
+    return folder ? [folder.parentId ?? ''] : []
+  }
+  return [
+    ...[...fresh.values()].filter((entry) => !('keep' in entry) && entry.type !== 'folder').map((entry) => entry.parentId ?? ''),
+    ...[...fresh.values()].flatMap((entry) => {
+      const was = before.get(entry.id)
+      return !was ? recount(entry) : was.parentId !== entry.parentId ? [...recount(entry), ...recount(was)] : []
+    }),
+    ...change.gone.map((id) => before.get(id)).flatMap(recount),
+  ]
 }
 
 // Several files arriving together (an upload of ten) are one read of each folder they are in, a moment after the last.
