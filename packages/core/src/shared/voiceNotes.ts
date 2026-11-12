@@ -273,12 +273,14 @@ export function looksHallucinated(lines: readonly TranscriptLine[], durationMs: 
 }
 
 export function renderTranscript(lines: readonly TranscriptLine[]): string {
-  return `${lines.map((l) => `[${formatTimestamp(l.startMs)}] ${l.speaker}：${l.text.replace(/\r?\n/g, '\n  ')}`).join('\n')}\n`
+  return `${lines.map((l) => `[${formatTimestamp(l.startMs)}] ${l.speaker}：${l.text.replace(/\r?\n/g, '\n\t')}`).join('\n')}\n`
 }
 
 export function parseTranscript(markdown: string): TranscriptLine[] {
   const out: TranscriptLine[] = []
   for (const raw of markdown.replace(/\r\n/g, '\n').split('\n')) {
+    // 新写入的续行用制表符区分，避免正文里的时间戳被当成新段。
+    if (raw.startsWith('\t') && out.length > 0) { out[out.length - 1].text += '\n' + raw.slice(1); continue }
     if (raw.startsWith('  ') && !LINE.test(raw.trim()) && out.length > 0) { out[out.length - 1].text += '\n' + raw.slice(2); continue }
     const m = LINE.exec(raw.trim())
     if (m) {
@@ -396,7 +398,7 @@ export function summaryRequestText(input: {
     ? input.createdAt
     : `${at.getMonth() + 1}月${at.getDate()}日 ${pad(at.getHours())}:${pad(at.getMinutes())}`
   // 会议名来自日历(谁发来的邀请都能写):压成一行、截短、当引用的数据,❌ 让它读起来像这段话本身。
-  const title = (input.meetingTitle ?? '').replace(/\s+/g, ' ').replace(/[「」]/g, '').trim().slice(0, 80)
+  const title = Array.from((input.meetingTitle ?? '').replace(/\s+/g, ' ').replace(/[「」]/g, '').trim()).slice(0, 80).join('')
   const meeting = title ? `,日历上这场会叫「${title}」` : ''
   return [
     `【咕咕 · 语音笔记】这是咕咕 App 自动交给你的活,不是${owner}在聊天里说的话。`,
