@@ -220,7 +220,9 @@ export function formatClock(ms: number): string {
 const LINE = /^\s*\[(\d+):(\d{2})(?::(\d{2}))?\]\s*([^：:\n]{1,40}?)\s*[：:]\s*(.*)$/
 
 function stampMs(a: string, b: string, c: string | undefined): number {
-  return c === undefined ? (Number(a) * 60 + Number(b)) * 1000 : (Number(a) * 3600 + Number(b) * 60 + Number(c)) * 1000
+  if (Number(b) >= 60 || c !== undefined && Number(c) >= 60) return NaN
+  const time = c === undefined ? (Number(a) * 60 + Number(b)) * 1000 : (Number(a) * 3600 + Number(b) * 60 + Number(c)) * 1000
+  return Number.isSafeInteger(time) ? time : NaN
 }
 
 /** 「说话人1」「Speaker 2」「说话人 3」都写成「说话人 N」;别的名字(助理认出来的人名)原样留。 */
@@ -239,7 +241,7 @@ export function parseModelTranscript(text: string, offsetMs: number): Transcript
     const line = raw.trim()
     if (!line || /^```/.test(line)) continue
     const m = LINE.exec(line)
-    if (m) {
+    if (m && Number.isFinite(stampMs(m[1], m[2], m[3]))) {
       const body = m[5].trim()
       if (!body) continue
       out.push({ startMs: offsetMs + stampMs(m[1], m[2], m[3]), speaker: normalizeSpeaker(m[4]), text: body })
@@ -277,7 +279,10 @@ export function parseTranscript(markdown: string): TranscriptLine[] {
   for (const raw of markdown.replace(/\r\n/g, '\n').split('\n')) {
     if (raw.startsWith('  ') && !LINE.test(raw.trim()) && out.length > 0) { out[out.length - 1].text += '\n' + raw.slice(2); continue }
     const m = LINE.exec(raw.trim())
-    if (m && m[5].trim()) out.push({ startMs: stampMs(m[1], m[2], m[3]), speaker: m[4].trim(), text: m[5].trim() })
+    if (m && m[5].trim()) {
+      const startMs = stampMs(m[1], m[2], m[3])
+      if (Number.isFinite(startMs)) out.push({ startMs, speaker: m[4].trim(), text: m[5].trim() })
+    }
   }
   return out
 }
