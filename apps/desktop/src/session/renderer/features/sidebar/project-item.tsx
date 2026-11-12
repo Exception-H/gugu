@@ -40,6 +40,7 @@ import {
   sidebarRowRestActionsClass,
 } from './sidebar-primitives';
 import { useSessionDropTarget } from './use-session-drop-target';
+import { clearDraggedScreenContent, setDraggedScreenContent } from '@renderer/lib/drag-screen-content';
 import { moveSessionUnder } from '@renderer/features/sessions/set-session-parent-flow';
 import { sidebarRowInsetPx } from './sidebar-row-metrics';
 import { SidebarTwistyLane } from './sidebar-twisty';
@@ -198,7 +199,12 @@ export const SidebarProjectItem = observer(function SidebarProjectItem({
           data-offline={machineDown || undefined}
           tabIndex={0}
           role="treeitem"
-          onMouseDown={(e) => e.preventDefault()}
+          // 项目行就是项目群那一行:和会话行、对话行同一份拖拽内容 —— 落在一块的边上分出这个项目块
+          // (与 ⌘ 点同一块),落在项目列表里换次序(见 sidebar-virtual-list)。
+          // ❌ 这里不能 `onMouseDown preventDefault`:那会连 dragstart 都拦掉(见 allowNativeDrag)。
+          draggable
+          onDragStart={(event) => setDraggedScreenContent(event.dataTransfer, { kind: 'project', projectId: rowId, title: projectLabel }, event.currentTarget)}
+          onDragEnd={clearDraggedScreenContent}
           onClick={(event) => openProject(event.metaKey || event.ctrlKey)}
           onKeyDown={(e) => {
             // Arrows belong to the session navigation listener (see sidebar-session-item for
@@ -227,6 +233,7 @@ export const SidebarProjectItem = observer(function SidebarProjectItem({
               <ProjectIcon className={cn('size-4 shrink-0', machineDown && 'opacity-60')} />
             )}
             <SidebarMenuAction
+              allowNativeDrag
               aria-label={translate('sidebar.openProject', { project: projectLabel })}
               className={cn(
                 'truncate font-medium transition-colors select-none',

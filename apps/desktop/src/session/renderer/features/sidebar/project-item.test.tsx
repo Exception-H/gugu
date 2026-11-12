@@ -50,6 +50,7 @@ vi.mock('@renderer/features/sessions/set-session-parent-flow', () => ({ moveSess
 vi.mock('@renderer/localization/use-session-messages', () => ({ useSessionMessages: () => ({ translate: (key: string) => key }) }));
 
 import { SidebarProjectItem } from './project-item';
+import { clearDraggedScreenContent, getDraggedScreenContent } from '@renderer/lib/drag-screen-content';
 
 it('opens an actual project on the assistant device and retains its project controls', async () => {
   const host = document.createElement('div');
@@ -100,6 +101,36 @@ it('a project row whose count comes from a topic calling you opens that topic be
   } finally {
     state.group = undefined;
     state.signals = null;
+    await act(async () => root.unmount());
+    host.remove();
+  }
+});
+
+// owner 11-12「没法拖拽一个项目群去分屏」: the project row is the project group's row, so it carries the same screen-content
+// drag as chat and session rows — the block it splits off is the one ⌘-click opens beside.
+it('a project row drags as the project block its click opens', async () => {
+  const host = document.createElement('div');
+  document.body.append(host);
+  const root = createRoot(host);
+  const data = new Map<string, string>();
+  const transfer = {
+    get types() { return [...data.keys()]; },
+    setData: (type: string, value: string) => data.set(type, value),
+    getData: (type: string) => data.get(type) ?? '',
+    setDragImage: vi.fn(),
+    effectAllowed: 'none',
+  } as unknown as DataTransfer;
+  try {
+    await act(async () => root.render(<SidebarProjectItem projectId="business" />));
+    const row = host.querySelector<HTMLElement>('[data-project-row="business"]')!;
+    expect(row.draggable).toBe(true);
+    const dragStart = new Event('dragstart', { bubbles: true });
+    Object.defineProperty(dragStart, 'dataTransfer', { value: transfer });
+    await act(async () => row.dispatchEvent(dragStart));
+    expect(getDraggedScreenContent(transfer)).toEqual({ kind: 'project', projectId: 'business', title: 'Research' });
+    expect(transfer.effectAllowed).toBe('move');
+  } finally {
+    clearDraggedScreenContent();
     await act(async () => root.unmount());
     host.remove();
   }
