@@ -189,7 +189,7 @@ export const extensionsController = createRPCController({
           hiddenTabs: extensionsService().hiddenTabs(),
           disclosure: disclosureOf(extensions.map((entry) => entry.manifest)),
           // Where each came from (E-05): the session page keeps the preinstalled ones out of every session's tabs, and a
-          // chat's card offers an update only of one that came from a chat — the only kind a package from chat may replace.
+          // chat's card offers no update of those — the only kind a package from chat may not replace.
           origins: extensionsService().origins(),
           // 「始终用它」 for the host's open paths. Unreadable is logged and read as none — the
           // person is asked again — rather than taking the whole list down with it.
