@@ -295,15 +295,16 @@ export const SessionHistoryMainPanel = observer(function SessionHistoryMainPanel
   const highlightedKey = rows.some((row) => row.key === activeKey) ? activeKey : (idHit?.key ?? null);
 
   // 列表末尾的哨兵进了视口就多要一批。limit 只增不减,上一批没回来时 loaded 不变 ⇒ 同一个 limit,不会连环触发。
+  // ❌ 等所有机器都读完再放行:一台慢机器还没回第一页,别的机器已经带回的那些就滚不下去。
   useEffect(() => {
     const node = moreRef.current;
-    if (!node || !hasMore || isLoading) return;
+    if (!node || !hasMore) return;
     const observer = new IntersectionObserver((entries) => {
       if (entries.some((entry) => entry.isIntersecting)) setLimit((n) => Math.max(n, loaded + BATCH_SIZE));
     });
     observer.observe(node);
     return () => observer.disconnect();
-  }, [hasMore, loaded, isLoading]);
+  }, [hasMore, loaded]);
 
   // 光标换了一条才把它滚进视野 —— 按 key 认,❌ 按行对象:每一轮刷新、小窗里每来一批,行对象都是新的,
   // 按对象认会把光标那条(缺省是第一条)重新滚进来,正在往下翻的小窗和页面就被拽回顶上。
