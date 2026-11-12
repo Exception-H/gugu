@@ -1,5 +1,5 @@
 {
   "repository": "OpenDCAI/gugu-supabase",
-  "ref": "917837e0dc0a433d1b2162fc18849f905525d267",
-  "status": "gugu-supabase dev 917837e0 (includes #252 owner connection cutover and RPC grants, #254 password vault sync, #255 cutover follow-ups and the 0.3.2 provider catalog)"
+  "ref": "fa3e0bd977aefed842178859a19fc5d056bf5c32",
+  "status": "gugu-supabase dev fa3e0bd9 (includes #256 reserved projects in list_my_projects and publish_device_projects_v2, on top of #252, #254 and #255)"
 }
