@@ -953,7 +953,9 @@ export class AcpChatStore {
     } : view;
     const record = this._sessionRecord();
     const resumes = !!(record?.providerSessionId || record?.forkFromProviderSessionId || this.runtimeView?.forkFromProviderSessionId);
-    const starting: PendingPrompt['starting'] = view !== null && lifeIsStarting(view) ? (resumes ? 'restoring' : 'starting') : undefined;
+    // The platform stage is the model-access request (ticket): said as it is, so a slow or stuck one is visible and stoppable.
+    const starting: PendingPrompt['starting'] = view === null || !lifeIsStarting(view) ? undefined
+      : view.stage?.at === 'platform' ? 'connecting' : resumes ? 'restoring' : 'starting';
     const transcriptState = this.chatState.transcript.state;
     const turns = [...transcriptState.committedTurns, ...(transcriptState.activeTurnSnapshot ? [transcriptState.activeTurnSnapshot] : [])];
     const projections = new Set([...(this.stoppedRowId ? [stoppedTurnId(this.stoppedRowId)] : []), ...this.failedRowIds.map(failedTurnId)]);
