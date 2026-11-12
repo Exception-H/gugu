@@ -6,7 +6,7 @@ import { type AgentJoinRequestStatus } from '../../lib/groupAgentJoin'
 import { groupJoinError } from '../../lib/groupAgentJoinService'
 import { MEMBER_PICKER_SHEET, MemberPicker } from '../member-picker/MemberPicker'
 import { Sheet } from '../ui/Sheet'
-import { GroupInviteShare } from './GroupInviteShare'
+import { GroupInviteActions, GroupInviteCode } from './GroupInviteShare'
 import { groupInviteLinkFor } from '../../lib/groupInviteShareUrl'
 
 const reasonOf = (error: unknown) => String((error as Error)?.message ?? error)
@@ -81,7 +81,8 @@ export function AddGroupMembers({ chatId, snapshot, settings, canInviteHumans, h
         initialSelectedIds={initialSelectedIds}
         peopleDenied={canInviteHumans ? undefined : humanDeniedHint ?? t('group.picker.humanPermissionHint')}
         agentNote={agentNote}
-        share={inviteLink ? (layout) => <GroupInviteShare inviteLink={inviteLink} groupName={settings?.name} snapshot={snapshot} main={layout === 'main'} /> : undefined}
+        actions={inviteLink ? <GroupInviteActions inviteLink={inviteLink} groupName={settings?.name} snapshot={snapshot} /> : undefined}
+        empty={inviteLink ? <GroupInviteCode inviteLink={inviteLink} groupName={settings?.name} snapshot={snapshot} /> : undefined}
         footer={error || notice ? (
           <p role={error ? 'alert' : 'status'} className={error ? '!m-0 !px-5 !py-2 text-[length:var(--font-caption)] text-[var(--danger-fg)]' : '!m-0 !px-5 !py-2 text-[length:var(--font-caption)] text-[var(--text-secondary)]'}>{error ?? notice}</p>
         ) : null}

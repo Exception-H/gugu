@@ -6,7 +6,7 @@ import type { ChatItem, GroupCollabSnapshot, NotificationLevel } from '@gugu/cor
 import { GroupNameRow } from './GroupNameRow'
 import { Avatar } from '../Avatar'
 import { Button } from '../ui/Button'
-import { buildUnifiedMembers } from './groupMemberModels'
+import { buildUnifiedMembers, GROUP_FACES } from './groupMemberModels'
 import { chatService } from '../../lib/chat'
 import { useGroupAvatarUpload } from './useGroupAvatarUpload'
 import { useChatStore } from '../../store/chatContext'
@@ -123,7 +123,7 @@ export function GroupMembersSection({
   const totalMembers = snapshot.humans.length + snapshot.agents.length
   // @@@1461-gap3 群头像组合只用成员已有的 canonical URL,与聊天列表群项同口径。
   const groupAvatarMembers = useMemo(
-    () => unifiedMembers.slice(0, 9).map((m) => ({ id: m.id, name: identitiesById[m.id]?.display_name ?? '', avatar: identitiesById[m.id]?.avatar ?? null })),
+    () => unifiedMembers.slice(0, GROUP_FACES).map((m) => ({ id: m.id, name: identitiesById[m.id]?.display_name ?? '', avatar: identitiesById[m.id]?.avatar ?? null })),
     [identitiesById, unifiedMembers],
   )
 
