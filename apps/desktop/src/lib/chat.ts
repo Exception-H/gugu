@@ -2,7 +2,7 @@ import { ingestMessages } from './messageIngest'
 import { ingestFetchedMessagePage } from './chatMessagePages'
 import { dbPayload } from '@gugu/core/cloud/supabase'
 import { createGroupWithInvitations, groupInvitationNote } from '@gugu/core/cloud/groupChat'
-import { joinRequestFromRow } from './groupJoinRequestRow'
+import { managedJoinRequestFromRow, type ManagedGroupJoinRequest } from './groupJoinRequestRow'
 import {
   getDeviceCommand as getCoreDeviceCommand,
   pollDeviceCommandUntilDone,
@@ -51,7 +51,6 @@ import type {
   ListenMode,
   GroupChatSettings,
   GroupJoinMode,
-  GroupJoinRequest,
   GroupCollabSnapshot,
   GroupMemberItem,
   GroupMemberRoleInput,
@@ -716,14 +715,9 @@ export const chatService = {
     return data === 'joined' ? 'joined' : 'pending'
   },
 
-  // 列出某群的加入请求,含已处理的（仅管理员，RPC 内 can_manage_group_members 校验）。
-  async listGroupJoinRequests(chatId: string): Promise<GroupJoinRequest[]> {
-    return (await (await currentGroupAdmin()).joinRequests(chatId)).map(joinRequestFromRow)
-  },
-
-  /** 我管理的全部群的加入请求,含已处理的,一次读(与逐群那份同行、同权限)。 */
-  async listManagedGroupJoinRequests(): Promise<GroupJoinRequest[]> {
-    return (await (await currentGroupAdmin()).managedJoinRequests()).map(joinRequestFromRow)
+  /** 我管理的全部群的加入请求,含已处理的,一次读(与逐群那份同权限),每行带上它的群。 */
+  async listManagedGroupJoinRequests(): Promise<ManagedGroupJoinRequest[]> {
+    return (await (await currentGroupAdmin()).managedJoinRequests()).map(managedJoinRequestFromRow)
   },
 
   // 审批一条加入请求（仅管理员）：accept→入群+标 accepted，reject→标 rejected。
