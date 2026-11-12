@@ -28,7 +28,6 @@ import {
   type MachineLinkState,
 } from '@renderer/lib/machine-clients';
 import { projectGroupsStore } from '@renderer/features/projects/stores/project-groups-store';
-import { accountProjectsStore } from '@renderer/features/projects/stores/account-projects-store';
 import { aliasFixedId, machineCodec, machineRegistry } from '@renderer/lib/machine-routing';
 import { appState, sidebarStore } from '@renderer/lib/stores/app-state';
 import { sessionAgentBindings } from '@renderer/features/sessions/stores/session-agent-bindings';
@@ -196,8 +195,6 @@ export class RemoteHostsStore {
       isAssistantHome: (deviceId) => this.device(deviceId)?.assistantHome === true,
       connected: (deviceId) => this.connectionState(deviceId) === 'connected',
     };
-    // 账号上的项目(侧栏「项目」分区、项目选择器的唯一来源):会话页起来时读一次。
-    void accountProjectsStore.refresh();
     // 各台机器上的本地项目绑的项目群(群操作、任务卡用;❌ 用它定侧栏有哪些项目)。
     projectGroupsStore.start(
       () => [...this.hosts.entries()].filter(([, state]) => state.synced).map(([deviceId]) => deviceId),

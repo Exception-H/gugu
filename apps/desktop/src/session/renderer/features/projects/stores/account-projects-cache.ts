@@ -9,11 +9,12 @@ const CACHE_KEY = 'gugu.account-projects.v1';
 
 type Cached = { accountId: string; list: readonly AccountProject[] };
 
-/** 这个账号上次那份;没有、是别的账号的、或形状不对 = []。可再生,❌ 迁移。 */
+/** 这个账号上次那份;没有、是别的账号的(换了账号:那份随即删掉)、或形状不对 = []。可再生,❌ 迁移。 */
 export function readCachedAccountProjects(accountId: string): AccountProject[] {
   try {
     const raw = localStorage.getItem(CACHE_KEY);
     const parsed = raw ? (JSON.parse(raw) as Partial<Cached>) : null;
+    if (parsed && parsed.accountId !== accountId) localStorage.removeItem(CACHE_KEY);
     if (!parsed || parsed.accountId !== accountId || !Array.isArray(parsed.list)) return [];
     return parsed.list.filter(
       (project): project is AccountProject => !!project && typeof project.chatId === 'string' && Array.isArray(project.bindings)
@@ -29,4 +30,9 @@ export function writeCachedAccountProjects(accountId: string, list: readonly Acc
   } catch {
     /* 存不下只是回到「重载时先等一次往返」,不影响这一次读到的。 */
   }
+}
+
+/** 登出:这台电脑上不留上一个账号的项目(只一格,换账号时也随读随删,见上)。 */
+export function forgetCachedAccountProjects(): void {
+  localStorage.removeItem(CACHE_KEY);
 }

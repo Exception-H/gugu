@@ -1,6 +1,9 @@
 import { computed, makeObservable, observable, reaction, runInAction } from 'mobx';
 import type { AccountProject } from '@gugu/core/cloud/deviceProjects';
 import { platform } from '@/platform';
+import { readDeviceRevision, type AccountRevisionEvent, type AccountRevisionListener } from '@/lib/accountRevisionCoordinator';
+import { deviceProjectsPublishedChannel } from '@shared/core/projects/projectEvents';
+import { events } from '@renderer/lib/ipc';
 import { log } from '@renderer/utils/logger';
 import { groupRowOrder } from './project-group-layout';
 import { readCachedAccountProjects, writeCachedAccountProjects } from './account-projects-cache';
@@ -17,11 +20,15 @@ export type LocalProjects = {
   connected(deviceId: string): boolean;
 };
 
+/** 账号 revision 的订阅口(聊天那一层给,见 store/chatContext)。 */
+export type SubscribeAccountRevision = (event: AccountRevisionEvent, listener: AccountRevisionListener) => () => void;
+
 const bindingKey = (deviceId: string, localProjectId: string) => `${deviceId}\u0000${localProjectId}`;
 
 /**
  * 账号上的项目(identity.list_my_projects,项目与机器解耦):项目就是它的项目群,一个文件夹都没有也在。
  * 侧栏、项目选择器、任务历史、手机都只从这一份认「有哪些项目、一个本地项目属于哪个项目」;❌ 各处再按群拼本地项目。
+ * 什么时候再读由它自己订({@link start}),❌ 别处再叫 refresh —— 人按的「重试」除外。
  * 读不到 = status 'error',由各处画出错误和重试;❌ 退回本地拼法。列着的仍是这份上次读到的(同一份,不是别的来源):
  * 开机 / 重载时先铺上这个账号上次那份({@link restore}),读到了就换成此刻的;断网重载不会把项目区读空。
  */
@@ -61,7 +68,31 @@ export class AccountProjectsStore {
     runInAction(() => { this.local = local; });
   }
 
-  /** 认出登录的是谁:铺上这个账号上次读到的那份(别的账号的那份不用),再由 refresh 换成此刻的。 */
+  /**
+   * 认出登录的是谁:换了账号先清掉上一个的,铺上这个账号上次那份,读一次;之后这几样变了再读 ——
+   * 某台机器的项目记上账号 / 某台被移除(device_changed,别的电脑、手机记的经这里到);这台电脑的项目记上账号
+   * (建了项目、绑了群之后那次发布,断网时是重连后那次:它们在那一刻才进 list_my_projects);这台电脑在账号里认出了自己
+   * (之前那次读分不出哪些绑定是这台的)。
+   * 返回的 stop 只退订、不清:界面不活跃、令牌刷新时登录的人会短暂读成空,❌ 当成登出;登出走 {@link clear}。
+   */
+  start(accountId: string, subscribeRevision: SubscribeAccountRevision): () => void {
+    if (this.accountId !== null && this.accountId !== accountId) this.clear();
+    this.restore(accountId);
+    void this.refresh();
+    const offs = [
+      subscribeRevision('device_changed', (operations) => {
+        if (operations.some((operation) => {
+          const key = readDeviceRevision(operation.payload);
+          return key.projects || key.removed;
+        })) void this.refresh();
+      }),
+      events.on(deviceProjectsPublishedChannel, () => void this.refresh()),
+      platform.subscribeLocalDeviceIdentified?.(() => void this.refresh()) ?? (() => {}),
+    ];
+    return () => offs.forEach((off) => off());
+  }
+
+  /** 铺上这个账号上次读到的那份(别的账号的那份不用),再由 refresh 换成此刻的。 */
   restore(accountId: string): void {
     this.accountId = accountId;
     if (this.list.length > 0) return;

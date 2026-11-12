@@ -68,21 +68,6 @@ describe('ProjectGroupsStore', () => {
     expect(localStorage.length).toBe(0);
   });
 
-  // A project made on this computer is in the account list only once this machine's publish lands (offline: after the
-  // reconnect). That publish, not the project's creation, is when this window reads the account list again.
-  it('reads the account projects again when this machine\'s projects are published, not when one is created', async () => {
-    const { accountProjectsStore } = await import('./account-projects-store');
-    const refresh = vi.spyOn(accountProjectsStore, 'refresh').mockResolvedValue();
-    answer('local', []);
-    new ProjectGroupsStore().start(() => [], () => [], () => []);
-    await settle();
-    refresh.mockClear();
-    expect(mocks.handlers.has('project:created')).toBe(false);
-    mocks.handlers.get('project:device-projects-published')!();
-    expect(refresh).toHaveBeenCalledTimes(1);
-    refresh.mockRestore();
-  });
-
   it('publishes project agents across devices and reacts to identities and project rebinding', async () => {
     const bindings = [
       { projectId: 'local-main', chatId: 'chat-main' },

@@ -3,9 +3,20 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { AccountProject } from '@gugu/core/cloud/deviceProjects';
 import { AccountProjectsStore } from './account-projects-store';
 
-const read = vi.hoisted(() => ({ list: vi.fn<() => Promise<AccountProject[]>>(), self: vi.fn(async () => ({ device_id: 'this-computer' })) }));
+const read = vi.hoisted(() => ({
+  list: vi.fn<() => Promise<AccountProject[]>>(),
+  self: vi.fn(async () => ({ device_id: 'this-computer' })),
+  events: new Map<string, () => void>(),
+  identified: null as null | (() => void),
+}));
 vi.mock('@/lib/deviceProjects', () => ({ listMyAccountProjects: () => read.list() }));
-vi.mock('@/platform', () => ({ platform: { getLocalDeviceSelfSnapshot: () => read.self() } }));
+vi.mock('@/platform', () => ({ platform: {
+  getLocalDeviceSelfSnapshot: () => read.self(),
+  subscribeLocalDeviceIdentified: (listener: () => void) => { read.identified = listener; return () => { read.identified = null; }; },
+} }));
+vi.mock('@renderer/lib/ipc', () => ({
+  events: { on: (event: { name: string }, handler: () => void) => { read.events.set(event.name, handler); return () => read.events.delete(event.name); } },
+}));
 
 const paper: AccountProject = {
   chatId: 'chat-paper',
@@ -102,6 +113,7 @@ describe('accountProjectsStore reading', () => {
     vi.stubGlobal('localStorage', {
       getItem: (key: string) => storage.get(key) ?? null,
       setItem: (key: string, value: string) => { storage.set(key, value); },
+      removeItem: (key: string) => { storage.delete(key); },
     });
     try {
       const before = new AccountProjectsStore();
@@ -118,15 +130,59 @@ describe('accountProjectsStore reading', () => {
       expect(reloaded.status).toBe('error');
       expect(reloaded.projects).toEqual([paper, empty]);
 
-      // Another account on this computer never sees it; clear (sign-out) drops what is on screen.
+      // Another account on this computer never sees it, and the previous account's copy is gone from this computer;
+      // clear (sign-out) drops what is on screen.
       const other = new AccountProjectsStore();
       other.restore('user-b');
       expect(other.projects).toEqual([]);
+      expect(storage.size).toBe(0);
       reloaded.clear();
       expect(reloaded.projects).toEqual([]);
     } finally {
       vi.unstubAllGlobals();
     }
+  });
+
+  // Nobody outside tells the store to read again: it subscribes to what changes the account's projects itself.
+  it('start reads once, then again on a project revision, a removed device, this computer\'s publish and its identification', async () => {
+    const store = new AccountProjectsStore();
+    const revisions = new Map<string, (operations: readonly { payload: unknown }[]) => void>();
+    const subscribe = ((event: string, listener: (operations: readonly { payload: unknown }[]) => void) => {
+      revisions.set(event, listener);
+      return () => revisions.delete(event);
+    }) as unknown as Parameters<AccountProjectsStore['start']>[1];
+    read.list.mockResolvedValue([paper]);
+    const stop = store.start('user-a', subscribe);
+    await vi.waitFor(() => expect(store.status).toBe('ready'));
+    const readsAgain = async (signal: () => void, list: AccountProject[]) => {
+      read.list.mockResolvedValueOnce(list);
+      signal();
+      await vi.waitFor(() => expect(store.projects).toEqual(list));
+    };
+
+    // A heartbeat (the device row only) is no project change.
+    revisions.get('device_changed')!([{ payload: { device_id: 'gpu', kind: 'row', tombstone: false } }]);
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(read.list).toHaveBeenCalledTimes(1);
+    await readsAgain(() => revisions.get('device_changed')!([{ payload: { device_id: 'gpu', kind: 'projects', tombstone: false } }]), [empty]);
+    await readsAgain(() => revisions.get('device_changed')!([{ payload: { device_id: 'gpu', kind: 'row', tombstone: true } }]), [paper]);
+    // A project made here is in list_my_projects only once this machine's publish lands — that, not the creation.
+    expect(read.events.has('project:created')).toBe(false);
+    await readsAgain(() => read.events.get('project:device-projects-published')!(), [empty]);
+    await readsAgain(() => read.identified!(), [paper]);
+    expect(read.list).toHaveBeenCalledTimes(5);
+
+    stop();
+    expect(revisions.size).toBe(0);
+    expect(read.events.size).toBe(0);
+    expect(read.identified).toBeNull();
+    // stop only unsubscribes: a moment without a signed-in user is not a sign-out.
+    expect(store.projects).toEqual([paper]);
+    // Another account signs in: the previous account's projects go before anything is read.
+    read.list.mockImplementationOnce(() => new Promise(() => {}));
+    store.start('user-b', subscribe);
+    expect(store.projects).toEqual([]);
+    expect(store.status).toBe('loading');
   });
 
   it('a refresh asked for while reading reads again afterwards; a read that lands after clear is dropped', async () => {

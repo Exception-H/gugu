@@ -225,7 +225,6 @@ vi.mock('@renderer/features/projects/stores/account-projects-store', async (impo
     accountProjectsStore.localDeviceId = 'this-computer';
     accountProjectsStore.status = 'ready';
   });
-  accountProjectsStore.refresh = async () => {};
   return { ...actual, accountProjectsStore };
 });
 

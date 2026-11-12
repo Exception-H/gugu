@@ -138,24 +138,16 @@ export function DevicesProvider({ children, active = true }: { children: React.R
     void refreshCloudComputer().catch(() => undefined)
   }, [userId])
 
-  // 账号上的项目(项目的唯一来源,桌面与手机同一份):登录后读一次;换了账号先清掉上一个账号的;登出清空。
-  // 某台机器的项目变了(下面的 device_changed kind 'projects')再读。
-  const projectsAccountRef = useRef<string | null>(null)
+  // 账号上的项目(项目的唯一来源,桌面与手机同一份):登录的人交给它,什么时候再读由它自己订;登出清空。
   const signedOut = !authLoading && !authenticatedUser
   useEffect(() => {
     if (signedOut) {
-      projectsAccountRef.current = null
       accountProjectsStore.clear()
       return
     }
     if (!userId) return
-    if (projectsAccountRef.current !== userId) {
-      if (projectsAccountRef.current !== null) accountProjectsStore.clear()
-      projectsAccountRef.current = userId
-    }
-    accountProjectsStore.restore(userId)
-    void accountProjectsStore.refresh()
-  }, [userId, signedOut])
+    return accountProjectsStore.start(userId, subscribeAccountRevision)
+  }, [userId, signedOut, subscribeAccountRevision])
 
   // gugu_devices 任何增删改都落账号 revision journal。初始拉取 + durable cursor 覆盖订阅建立前与离线期间的变更。
   // 每条带着是哪一台、是那一行还是它的项目:只读变了的那一样(心跳每 30 秒一条,从前每条都把整个账号的设备和项目重读一遍)。
@@ -173,7 +165,6 @@ export function DevicesProvider({ children, active = true }: { children: React.R
         if (key.projects) projectsOf.add(key.deviceId)
       }
     }
-    if (projectsOf.size > 0 || removed.size > 0) void accountProjectsStore.refresh()
     let listed: Device[]
     let projects: Awaited<ReturnType<typeof listMyDeviceProjects>> | null
     try {

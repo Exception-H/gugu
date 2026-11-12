@@ -83,7 +83,7 @@ export const ComposerProjectPicker = observer(function ComposerProjectPicker({
   const twins = nameTwinIds(projects.map((p) => ({ id: p.chatId, name: p.name })));
 
   return (
-    <DropdownMenu onOpenChange={(open) => { if (open) void accountProjectsStore.refresh(); }}>
+    <DropdownMenu>
       <DropdownMenuTrigger
         render={
           <button type="button" className={sessionComposerTrayTriggerClassName}>
