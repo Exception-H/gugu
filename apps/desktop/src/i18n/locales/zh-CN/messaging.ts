@@ -232,6 +232,7 @@ export default {
       "resize": "调整面板宽度",
       "offer": "用『{{name}}』打开",
       "appFiles": "『{{name}}』的文件",
+      "noAppFiles": "这个对话里还没有『{{name}}』的文件。它打开的是对话里的文件，先建一个，或者让 agent 建一个。",
       "fileUnavailable": "这里打不开这个文件：它可能已被删除，或者不在这个对话里。",
       "noOpener": "本机没有能打开『{{name}}』的 App，咕咕市场里也没有。",
       "marketUnreadable": "本机没有能打开『{{name}}』的 App；咕咕市场现在读不到，稍后再试。",
