@@ -333,14 +333,17 @@ const SidebarGroupProjectItem = observer(function SidebarGroupProjectItem({ proj
       data-project-chat={chatId}
       tabIndex={0}
       role="treeitem"
-      onMouseDown={(e) => e.preventDefault()}
+      // 拖起来的就是它点开的那块(项目群);落在项目列表里 = 换次序(sidebar-virtual-list)。❌ `onMouseDown preventDefault`:会拦掉 dragstart。
+      draggable
+      onDragStart={(event) => setDraggedScreenContent(event.dataTransfer, { kind: 'chat', chatId, title: name }, event.currentTarget)}
+      onDragEnd={clearDraggedScreenContent}
       onClick={(event) => open(event.metaKey || event.ctrlKey)}
       onKeyDown={(e) => { if (e.key === 'Enter') open(false); }}
     >
       <SidebarTwistyLane alwaysVisible expanded={false} label={translate('sidebar.expandProject', { project: name })} />
       <div className="flex min-w-0 flex-1 items-center gap-1">
         <FolderClosed className="size-4 shrink-0" />
-        <SidebarMenuAction aria-label={translate('sidebar.openProject', { project: name })} className="truncate font-medium transition-colors select-none">
+        <SidebarMenuAction allowNativeDrag aria-label={translate('sidebar.openProject', { project: name })} className="truncate font-medium transition-colors select-none">
           <ProjectRowTitle name={name} />
         </SidebarMenuAction>
       </div>

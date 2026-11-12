@@ -124,7 +124,17 @@ it('a project without any local project is a row named after the project that op
     await act(async () => row.click());
     expect(state.openChat).toHaveBeenCalledWith('chat-paper', false);
     expect(state.show).not.toHaveBeenCalledWith({ kind: 'project', projectId: 'chat-paper' });
+    // It drags as the block its click opens (the group), which the project list also takes as a reorder (row id = chat id).
+    const data = new Map<string, string>();
+    const transfer = { get types() { return [...data.keys()]; }, setData: (type: string, value: string) => data.set(type, value),
+      getData: (type: string) => data.get(type) ?? '', setDragImage: vi.fn(), effectAllowed: 'none' } as unknown as DataTransfer;
+    expect(row.draggable).toBe(true);
+    const dragStart = new Event('dragstart', { bubbles: true });
+    Object.defineProperty(dragStart, 'dataTransfer', { value: transfer });
+    await act(async () => row.dispatchEvent(dragStart));
+    expect(getDraggedScreenContent(transfer)).toEqual({ kind: 'chat', chatId: 'chat-paper', title: 'Paper' });
   } finally {
+    clearDraggedScreenContent();
     state.rows = [];
     await act(async () => root.unmount());
     host.remove();

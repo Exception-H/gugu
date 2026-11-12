@@ -180,13 +180,15 @@ export const SidebarVirtualList = observer(function SidebarVirtualList() {
   // 拖起、落到分屏都是同一份原生拖拽内容(drag-screen-content),这里只收落在列表里的那一下。
   function projectInsertionAt(event: DragEvent<HTMLElement>): ProjectInsertion | null {
     const dragged = getDraggedScreenContent(event.dataTransfer);
-    if (dragged?.kind !== 'project') return null;
+    // 还没有本地项目的账号项目,行 id 就是它的群,拖起来的是那个群(project-item);别的群不是项目行,nextProjectOrder 认不出就不动。
+    const projectId = dragged?.kind === 'project' ? dragged.projectId : dragged?.kind === 'chat' && !dragged.topic ? dragged.chatId : null;
+    if (!projectId) return null;
     const rowElement = event.target instanceof Element ? event.target.closest<HTMLElement>('[data-index]') : null;
     const overIndex = Number(rowElement?.dataset.index);
     if (!rowElement || !listRef.current?.contains(rowElement) || !Number.isInteger(overIndex)) return null;
     const rect = rowElement.getBoundingClientRect();
     const isAbove = event.clientY < rect.top + rect.height / 2;
-    return { projectId: dragged.projectId, rowIndex: isAbove ? overIndex : overIndex + 1, rect, isAbove };
+    return { projectId, rowIndex: isAbove ? overIndex : overIndex + 1, rect, isAbove };
   }
 
   function nextProjectOrder({ projectId, rowIndex }: ProjectInsertion): string[] | null {
