@@ -202,6 +202,7 @@ export function retryStartsAt(meta: VoiceNoteMeta): 'transcribe' | 'summarize' {
 export type TranscriptLine = { startMs: number; speaker: string; text: string }
 
 export function formatTimestamp(ms: number): string {
+  if (!Number.isFinite(ms)) throw new RangeError('Invalid voice duration')
   const total = Math.max(0, Math.floor(ms / 1000))
   const h = Math.floor(total / 3600)
   const m = Math.floor((total % 3600) / 60)
@@ -212,6 +213,7 @@ export function formatTimestamp(ms: number): string {
 
 /** 录音条上的计时:HH:MM:SS。 */
 export function formatClock(ms: number): string {
+  if (!Number.isFinite(ms)) throw new RangeError('Invalid voice duration')
   const total = Math.max(0, Math.floor(ms / 1000))
   const two = (n: number) => String(n).padStart(2, '0')
   return `${two(Math.floor(total / 3600))}:${two(Math.floor((total % 3600) / 60))}:${two(total % 60)}`
