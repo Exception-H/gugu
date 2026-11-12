@@ -6,6 +6,7 @@ import { bindBackendProbe } from '@gugu/core/cloud/backendReachability'
 import { forgetUnconfirmedReads } from '../lib/readWriter'
 import type { AccountImRepository } from '../lib/imRepository'
 import { rendererLogger } from '../lib/log'
+import { forgetMessageAgentWakes } from '../lib/messageAgentWakes'
 
 const revisionLog = rendererLogger('chat/account-revision')
 const storeLog = rendererLogger('chat/store')
@@ -63,7 +64,7 @@ export function useAccountStartBeat(userId: string | null | undefined, ports: {
     const stopBeat = watchRendererRevisionReconcile(beat)
     // A failed backend write asks for this same beat now; the beat's pull is what tells the backend came back.
     const unbindProbe = bindBackendProbe(beat)
-    // Reads this account could not write are this account's: they never go out under the next one.
-    return () => { cancelled = true; stopBeat(); unbindProbe(); forgetUnconfirmedReads() }
+    // Reads this account could not write, and wakes it read, are this account's: they never carry over to the next one.
+    return () => { cancelled = true; stopBeat(); unbindProbe(); forgetUnconfirmedReads(); forgetMessageAgentWakes() }
   }, [coordinatorRef, getImRepository, getRevisionCoordinator, loadChats, paintLocal, registrationsRef, setChats, setChatsLoad, userId])
 }

@@ -233,6 +233,7 @@ export default {
       "resize": "Resize the panel",
       "offer": "Open it with “{{name}}”",
       "appFiles": "Files of “{{name}}”",
+      "noAppFiles": "This chat has no files of “{{name}}” yet. It opens files in a chat: make one, or ask an agent to.",
       "fileUnavailable": "This file can't be opened here: it may have been deleted, or be outside this chat.",
       "noOpener": "No App on this device opens “{{name}}”, and the Gugu market has none that does.",
       "marketUnreadable": "No App on this device opens “{{name}}”, and the Gugu market can't be reached right now. Try again later.",

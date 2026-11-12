@@ -205,10 +205,15 @@ export function useChatOpener(chatId: string | null, onShow?: (chatId: string, t
         })
       } else {
         void appsHere!.groupFilesOpenedBy({ chatId, extensionId: ask.app }).then((result) => {
-          if (!live || asked !== asking.current || !result.success || !result.data) return
+          if (!live || asked !== asking.current) return
+          if (!result.success || !result.data) {
+            setUnopened(result.error || 'no answer')
+            return
+          }
           const files = result.data
+          // One opens; several, or none yet, are said in the same sheet — a click never comes to nothing.
           if (files.length === 1) void openGroupFile(files[0]!.itemId)
-          else if (files.length > 1) setAppFiles({ chatId, appName: installedExtensionsStore.appName(ask.app) ?? ask.app, files })
+          else setAppFiles({ chatId, appName: installedExtensionsStore.appName(ask.app) ?? ask.app, files })
         })
       }
     }
@@ -234,7 +239,7 @@ export function useChatOpener(chatId: string | null, onShow?: (chatId: string, t
       ) : null}
       {appFiles && appFiles.chatId === chatId ? (
         <div className="flex flex-col items-stretch gap-1" data-testid="group-app-slot-app-files">
-          <div className="text-[length:var(--font-caption)] text-[var(--text-secondary)]">{t('chatArea.openWith.appFiles', { name: appFiles.appName })}</div>
+          <div className="text-[length:var(--font-caption)] text-[var(--text-secondary)]">{t(appFiles.files.length > 0 ? 'chatArea.openWith.appFiles' : 'chatArea.openWith.noAppFiles', { name: appFiles.appName })}</div>
           {appFiles.files.map((file) => (
             <Button key={file.itemId} size="sm" variant="ghost" className="justify-start" data-app-file={file.itemId} onClick={() => void openGroupFile(file.itemId)}>
               {file.displayName}
