@@ -44,6 +44,8 @@ beforeEach(() => {
 afterEach(() => {
   harness.cleanup()
   HTMLElement.prototype.checkVisibility = originalCheckVisibility
+  // A group's packages are one test's: left over, they offer an update in the next test's group.
+  sharedHere.packages = new Map()
 })
 
 const slot = (props: Partial<ChatTabsProps> = {}) => chatTabs({ chatId: 'group-1', ...props })
@@ -160,15 +162,19 @@ describe('the slot header', () => {
   })
 
   // 10-17: the market's office here, a newer package of it in the group — the bar offered 「更新」 and the install refused it
-  // (E-05). An App that did not come from a chat gets no bar; the same App from a chat does (the case above).
-  it('no update bar over an App that did not come from a chat (E-05)', async () => {
+  // (E-05). 11-12: the install asks instead, saying what it replaces, so the bar is offered over the market's copy too;
+  // only over an App gugu ships there is none.
+  it('an update bar over a market App; none over one gugu ships (E-05)', async () => {
+    const bar = () => harness.container.querySelector('[data-testid="group-app-slot-update"]')
+    sharedHere.packages = new Map([['board', { manifest: { id: 'board', name: 'Board', version: '1.1.0' }, card: { source: { kind: 'url', url: 'https://files.invalid/board.zip' }, messageId: 'm-board' } }]])
     install([], [], '1.0.0', 'market')
-    sharedHere.packages = new Map([['board', { manifest: { id: 'board', name: 'Board', version: '1.1.0' }, url: 'https://files.invalid/board.zip' }]])
     openPanelItem('group-3-market', boardPage())
     await harness.render(slot({ chatId: 'group-3-market' }))
     await act(async () => {})
+    expect(bar()?.getAttribute('data-version')).toBe('1.1.0')
+    install([], [], '1.0.0', 'preinstalled')
     expect(harness.container.querySelector('[data-testid="group-app-slot"]')).not.toBeNull()
-    expect(harness.container.querySelector('[data-testid="group-app-slot-update"]')).toBeNull()
+    expect(bar()).toBeNull()
   })
 })
 
