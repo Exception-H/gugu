@@ -1,3 +1,4 @@
+import '../../test-support/headless-electron';
 import { app, BrowserWindow, WebContentsView } from 'electron';
 import '../../../../../page-navigation-bootstrap';
 import { createServer } from 'node:http';
