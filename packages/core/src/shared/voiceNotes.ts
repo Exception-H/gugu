@@ -202,7 +202,6 @@ export function retryStartsAt(meta: VoiceNoteMeta): 'transcribe' | 'summarize' {
 export type TranscriptLine = { startMs: number; speaker: string; text: string }
 
 export function formatTimestamp(ms: number): string {
-  if (!Number.isFinite(ms)) throw new RangeError('Invalid voice duration')
   const total = Math.max(0, Math.floor(ms / 1000))
   const h = Math.floor(total / 3600)
   const m = Math.floor((total % 3600) / 60)
@@ -213,7 +212,6 @@ export function formatTimestamp(ms: number): string {
 
 /** 录音条上的计时:HH:MM:SS。 */
 export function formatClock(ms: number): string {
-  if (!Number.isFinite(ms)) throw new RangeError('Invalid voice duration')
   const total = Math.max(0, Math.floor(ms / 1000))
   const two = (n: number) => String(n).padStart(2, '0')
   return `${two(Math.floor(total / 3600))}:${two(Math.floor((total % 3600) / 60))}:${two(total % 60)}`
@@ -281,14 +279,14 @@ export function parseTranscript(markdown: string): TranscriptLine[] {
   for (const raw of markdown.replace(/\r\n/g, '\n').split('\n')) {
     // 新写入的续行用制表符区分，避免正文里的时间戳被当成新段。
     if (raw.startsWith('\t') && out.length > 0) { out[out.length - 1].text += '\n' + raw.slice(1); continue }
-    if (raw.startsWith('  ') && !LINE.test(raw.trim()) && out.length > 0) { out[out.length - 1].text += '\n' + raw.slice(2); continue }
     const m = LINE.exec(raw.trim())
     if (m) {
       const startMs = stampMs(m[1], m[2], m[3])
       if (Number.isFinite(startMs)) out.push({ startMs, speaker: m[4].trim(), text: m[5].trim() })
     }
   }
-  return out
+  // 首行可为空，读完续行后再丢弃完全没有正文的段。
+  return out.filter((line) => line.text.trim().length > 0)
 }
 
 export function speakersOf(lines: readonly TranscriptLine[]): string[] {

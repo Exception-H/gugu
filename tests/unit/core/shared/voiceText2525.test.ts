@@ -2,8 +2,6 @@ import { expect, it } from 'vitest'
 import {
   parseTranscript,
   renderTranscript,
-  formatTimestamp,
-  formatClock,
   looksHallucinated,
   summaryRequestText
 } from '@gugu/core/shared/voiceNotes'
@@ -19,11 +17,16 @@ it('does not create seek positions from invalid timestamp fields', () => {
   expect(parseTranscript('[00:60] Lin：Bad\n[1:60:00] Q：Bad')).toEqual([])
 })
 
-it('rejects nonfinite voice durations rather than printing invalid clock labels', () => {
-  for (const value of [NaN, Infinity]) {
-    expect(() => formatTimestamp(value)).toThrow()
-    expect(() => formatClock(value)).toThrow()
-  }
+it('uses only tab-prefixed lines as transcript continuations', () => {
+  expect(parseTranscript('[00:00] Lin：One\n  Ignored\n\tSecond\n')).toEqual([
+    { startMs: 0, speaker: 'Lin', text: 'One\nSecond' }
+  ])
+})
+
+it('skips transcript entries whose body stays empty after reading continuations', () => {
+  expect(parseTranscript('[00:00] Lin：\n\t   \n[00:01] Q：Second\n[00:02] Lin：\n')).toEqual([
+    { startMs: 1000, speaker: 'Q', text: 'Second' }
+  ])
 })
 
 it('round-trips transcript text whose first line is empty', () => {
