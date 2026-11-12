@@ -9,10 +9,10 @@ import { phoneAccountProjects } from '../phoneAccountProjects'
 /**
  * 手机「+」新建页的「项目 · 机器」两行(DESIGN 点击路径 4a):项目是账号上的,机器只是这一次跑在哪。
  *
- * `key` = 项目群 chatId,「上次在这个项目里用的机器」按它记。
+ * `chatId` = 项目群(项目的 id),「上次在这个项目里用的机器」按它记。
  * `homes` = 这个项目绑在哪几台机器上 → 那台上的本地项目 id(建会话时带给那台机器)。
  */
-export type CreateProject = { key: string; name: string; homes: ReadonlyMap<string, string>; groupId: string | undefined }
+export type CreateProject = { chatId: string; name: string; homes: ReadonlyMap<string, string> }
 
 /**
  * 账号下的项目 = accountProjectsStore(桌面项目选择器同一份,归档的不列);各台机器上的本地项目就是它的绑定。
@@ -20,8 +20,7 @@ export type CreateProject = { key: string; name: string; homes: ReadonlyMap<stri
  */
 export function accountProjects(projects: readonly AccountProject[], devices: readonly Device[], cloudDeviceId: string | null): CreateProject[] {
   return phoneAccountProjects(projects, devices, (device) => isAssistantHome(device, cloudDeviceId)).map(({ project, members }) => ({
-    key: project.chatId,
-    groupId: project.chatId,
+    chatId: project.chatId,
     name: project.name,
     homes: new Map(members.map((member) => [member.device.device_id, member.localProjectId] as const)),
   }))

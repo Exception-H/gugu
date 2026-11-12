@@ -34,7 +34,7 @@ describe('手机新建页的「项目 · 机器」(DESIGN 点击路径 4a)', () 
 
   it('一个项目在几台机器上有文件夹 = 账号上一个项目,带着各台上的本地项目', () => {
     expect(accountProjects(store, machines, null)).toHaveLength(1)
-    expect(work).toMatchObject({ key: 'chat-work', name: 'work' })
+    expect(work).toMatchObject({ chatId: 'chat-work', name: 'work' })
     expect([...work!.homes]).toEqual(expect.arrayContaining([['gpu', 'gpu-work'], ['juma', 'juma-work'], ['wen', 'wen-work']]))
   })
 
@@ -75,7 +75,7 @@ describe('手机新建页的「项目 · 机器」(DESIGN 点击路径 4a)', () 
       { chatId: 'chat-old', name: 'old', archived: true, bindings: [] },
       { chatId: 'chat-home', name: '助理', archived: false, bindings: [{ deviceId: 'cloud', localProjectId: 'home' }] },
     ], [...machines, cloud], 'cloud')
-    expect(list.map((one) => one.key)).toEqual(['chat-work', 'chat-empty'])
+    expect(list.map((one) => one.chatId)).toEqual(['chat-work', 'chat-empty'])
     const empty = list[1]!
     expect([...empty.homes]).toEqual([])
     expect(createMachines(empty, machines).every((row) => !row.available)).toBe(true)

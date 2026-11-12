@@ -104,10 +104,10 @@ export function CreateSessionPage({
   const projects = useMemo(() => accountProjects(accountList, devices, cloudComputer?.snapshot?.deviceId ?? null), [accountList, devices, cloudComputer])
   // 默认不选项目(桌面 New task 同:`No project · 默认机器`)。
   const [projectKey, setProjectKey] = useState<string | null>(null)
-  const project = projects.find((one) => one.key === projectKey) ?? null
+  const project = projects.find((one) => one.chatId === projectKey) ?? null
   const rows = useMemo(() => createMachines(project, machines), [project, machines])
-  const runKey = project?.key ?? ''
-  const { machine: machineId, pick } = useProjectRunMachine(runKey, runCandidates(rows, project), project?.groupId)
+  const runKey = project?.chatId ?? ''
+  const { machine: machineId, pick } = useProjectRunMachine(runKey, runCandidates(rows, project), project?.chatId)
   const machine = rows.find((row) => row.device.device_id === machineId)
   const target = (busy: boolean) => (
     <CreateTarget projects={projects} project={project} onProject={setProjectKey} machines={rows} machine={machine} onMachine={pick} machineLabel={machineLabel} busy={busy} />
@@ -129,7 +129,7 @@ export function CreateSessionPage({
       taskGroup={taskGroup}
       onBack={onBack}
       onCreated={(...created) => {
-        rememberRunMachine(project?.groupId, machine.device.device_id)
+        rememberRunMachine(project?.chatId, machine.device.device_id)
         onCreated(machine.device, ...created)
       }}
     />

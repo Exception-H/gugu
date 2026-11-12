@@ -37,7 +37,7 @@ export function CreateTarget({
   const { t: tFlow } = useTranslation('mobileTaskFlow')
   const [open, setOpen] = useState<'project' | 'machine' | null>(null)
   const noProject = '\u0000none'
-  const projectChoices: Choice[] = [{ id: noProject, name: tFlow('noProject') }, ...projects.map((one) => ({ id: one.key, name: one.name }))]
+  const projectChoices: Choice[] = [{ id: noProject, name: tFlow('noProject') }, ...projects.map((one) => ({ id: one.chatId, name: one.name }))]
   const machineChoices: Choice[] = machines.map((row) => ({
     id: row.device.device_id,
     name: label(row.device),
@@ -68,7 +68,7 @@ export function CreateTarget({
           </div>
           <div className="gg-aw-choice-group" role="radiogroup" data-dimension={open}>
             {(open === 'project' ? projectChoices : machineChoices).map((choice) => {
-              const selected = choice.id === (open === 'project' ? project?.key ?? noProject : machine?.device.device_id)
+              const selected = choice.id === (open === 'project' ? project?.chatId ?? noProject : machine?.device.device_id)
               return (
                 <Button
                   key={choice.id}

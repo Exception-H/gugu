@@ -13,6 +13,7 @@ import {
 import { assistantDescendants, isAssistantSession } from '@/session/renderer/features/assistant/assistant-lineage'
 import { sidebarStateGroup } from '@/session/renderer/features/sidebar/session-groups'
 import { sessionPresentation } from './watch-status'
+import { groupRowOrder } from '@/session/renderer/features/projects/stores/project-group-layout'
 import type { SessionDirectoryRow } from '@/session/shared/remote-sessions/session-directory'
 import type { AccountProjectsStore } from '@/session/renderer/features/projects/stores/account-projects-store'
 
@@ -165,12 +166,14 @@ export function sessionSections(
   }
   type Cell = NonNullable<ReturnType<typeof cell>>
   const present = (list: (Cell | null)[]): Cell[] => list.filter((entry): entry is Cell => entry !== null)
-  // 一个项目一格:同一个格键的各台机器上的本地项目并进来,代表取第一台(机器给的次序)上的那个。
-  const members = new Map<string, { project: SessionpageProjectSummary; projectIds: string[]; deviceIds: Set<string> }>()
+  // 一个项目一格:同一个格键的各台机器上的本地项目并进来,代表与桌面侧栏、手机项目页同一条 groupRowOrder(在线的在前,再按 id)。
+  const members = new Map<string, { project: SessionpageProjectSummary; deviceId: string; projectIds: string[]; deviceIds: Set<string> }>()
+  const order = (deviceId: string, id: string) => ({ id, machine: deviceId, online: fold.online(deviceId), createdAt: null })
   for (const machine of machines) {
     for (const project of projectsOf(machine)) {
       const key = projectSectionKey(machine.deviceId, project.id, project.chatId)
-      const member = members.get(key) ?? { project, projectIds: [], deviceIds: new Set<string>() }
+      const member = members.get(key) ?? { project, deviceId: machine.deviceId, projectIds: [], deviceIds: new Set<string>() }
+      if (groupRowOrder(order(machine.deviceId, project.id), order(member.deviceId, member.project.id)) < 0) Object.assign(member, { project, deviceId: machine.deviceId })
       member.projectIds.push(project.id)
       member.deviceIds.add(machine.deviceId)
       members.set(key, member)
