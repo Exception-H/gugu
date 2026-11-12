@@ -25,21 +25,33 @@ describe('#6418 managedGroupChats', () => {
 })
 
 describe('#6418 listManagedGroupJoinRequests', () => {
-  it('逐群读、带上群信息、新的在前', async () => {
-    const list = vi.spyOn(chatService, 'listGroupJoinRequests').mockImplementation(async (chatId: string) => (
-      chatId === 'a' ? [request('r1', 'a', '2026-09-24T01:00:00Z')] : [request('r2', 'b', '2026-09-24T02:00:00Z')]
-    ))
+  it('一次读全部我管理的群、带上群信息、新的在前', async () => {
+    const list = vi.spyOn(chatService, 'listManagedGroupJoinRequests').mockResolvedValue([
+      request('r1', 'a', '2026-09-24T01:00:00Z'), request('r2', 'b', '2026-09-24T02:00:00Z'),
+    ])
     const rows = await listManagedGroupJoinRequests([group('a', 'owner'), group('b', 'admin')])
-    expect(list.mock.calls.map(([id]) => id).sort()).toEqual(['a', 'b'])
+    expect(list).toHaveBeenCalledTimes(1)
     expect(rows.map((row) => row.id)).toEqual(['r2', 'r1'])
     expect(rows[0].group).toEqual({ id: 'b', name: '群-b', avatar_url: null })
   })
 
-  it('任何一个群读失败就整体失败', async () => {
-    vi.spyOn(chatService, 'listGroupJoinRequests').mockImplementation(async (chatId: string) => {
-      if (chatId === 'b') throw new Error('network down')
-      return []
-    })
+  it('请求数不随群数增长:200 个群也是一次读;没有我管理的群就一发不打', async () => {
+    const list = vi.spyOn(chatService, 'listManagedGroupJoinRequests').mockResolvedValue([])
+    await listManagedGroupJoinRequests(Array.from({ length: 200 }, (_, i) => group(`g${i}`, 'owner')))
+    expect(list).toHaveBeenCalledTimes(1)
+    expect(await listManagedGroupJoinRequests([])).toEqual([])
+    expect(list).toHaveBeenCalledTimes(1)
+  })
+
+  it('只留调用方问到的群:别的群的行不带进来', async () => {
+    vi.spyOn(chatService, 'listManagedGroupJoinRequests').mockResolvedValue([
+      request('r1', 'a', '2026-09-24T01:00:00Z'), request('r9', 'unknown', '2026-09-24T03:00:00Z'),
+    ])
+    expect((await listManagedGroupJoinRequests([group('a', 'owner')])).map((row) => row.id)).toEqual(['r1'])
+  })
+
+  it('读失败就整体失败', async () => {
+    vi.spyOn(chatService, 'listManagedGroupJoinRequests').mockRejectedValue(new Error('network down'))
     await expect(listManagedGroupJoinRequests([group('a', 'owner'), group('b', 'admin')])).rejects.toThrow('network down')
   })
 })
