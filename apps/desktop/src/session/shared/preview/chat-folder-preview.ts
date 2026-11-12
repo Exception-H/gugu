@@ -52,7 +52,7 @@ export function chatFolderPreviewCsp(origin: string): string {
 
 /** `bytes=a-b`, `bytes=a-`, `bytes=-n` over a file of `size`; one range only (what media elements ask). */
 export function byteRange(header: string | null | undefined, size: number): { start: number; end: number } | 'unsatisfiable' | null {
-  const match = header ? /^bytes=(\d*)-(\d*)$/.exec(header.trim()) : null;
+  const match = header ? /^bytes=(\d*)-(\d*)$/i.exec(header.trim()) : null;
   if (!match || (match[1] === '' && match[2] === '')) return null;
   if (size === 0) return 'unsatisfiable';
   if (match[1] === '') {
