@@ -23,7 +23,7 @@ function ops(overrides: Partial<ProjectAgentOps> = {}): ProjectAgentOps {
 
 describe('agent project operations', () => {
   it('reads the current project and its actual folder IDs', async () => {
-    expect(await runProjectAgentAction({ projectId: 'p1' }, { action: 'project_get' }, ops())).toMatchObject({ project_id: 'chat1', chat_id: 'chat1', folders: [{ folder_id: 'root', kind: 'root' }, { path: '/work/docs' }] });
+    expect(await runProjectAgentAction({ projectId: 'p1' }, { action: 'project_get' }, ops())).toMatchObject({ project_id: 'chat1', folders: [{ folder_id: 'root', kind: 'root' }, { path: '/work/docs' }] });
   });
 
   it('names every project by its project group: one row per group, none for a local project in no group', async () => {
@@ -151,7 +151,7 @@ describe('agent project operations', () => {
     const removed = await runProjectAgentAction({}, { action: 'project_remove_device', project_id: 'shared' }, api) as { undo: { tool: 'project_restore_device'; project_id: string; path: string; expected_chat_id: string | null } };
     expect(removed.undo).toEqual({ tool: 'project_restore_device', project_id: 'shared', path: '/work/app', expected_chat_id: 'original' });
     const { tool, ...args } = removed.undo;
-    expect(await runProjectAgentAction({}, { action: tool, ...args }, api)).toMatchObject({ restored: true, project_id: 'shared', chat_id: 'shared' });
+    expect(await runProjectAgentAction({}, { action: tool, ...args }, api)).toMatchObject({ restored: true, project_id: 'shared' });
     expect(chat).toBe('shared');
   });
 
@@ -170,7 +170,7 @@ describe('agent project operations', () => {
 
   it('reserves the new project group for the acting agent to materialize', async () => {
     const api = ops();
-    expect(await runProjectAgentAction({}, { action: 'project_create', name: 'App', path: '/work/app' }, api)).toMatchObject({ project_id: 'chat1', chat_id: 'chat1', group_notice: { chat_id: 'chat1' } });
+    expect(await runProjectAgentAction({}, { action: 'project_create', name: 'App', path: '/work/app' }, api)).toMatchObject({ project_id: 'chat1', group_notice: { chat_id: 'chat1' } });
     expect(api.ensureGroup).toHaveBeenCalledWith('p1');
   });
 

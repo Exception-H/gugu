@@ -22,7 +22,7 @@ export interface AgentCreateDefaults {
    */
   projectByChat: Record<string, { deviceId: string; projectId: string }>
   /**
-   * 项目与机器解耦:每个项目(键 = 项目群 chatId,还没绑群 = 那个本地项目 id)上次选在哪台机器上跑(设备 id)。
+   * 项目与机器解耦:每个项目(键 = 项目群 chatId)上次选在哪台机器上跑(设备 id)。
    * 跟着账号走:手机、别的桌面打开同一个项目,默认的还是这台。
    */
   machineByProject: Record<string, string>

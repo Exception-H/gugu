@@ -18,6 +18,7 @@ export type ProjectAgentAction =
   | { action: 'project_remove_device'; project_id?: string; path?: string }
   | { action: 'project_restore_device'; project_id?: string; path: string; expected_chat_id: string | null }
   | { action: 'project_prepare_device'; project_id?: string }
+  // Machine-to-machine (project-device-link.ts), never an agent's tool: `chat_id` is the wire name released hosts read.
   | { action: 'project_bind_folder'; chat_id: string; name: string; path: string; merge_existing?: boolean }
   | { action: 'project_add_device'; project_id?: string; target_device: string; path: string; merge_existing?: boolean }
 
@@ -86,7 +87,7 @@ export async function runProjectAgentAction(context: { projectId?: string }, act
   if (action.action === 'project_create') {
     const project = value(await api.create(action.name, action.path))
     const chatId = value(await api.ensureGroup(project.id)).chatId
-    return { ...row(project, chatId), chat_id: chatId, group_notice: notice(chatId, `创建了项目「${project.name}」，根目录是 ${project.path}。`) }
+    return { ...row(project, chatId), group_notice: notice(chatId, `创建了项目「${project.name}」，根目录是 ${project.path}。`) }
   }
   if (action.action === 'project_bind_folder') return bindFolder(action, api)
   if (action.action === 'project_add_device') throw new Error('project_add_device must be routed through the device host')
@@ -103,7 +104,7 @@ export async function runProjectAgentAction(context: { projectId?: string }, act
     const source = (await api.inspect(action.path)).existingProject
     if (!source || !sameFolder(source.path, action.path)) throw new Error(`No project root at ${action.path} on this device`)
     value(await api.bind(source.id, chatId, action.expected_chat_id))
-    return { ...row(source, chatId), restored: true, chat_id: chatId, group_notice: notice(chatId, `恢复了这台设备上的「${source.name}」与共享项目的关联。`), undo: { tool: 'project_remove_device', project_id: chatId, path: source.path } }
+    return { ...row(source, chatId), restored: true, group_notice: notice(chatId, `恢复了这台设备上的「${source.name}」与共享项目的关联。`), undo: { tool: 'project_remove_device', project_id: chatId, path: source.path } }
   }
   if (!locals.length) throw new Error(`This device has no folder for project:${chatId}. Link one with project_add_device`)
   const id = locals[0]!
@@ -111,10 +112,11 @@ export async function runProjectAgentAction(context: { projectId?: string }, act
   if (!project) throw new Error(`Project not found: ${id}`)
   if (action.action === 'project_prepare_device') {
     const group = chatId ?? value(await api.ensureGroup(id)).chatId
+    // project_prepare_device's answer is read by released hosts' project_add_device as `chat_id`.
     return { ...row(project, group), chat_id: group }
   }
   const foldersOf = async () => (await Promise.all(locals.map(async (local) => value(await api.folders(local)).map((folder) => ({ ...folder, owner: local }))))).flat()
-  if (action.action === 'project_get') return { ...row(project, chatId), chat_id: chatId, folders: (await foldersOf()).map((f) => ({ folder_id: f.workspaceId, path: f.path, kind: f.kind, branch: f.branch, sessions: f.sessionIds.map((session_id) => ({ session_id })) })) }
+  if (action.action === 'project_get') return { ...row(project, chatId), folders: (await foldersOf()).map((f) => ({ folder_id: f.workspaceId, path: f.path, kind: f.kind, branch: f.branch, sessions: f.sessionIds.map((session_id) => ({ session_id })) })) }
   if (action.action === 'project_add_folder') {
     if (action.merge_existing || action.source_project_id) {
       if (!action.merge_existing || !action.source_project_id) {
@@ -204,9 +206,9 @@ async function bindFolder(action: Extract<ProjectAgentAction, { action: 'project
   const projectId = value(await api.localProjectOfGroup(action.chat_id))
   if (projectId) {
     const already = value(await api.folders(projectId)).find((f) => sameFolder(f.path, action.path))
-    if (already) return { project_id: action.chat_id, folder_id: already.workspaceId, path: already.path, chat_id: action.chat_id, already_attached: true }
+    if (already) return { project_id: action.chat_id, folder_id: already.workspaceId, path: already.path, already_attached: true }
     const folder = value(await api.attach(projectId, action.path))
-    return { project_id: action.chat_id, folder_id: folder.workspaceId, path: folder.path, chat_id: action.chat_id, group_notice: notice(action.chat_id, `把这台设备上的 ${folder.path} 挂进了项目「${action.name}」。`), undo: { tool: 'project_remove_folder', project_id: action.chat_id, folder_id: folder.workspaceId } }
+    return { project_id: action.chat_id, folder_id: folder.workspaceId, path: folder.path, group_notice: notice(action.chat_id, `把这台设备上的 ${folder.path} 挂进了项目「${action.name}」。`), undo: { tool: 'project_remove_folder', project_id: action.chat_id, folder_id: folder.workspaceId } }
   }
   const existing = (await api.inspect(action.path)).existingProject
   if (existing && !sameFolder(existing.path, action.path)) throw new Error(`Folder already belongs to project ${existing.name}`)
@@ -223,7 +225,7 @@ async function bindFolder(action: Extract<ProjectAgentAction, { action: 'project
     sessionCountOf: api.sessionCount,
   }, { rowId: '', machine: null, path: action.path })
   if (!linked.ok) throw linked.error
-  return { project_id: action.chat_id, path: action.path, chat_id: action.chat_id, group_notice: notice(action.chat_id, `把这台设备上的 ${action.path} 接进了项目「${action.name}」。`), undo: { tool: 'project_remove_device', project_id: action.chat_id, path: action.path } }
+  return { project_id: action.chat_id, path: action.path, group_notice: notice(action.chat_id, `把这台设备上的 ${action.path} 接进了项目「${action.name}」。`), undo: { tool: 'project_remove_device', project_id: action.chat_id, path: action.path } }
 }
 
 export function isProjectAgentAction(action: { action: string }): action is ProjectAgentAction {
