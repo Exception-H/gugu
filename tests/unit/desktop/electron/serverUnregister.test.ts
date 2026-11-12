@@ -36,15 +36,15 @@ describe('gugu-server unregister', () => {
   })
 
   it('连不上云端 ⇒ unreachable,本地登录态留着(卸载据此中止,网络好了重卸能补上)', async () => {
-    for (const over of [
-      { refresh: vi.fn(async () => { throw new Error('ENOTFOUND') }) },
-      { deviceId: vi.fn(async () => { throw new Error('fetch failed') }) },
-    ]) {
+    for (const [over, cause] of [
+      [{ refresh: vi.fn(async () => { throw new Error('ENOTFOUND') }) }, 'ENOTFOUND'],
+      [{ deviceId: vi.fn(async () => { throw new Error('fetch\nfailed') }) }, 'fetch failed'],
+    ] as const) {
       const { d, lines } = deps(over)
       expect(await runUnregister(d)).toBe('unreachable')
       expect(d.clearLocal).not.toHaveBeenCalled()
       expect(d.revoke).not.toHaveBeenCalled()
-      expect(lines).toEqual([`${UNREGISTERED_MARK} unreachable`])
+      expect(lines).toEqual([`${UNREGISTERED_MARK} unreachable ${cause}`])
     }
   })
 
