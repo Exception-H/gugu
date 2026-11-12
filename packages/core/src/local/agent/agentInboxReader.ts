@@ -254,15 +254,35 @@ export function readAgentInboxBatchAuditForTest(): Array<{ agentUserId: string; 
 }
 
 const PULL_LIMIT = 80
-/** pull 是 single-flight 的:半开连接(合盖/切网/代理挂住)不结算就会一直占着这个 agent 的槽,新消息全进不来。 */
-const PULL_FETCH_TIMEOUT_MS = 15_000
+/**
+ * pull 是 single-flight 的:半开连接(合盖/切网/代理挂住)不结算,那一个 promise 就一直占着这个 agent 的槽,
+ * 新消息全进不来。上限只用来兜住「永远不结算」:慢网仍按两次尝试继续等(读 RPC 无副作用,可安全重试),
+ * 30s–240s 才返回的慢请求照样拿得到结果,不比原来的默认行为更早失败。
+ */
+const PULL_FETCH_TIMEOUT_MS = 120_000
+const PULL_FETCH_ATTEMPTS = 2
+
+function isFetchTimeout(error: unknown): boolean {
+  return (error as { name?: string } | null)?.name === 'TimeoutError'
+}
+
+/** 第一次超时不是失败,是这个连接不结算:立刻换一条重试;两次都不结算才把异常交出去。 */
+async function fetchPull(url: string, init: RequestInit): Promise<Response> {
+  for (let attempt = 1; ; attempt++) {
+    try {
+      return await fetch(url, { ...init, signal: AbortSignal.timeout(PULL_FETCH_TIMEOUT_MS) })
+    } catch (error) {
+      if (attempt >= PULL_FETCH_ATTEMPTS || !isFetchTimeout(error)) throw error
+    }
+  }
+}
 
 // ── 缺省云端实现 ────────────────────────────────────────────────────────────────
 async function fetchUnreadViaRpc(
   input: AgentInboxFetchInput,
   accessToken: string,
 ): Promise<AgentInboxUnreadRow[]> {
-  const response = await fetch(`${getSupabaseUrl().replace(/\/+$/, '')}/rest/v1/rpc/pull_agent_inbox_v2`, {
+  const response = await fetchPull(`${getSupabaseUrl().replace(/\/+$/, '')}/rest/v1/rpc/pull_agent_inbox_v2`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
@@ -271,7 +291,6 @@ async function fetchUnreadViaRpc(
       'Accept-Profile': 'identity',
       'Content-Profile': 'identity',
     },
-    signal: AbortSignal.timeout(PULL_FETCH_TIMEOUT_MS),
     body: JSON.stringify({
       p_agent_user_id: input.agentUserId,
       p_chat_id: input.chatId ?? null,

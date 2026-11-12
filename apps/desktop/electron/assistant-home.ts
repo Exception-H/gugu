@@ -32,8 +32,11 @@ export function installAssistantHome(): void {
   const owned = (event: Electron.IpcMainInvokeEvent, id: string) => {
     if (owners.get(id) !== event.sender) throw new Error('This assistant preparation belongs to another window')
   }
-  // prepare / wipe 没有 attempt id 可认:它们会建、也会 `rm -rf` 本机助理的家,只认主窗口 ——
-  // 会话页与咕咕同文档同窗口,不是另一扇窗;preload 又是通用桥,❌ 任意拿到 channel 的渲染层都能清。
+  // prepare / wipe 没有 attempt id 可认:它们会建、也会 `rm -rf` 本机助理的家,所以只认主窗口。
+  // 现有调用方都在主窗口里:AssistantCloseHost(MainLayout)、lib/assistantSetup、assistant-move-wire;
+  // 会话页与咕咕**同文档同窗口**(EmdashSessionFrame 把 session-embedded 入口挂进主窗的 Shadow DOM),
+  // 不是另一扇窗;而 preload 暴露的是通用桥 electronAPI.invoke(channel, ...),不校验 = 任意拿到 channel
+  // 的渲染层(或注入的脚本)都能清空本机助理的家。
   const fromMainWindow = (event: Electron.IpcMainInvokeEvent) => {
     const main = getMainWindow()
     if (!main || event.sender !== main.webContents) throw new Error('This assistant home belongs to the main window')

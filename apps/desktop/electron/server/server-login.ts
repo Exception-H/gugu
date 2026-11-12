@@ -38,8 +38,17 @@ import { accountDataDir, applyAccountEnv, clearSignedOutMark, emailFromAccessTok
 
 type StartResponse = { device_code: string; user_code: string; expires_in: number; interval: number }
 
-/** 人在对话框前等这一个结果:连接卡住(半开)时必须自己收场,❌ 一直转。 */
-const LOGIN_FETCH_TIMEOUT_MS = 15_000
+/**
+ * 人在对话框前等这一个结果:连接卡住(半开)时必须自己收场,❌ 一直转。
+ * 这只是单次请求的上限,不是登录的上限 —— 超时按「这一轮没答」处理,下一轮接着问,
+ * 直到短码过期;慢网只是变成多问几次,最终结果与以前一样。
+ */
+const LOGIN_FETCH_TIMEOUT_MS = 30_000
+const LOGIN_START_ATTEMPTS = 2
+
+function isFetchTimeout(error: unknown): boolean {
+  return (error as { name?: string } | null)?.name === 'TimeoutError'
+}
 
 function functionsUrl(path: string): string {
   return `${getSupabaseUrl().replace(/\/$/, '')}/functions/v1/server-login${path}`
@@ -82,12 +91,22 @@ async function postJson(url: string, body: unknown): Promise<{ status: number; d
   return { status: response.status, data }
 }
 
+/** 半开连接换一条再问;两次都不结算才把异常交出去。 */
+async function postJsonRetryingTimeout(url: string, body: unknown, attempts: number) {
+  for (let attempt = 1; ; attempt++) {
+    try {
+      return await postJson(url, body)
+    } catch (error) {
+      if (attempt >= attempts || !isFetchTimeout(error)) throw error
+    }
+  }
+}
+
 /** 用一次性 token_hash 向 GoTrue 换一条全新的会话(access + refresh)。 */
 async function exchangeTokenHash(tokenHash: string, type: string): Promise<{ accessToken: string; refreshToken: string }> {
   const response = await fetch(`${getSupabaseUrl().replace(/\/$/, '')}/auth/v1/verify`, {
     method: 'POST',
     headers: { 'content-type': 'application/json', apikey: getSupabaseAnonKey() },
-    signal: AbortSignal.timeout(LOGIN_FETCH_TIMEOUT_MS),
     body: JSON.stringify({ type, token_hash: tokenHash }),
   })
   const data = (await response.json().catch(() => ({}))) as { access_token?: string; refresh_token?: string; msg?: string }
@@ -169,7 +188,7 @@ export async function runServerLogin(out: Out = defaultOut, args: readonly strin
     return LOGIN_EXIT_TUNNEL_CLOSED
   }
   const machineId = await machineIdOrNull()
-  const started = await postJson(functionsUrl('/start'), { machine: machineInfo(machineId) })
+  const started = await postJsonRetryingTimeout(functionsUrl('/start'), { machine: machineInfo(machineId) }, LOGIN_START_ATTEMPTS)
   if (started.status !== 200) {
     out(`登录请求没发出去(${started.status}): ${JSON.stringify(started.data)}`)
     return 1
@@ -206,7 +225,14 @@ async function pollUntilDone(
   while (Date.now() < deadline) {
     if (!first) await sleep(interval)
     first = false
-    const polled = await postJson(functionsUrl('/poll'), { device_code: deviceCode, ...(machineId ? { machine_id: machineId } : {}) })
+    let polled: Awaited<ReturnType<typeof postJson>>
+    try {
+      polled = await postJson(functionsUrl('/poll'), { device_code: deviceCode, ...(machineId ? { machine_id: machineId } : {}) })
+    } catch (error) {
+      // 这一轮连接没结算:当作「还没结果」,按下一次间隔再问;authorization_pending 同一条路。
+      if (!isFetchTimeout(error)) throw error
+      continue
+    }
     if (polled.status === 200 && typeof polled.data.token_hash === 'string') {
       const tokens = await exchangeTokenHash(polled.data.token_hash, String(polled.data.type ?? 'magiclink'))
       const userId = userIdFromSupabaseAccessToken(tokens.accessToken)

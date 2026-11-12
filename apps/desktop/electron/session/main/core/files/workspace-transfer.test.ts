@@ -111,7 +111,7 @@ describe('按块写,按「打开时那一版」核对', () => {
   });
 });
 
-describe('挂起上传按「目标路径 + uploadId」隔离,并有数量 / 字节上限', () => {
+describe('挂起上传按目标路径隔离,重试换 uploadId 不再多留一份', () => {
   it('同一个 uploadId 用在两个文件上,各自接各自的段,❌ 串成同一次上传', async () => {
     const uploads = createWorkspaceUploads();
     const part = { uploadId: 'shared', total: 4, expectedEtag: null };
@@ -123,23 +123,19 @@ describe('挂起上传按「目标路径 + uploadId」隔离,并有数量 / 字�
     expect(readFileSync(path.join(root, 'b.txt'), 'utf8')).toBe('cdgh');
   });
 
-  it('挂起的保存数量有上限:满了丢最久没动的那一份,它再传回来是从头再存', async () => {
-    const uploads = createWorkspaceUploads({ maxPendingUploads: 2, maxBytes: 10, maxPendingBytes: 100 });
-    const part = (uploadId: string) => ({ path: `${uploadId}.txt`, uploadId, total: 4, expectedEtag: null });
-    await uploads.write(root, { ...part('u1'), offset: 0, data: b64('ab'), final: false });
-    await waitForNextTouch();
-    await uploads.write(root, { ...part('u2'), offset: 0, data: b64('cd'), final: false });
-    await waitForNextTouch();
-    await uploads.write(root, { ...part('u3'), offset: 0, data: b64('ef'), final: false });
-    await expect(uploads.write(root, { ...part('u1'), offset: 2, data: b64('gh'), final: true })).rejects.toMatchObject({
-      code: 'upload_lost',
-    });
-    await uploads.write(root, { ...part('u2'), offset: 2, data: b64('ij'), final: true });
-    expect(readFileSync(path.join(root, 'u2.txt'), 'utf8')).toBe('cdij');
+  it('同一个文件重试换了新的 uploadId:新的那份接替旧的,旧的半截作废(不会两份都攒着)', async () => {
+    const uploads = createWorkspaceUploads();
+    const part = (uploadId: string) => ({ uploadId, total: 4, expectedEtag: null });
+    await uploads.write(root, { ...part('first-try'), path: 'a.txt', offset: 0, data: b64('ab'), final: false });
+    await uploads.write(root, { ...part('retry'), path: 'a.txt', offset: 0, data: b64('xy'), final: false });
+    await expect(uploads.write(root, { ...part('first-try'), path: 'a.txt', offset: 2, data: b64('cd'), final: true }))
+      .rejects.toMatchObject({ code: 'upload_lost' });
+    await uploads.write(root, { ...part('retry'), path: 'a.txt', offset: 2, data: b64('zw'), final: true });
+    expect(readFileSync(path.join(root, 'a.txt'), 'utf8')).toBe('xyzw');
   });
 
-  it('挂起的字节总量有上限:超了先丢最久没动的那一份', async () => {
-    const uploads = createWorkspaceUploads({ maxPendingUploads: 10, maxBytes: 4, maxPendingBytes: 4 });
+  it('很多不同文件同时传时总字节有上限:超了先丢最久没动的那一份', async () => {
+    const uploads = createWorkspaceUploads({ maxBytes: 4, maxPendingBytes: 4 });
     const part = (uploadId: string) => ({ path: `${uploadId}.txt`, uploadId, total: 4, expectedEtag: null });
     await uploads.write(root, { ...part('u1'), offset: 0, data: b64('ab'), final: false });
     await waitForNextTouch();
