@@ -13,7 +13,7 @@ import { alignMessageStore } from './messageStoreRecovery'
 import { ingestMessages, prefetchMessages } from './messageIngest'
 import { messageAccessWrites } from './messageRevisionWrites'
 import { createSupabaseAccountRevisionSource } from './supabaseAccountRevisionSource'
-import { noteBackendAnswer } from './backendReachability'
+import { noteBackendAnswer } from '@gugu/core/cloud/backendReachability'
 
 const log = rendererLogger('im/snapshot')
 const row = z.record(z.string(), z.unknown())

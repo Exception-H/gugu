@@ -3,7 +3,7 @@ import { readStoredAgentTurnFailures, type StoredAgentTurnFailure, type StoredFa
 import { readAgentTurnFailureDismissals, writeAgentTurnFailureDismissals, type AgentTurnFailureDismissals } from '../lib/agentTurnFailureDismissals'
 import { subscribePrivateUserEventBus, unsubscribePrivateUserEventBus } from '../lib/realtimeChannel'
 import { rendererLogger } from '../lib/log'
-import { subscribeBackendRecovered } from '../lib/backendReachability'
+import { subscribeBackendRecovered } from '@gugu/core/cloud/backendReachability'
 import { useAuth } from '../store/auth'
 
 const log = rendererLogger('agent/stored-turn-failure')

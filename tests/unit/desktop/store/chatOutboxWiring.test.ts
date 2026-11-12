@@ -17,7 +17,7 @@ import {
 import type { OutboxRecord } from '../../../../apps/desktop/src/lib/imRepository'
 import { setLocalePreference } from '../../../../apps/desktop/src/i18n'
 import { chat } from '../../../support/testHarness'
-import { bindBackendProbe, noteBackendAnswer } from '../../../../apps/desktop/src/lib/backendReachability'
+import { bindBackendProbe, noteBackendAnswer } from '../../../../packages/core/src/cloud/backendReachability'
 const logError = vi.hoisted(() => vi.fn())
 vi.mock('../../../../apps/desktop/src/lib/log', () => ({ rendererLogger: () => ({ debug: vi.fn(), info: vi.fn(), warn: vi.fn(), error: logError }) }))
 vi.mock('../../../../apps/desktop/src/lib/loading/LoadingIndicator', () => ({ LoadingIndicator: () => null }))

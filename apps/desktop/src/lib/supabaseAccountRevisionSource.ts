@@ -9,7 +9,7 @@ import {
 } from './realtimeChannel'
 import { parseWakeHead } from './chatProjection'
 import { dataClient } from './supabase'
-import { noteBackendAnswer } from './backendReachability'
+import { noteBackendAnswer } from '@gugu/core/cloud/backendReachability'
 
 export function createSupabaseAccountRevisionSource(): AccountRevisionSource {
   return {

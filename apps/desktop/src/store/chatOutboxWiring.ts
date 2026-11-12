@@ -31,7 +31,7 @@ import {
 } from '../lib/imRepository'
 import { advanceReadWatermark, applyThreadSnapshot, type PatchChat } from './chatRealtimeMutations'
 import { createChatOutbox, type ChatOutbox } from './chatOutbox'
-import { noteBackendWriteFailed, subscribeBackendRecovered } from '../lib/backendReachability'
+import { noteBackendRequestFailed, subscribeBackendRecovered } from '@gugu/core/cloud/backendReachability'
 import { i18n } from '@/i18n'
 import { chatDisplayName } from '@gugu/core/shared/ui/chatModels'
 import { rendererLogger } from '@/lib/log'
@@ -219,7 +219,7 @@ export function createOutboxWiring(io: OutboxWiringIo): OutboxWiring {
       if (record.operation?.kind === 'attachment') attachmentTimings.get(record.clientMessageId)?.finish('failed', 'outbox')
       finishChatSendTiming(record.clientMessageId)
       rendererLogger('chat/outbox').error({ chatId: record.chatId, messageId: record.clientMessageId, error: record.lastError }, 'message send failed')
-      noteBackendWriteFailed() // if the backend is down, the beat's next success retries this row
+      noteBackendRequestFailed() // if the backend is down, the beat's next success retries this row
       const onScreen = record.payload.threadRootId
         ? io.activeChatId() === record.chatId && io.activeThreadRootId() === record.payload.threadRootId
         : io.activeChatId() === record.chatId

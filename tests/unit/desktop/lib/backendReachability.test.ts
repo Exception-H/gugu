@@ -11,12 +11,12 @@ vi.mock('../../../../apps/desktop/src/lib/supabase', () => ({
 vi.mock('../../../../apps/desktop/src/lib/realtimeChannel', () => ({ subscribePrivateUserEventBus: vi.fn(), unsubscribePrivateUserEventBus: vi.fn() }))
 vi.mock('../../../../apps/desktop/src/lib/log', () => ({ rendererLogger: () => ({ debug: vi.fn(), info: vi.fn(), warn: vi.fn(), error: vi.fn() }) }))
 
-import { bindBackendProbe, noteBackendAnswer, subscribeBackendRecovered } from '../../../../apps/desktop/src/lib/backendReachability'
+import { bindBackendProbe, noteBackendAnswer, subscribeBackendRecovered } from '../../../../packages/core/src/cloud/backendReachability'
 import { createSupabaseAccountRevisionSource } from '../../../../apps/desktop/src/lib/supabaseAccountRevisionSource'
-import { chatSeq, writeRead } from '../../../../apps/desktop/src/lib/readWriter'
+import { chatSeq, forgetUnconfirmedReads, writeRead } from '../../../../apps/desktop/src/lib/readWriter'
 
 const unbinds: Array<() => void> = []
-afterEach(() => { for (const unbind of unbinds.splice(0)) unbind(); db.rpc.mockReset(); db.syncSince.mockReset() })
+afterEach(() => { for (const unbind of unbinds.splice(0)) unbind(); forgetUnconfirmedReads(); db.rpc.mockReset(); db.syncSince.mockReset() })
 
 describe('backend recovered = the sync pull failed, then answered', () => {
   it('fires once on the failed → answered edge, never while the backend keeps answering', () => {
@@ -80,5 +80,33 @@ describe('a cloud read that could not be written goes out again when the backend
     noteBackendAnswer(true)
     await Promise.resolve()
     expect(db.rpc).toHaveBeenCalledOnce()
+  })
+
+  it('a read still not written on recovery waits for the next one (local is the fact), until a newer read replaces it', async () => {
+    unbinds.push(bindBackendProbe(() => {}))
+    db.rpc.mockResolvedValue({ data: null, error: { message: 'Failed to fetch' } })
+    await expect(writeRead({ kind: 'thread', chatId: 'c', rootId: 'r', seq: chatSeq(4) })).rejects.toThrow('Failed to fetch')
+    noteBackendAnswer(false); noteBackendAnswer(true)
+    await vi.waitFor(() => expect(db.rpc).toHaveBeenCalledTimes(2))
+    await new Promise((resolve) => setTimeout(resolve, 0)) // the failed push is kept again
+    db.rpc.mockReset()
+    db.rpc.mockResolvedValue({ data: [{ stream_id: 'thread:c:r' }], error: null })
+    noteBackendAnswer(false); noteBackendAnswer(true)
+    await vi.waitFor(() => expect(db.rpc).toHaveBeenCalledOnce())
+    expect(db.rpc).toHaveBeenCalledWith('mark_stream_read', expect.objectContaining({ p_chat_id: 'c', p_thread_root_id: 'r', p_seq: 4 }))
+    noteBackendAnswer(false); noteBackendAnswer(true)
+    await Promise.resolve(); await Promise.resolve()
+    expect(db.rpc).toHaveBeenCalledOnce()
+  })
+
+  it('an account switch forgets the reads the previous account could not write (they never go out under the next one)', async () => {
+    unbinds.push(bindBackendProbe(() => {}))
+    db.rpc.mockResolvedValue({ data: null, error: { message: 'Failed to fetch' } })
+    await expect(writeRead({ kind: 'main', chatId: 'shared-group', seq: chatSeq(12) })).rejects.toThrow('Failed to fetch')
+    forgetUnconfirmedReads()
+    db.rpc.mockReset()
+    noteBackendAnswer(false); noteBackendAnswer(true)
+    await Promise.resolve(); await Promise.resolve()
+    expect(db.rpc).not.toHaveBeenCalled()
   })
 })

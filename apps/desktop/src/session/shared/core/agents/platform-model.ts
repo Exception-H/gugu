@@ -24,12 +24,6 @@ export const SESSIONPAGE_PLATFORM_CATALOG_CHANNEL = 'sessionpage-platform-catalo
 export const SESSIONPAGE_PLATFORM_RETRY_CHANNEL = 'sessionpage-platform:retry';
 
 /**
- * 账号的同步节拍失败过、又拉通了(backendReachability):后端回来了。这台机器上因起不来而失败、还压着消息的会话
- * 各自真去重来一次(跟人点重试同一条路:先清取票退避,再 start),❌ 等人手点。
- */
-export const SESSIONPAGE_BACKEND_RECOVERED_CHANNEL = 'sessionpage-platform:backend-recovered';
-
-/**
  * 设置「模型」页开关了一条(#7056)⇒ 同一窗口里所有模型下拉重取目录。设置页与会话页是同一个 document
  * 里的两个 bundle(EmdashSessionFrame),`window` 事件两边都收得到;别的设备下次取目录时自然是新的。
  */

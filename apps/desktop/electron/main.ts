@@ -361,7 +361,8 @@ import {
 import { sessionPlatformModel } from './session/main/core/sessions/platform-model-selection'
 import { providerSessionIdForSession } from './session/main/core/sessions/provider-session-id'
 import { SESSIONPAGE_SESSION_RELOAD_CHANNEL } from '../src/session/shared/core/agents/session-reload'
-import { SESSIONPAGE_BACKEND_RECOVERED_CHANNEL, SESSIONPAGE_PLATFORM_RETRY_CHANNEL } from '../src/session/shared/core/agents/platform-model'
+import { SESSIONPAGE_PLATFORM_RETRY_CHANNEL } from '../src/session/shared/core/agents/platform-model'
+import { subscribeBackendRecovered } from '@gugu/core/cloud/backendReachability'
 import {
   VOICE_NOTE_MEETINGS_CHANNEL,
   VOICE_NOTE_MICROPHONE_CHANNEL,
@@ -2518,12 +2519,12 @@ handleShellChannel(SESSIONPAGE_PLATFORM_RETRY_CHANNEL, (_event, sessionId: unkno
   clearPlatformIssueBackoff(sessionId.trim())
 })
 
-// 后端恢复(渲染层同步节拍失败过又拉通):起不来、还压着消息的会话各自重来一次,先清它的取票退避 —— 和人点重试同一条路。
-ipcMain.handle(SESSIONPAGE_BACKEND_RECOVERED_CHANNEL, () => {
-  if (!sessionLifeBooted) return []
+// 后端恢复(这个宿主的心跳失败过又答上,见 backendReachability):起不来、还压着消息的会话各自重来一次,
+// 先清它的取票退避 —— 和人点重试同一条路。没有窗口的宿主也一样。
+subscribeBackendRecovered(() => {
+  if (!sessionLifeBooted) return
   const started = bootedSessionLife().startAfterOutage(clearPlatformIssueBackoff)
   if (started.length) createLogger('session-life').info({ started }, 'backend recovered; restarting failed sessions')
-  return started
 })
 
 /**

@@ -214,7 +214,7 @@ it('restores group and contact overrides into their distinct account snapshot ke
 })
 
 it('a cold account start is the beat pull too: a failed snapshot then an answered one is the backend-recovered edge', async () => {
-  const { bindBackendProbe, subscribeBackendRecovered } = await import('../../../../apps/desktop/src/lib/backendReachability')
+  const { bindBackendProbe, subscribeBackendRecovered } = await import('../../../../packages/core/src/cloud/backendReachability')
   const unbind = bindBackendProbe(() => {})
   const recovered = vi.fn()
   const unsubscribe = subscribeBackendRecovered(recovered)

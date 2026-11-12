@@ -2,8 +2,8 @@ import { useEffect, type MutableRefObject } from 'react'
 import type { ChatItem } from '@gugu/core/shared/types/chat'
 import type { AccountRevisionCoordinator, AccountRevisionEvent, AccountRevisionListener } from '../lib/accountRevisionCoordinator'
 import { watchRendererRevisionReconcile } from '../lib/accountRevisionReconcile'
-import { bindBackendProbe, subscribeBackendRecovered } from '../lib/backendReachability'
-import { platform } from '../platform'
+import { bindBackendProbe } from '@gugu/core/cloud/backendReachability'
+import { forgetUnconfirmedReads } from '../lib/readWriter'
 import type { AccountImRepository } from '../lib/imRepository'
 import { rendererLogger } from '../lib/log'
 
@@ -63,10 +63,7 @@ export function useAccountStartBeat(userId: string | null | undefined, ports: {
     const stopBeat = watchRendererRevisionReconcile(beat)
     // A failed backend write asks for this same beat now; the beat's pull is what tells the backend came back.
     const unbindProbe = bindBackendProbe(beat)
-    // The desktop host restarts sessions an outage failed (session renderer's platform-retry owns that channel).
-    const stopHostResume = platform.kind === 'electron' ? subscribeBackendRecovered(() => {
-      void import('@/session/renderer/features/sessions/platform-retry').then(({ resumeLocalSessionsAfterOutage }) => resumeLocalSessionsAfterOutage())
-    }) : () => {}
-    return () => { cancelled = true; stopBeat(); unbindProbe(); stopHostResume() }
+    // Reads this account could not write are this account's: they never go out under the next one.
+    return () => { cancelled = true; stopBeat(); unbindProbe(); forgetUnconfirmedReads() }
   }, [coordinatorRef, getImRepository, getRevisionCoordinator, loadChats, paintLocal, registrationsRef, setChats, setChatsLoad, userId])
 }
