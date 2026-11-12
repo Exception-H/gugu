@@ -6,3 +6,5 @@ it('reads indented timestamp rows as new transcript entries', () => {expect(pars
 it('does not create seek positions from invalid timestamp fields', () => {expect(parseTranscript('[00:60] Lin：Bad\n[1:60:00] Q：Bad')).toEqual([])})
 
 it('rejects nonfinite voice durations rather than printing invalid clock labels', () => {for(const value of [NaN,Infinity]) {expect(()=>formatTimestamp(value)).toThrow();expect(()=>formatClock(value)).toThrow()}})
+
+it('round-trips transcript text whose first line is empty', () => {const rows=[{startMs:0,speaker:'Lin',text:'\nSecond'}];expect(parseTranscript(renderTranscript(rows))).toEqual(rows)})

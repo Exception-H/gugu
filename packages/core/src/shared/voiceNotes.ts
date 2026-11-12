@@ -281,7 +281,7 @@ export function parseTranscript(markdown: string): TranscriptLine[] {
   for (const raw of markdown.replace(/\r\n/g, '\n').split('\n')) {
     if (raw.startsWith('  ') && !LINE.test(raw.trim()) && out.length > 0) { out[out.length - 1].text += '\n' + raw.slice(2); continue }
     const m = LINE.exec(raw.trim())
-    if (m && m[5].trim()) {
+    if (m) {
       const startMs = stampMs(m[1], m[2], m[3])
       if (Number.isFinite(startMs)) out.push({ startMs, speaker: m[4].trim(), text: m[5].trim() })
     }
