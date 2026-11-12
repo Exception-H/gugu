@@ -28,7 +28,6 @@ import { ProjectNeedsYouDot, ProjectRowTitle } from './project-row-parts';
 import { SidebarUnreadCount } from './sidebar-list-switch';
 import { requestTopicSplit } from '@/lib/topicSplitRequest';
 import { useSidebarChatSignals } from '@/lib/sidebarChatsBridge';
-import { projectGroupsStore } from '@renderer/features/projects/stores/project-groups-store';
 import { openChatOnScreen } from '@renderer/features/chats/open-chat';
 import {
   SidebarItemMiniButton,
@@ -98,7 +97,7 @@ export const SidebarProjectItem = observer(function SidebarProjectItem({
   // when the "needs you" count returns to zero. When expanded, the per-section header carries it.
   const needsYouCount = sidebarStore.needsYouCountForProject(projectId);
   // gugu-dev#181 项目就是群:行尾挂项目群的未读(含它的话题),壳发过来的那一份;真读了才减。
-  const groupChatId = ref?.chatId ?? projectGroupsStore.chatIdOf(projectId);
+  const groupChatId = ref?.chatId;
   const chatSignals = useSidebarChatSignals();
   const groupUnread = chatSignals?.groupUnread.get(groupChatId ?? '') ?? 0;
   const callingTopic = chatSignals?.groupCallingTopic.get(groupChatId ?? '');
@@ -134,8 +133,7 @@ export const SidebarProjectItem = observer(function SidebarProjectItem({
     }
     if (isProjectActive) {
       // gugu-dev#181 正在开新任务时点这一行 = 回到群聊:还没打字,「新任务」一起撤掉;打了字就留着。
-      const chatId = projectGroupsStore.chatIdOf(rowId);
-      if (chatId && readComposerVerb(chatId) === 'task' && !composerDrafts.get(projectDraftKey(projectId)).trim()) setComposerVerb(chatId, null);
+      if (groupChatId && readComposerVerb(groupChatId) === 'task' && !composerDrafts.get(projectDraftKey(projectId)).trim()) setComposerVerb(groupChatId, null);
       return;
     }
     // The project's block (its group) goes on screen; navigation follows it.

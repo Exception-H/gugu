@@ -706,8 +706,6 @@ describe('NewSessionPage', () => {
 
   // #2412 review ②: a machine picked on New task is remembered for the project only when it holds that project's folder.
   it('remembers the machine picked first only for a project that has a folder there', async () => {
-    const { projectGroupsStore } = await import('@renderer/features/projects/stores/project-groups-store');
-    const chatOf = vi.spyOn(projectGroupsStore, 'chatIdOf').mockImplementation((id) => `chat-${id}`);
     machineRegistry.register('device-9', ['project-remote']);
     mocks.orderedProjects = [{ id: 'project-1', state: 'mounted' }, { id: 'project-remote', state: 'mounted' }];
     remoteHostsStore.requestNewSession('device-9');
@@ -722,7 +720,6 @@ describe('NewSessionPage', () => {
       await act(async () => pick('project-remote').click());
       await vi.waitFor(() => expect(runMachineCloud.remember).toHaveBeenCalledWith('chat-project-remote', 'device-9'));
     } finally {
-      chatOf.mockRestore();
       machineRegistry.forgetMachine('device-9');
     }
   });

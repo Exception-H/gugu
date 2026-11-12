@@ -2,7 +2,9 @@ import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 const state = vi.hoisted(() => ({ rows: new Map<string, string>(), returned: vi.fn() }));
 vi.mock('@renderer/lib/stores/app-state', () => ({ sidebarStore: { rowProjectIdOf: (id: string) => state.rows.get(id) ?? id } }));
 vi.mock('@renderer/app/screen-layout-actions', () => ({ returnToScreen: state.returned }));
+import { runInAction } from 'mobx';
 import { projectGroupsStore } from '@renderer/features/projects/stores/project-groups-store';
+import { accountProjectsStore } from '@renderer/features/projects/stores/account-projects-store';
 import { screenLayout } from '@renderer/app/screen-layout';
 import { groupParticipantPanes } from '@renderer/features/chats/group-participant-panes';
 import { showGroupParticipant } from '@renderer/features/chats/group-participant-actions';
@@ -16,10 +18,18 @@ beforeEach(() => {
     { projectId: first.projectId, chatId: 'shared-project-group' },
     { projectId: visible.projectId, chatId: 'shared-project-group' },
   ]);
+  // Which group a project on screen belongs to is the account's answer.
+  runInAction(() => {
+    accountProjectsStore.localDeviceId = 'this-computer';
+    accountProjectsStore.list = [{
+      chatId: 'shared-project-group', name: 'shared', archived: false,
+      bindings: [first.projectId, visible.projectId].map((localProjectId) => ({ deviceId: 'this-computer', localProjectId })),
+    }];
+  });
 });
 afterEach(() => {
   for (const block of [...screenLayout.blocks.values(), ...screenLayout.parkedContents]) screenLayout.forgetContent(block);
-  groupParticipantPanes.useAccount(null); projectGroupsStore.applyBindings(null, []);
+  groupParticipantPanes.useAccount(null); projectGroupsStore.applyBindings(null, []); accountProjectsStore.clear();
 });
 it('opens beside a project group with one canonical visible project', () => {
   screenLayout.show(first);

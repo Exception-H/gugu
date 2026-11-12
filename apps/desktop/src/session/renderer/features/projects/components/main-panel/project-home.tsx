@@ -13,7 +13,7 @@ import {
   sessionComposerDockedWidthClassName,
 } from '@renderer/features/sessions/session-composer-styles';
 import { useNavigate } from '@renderer/lib/layout/navigation-provider';
-import { projectGroupsStore } from '@renderer/features/projects/stores/project-groups-store';
+import { accountProjectsStore } from '@renderer/features/projects/stores/account-projects-store';
 import { machineRegistry } from '@renderer/lib/machine-routing';
 import { ComposerFolderPicker } from './composer-folder-picker';
 import { useProjectFolderStage, type ProjectFolderStage } from './project-folder-stage';
@@ -117,7 +117,7 @@ export const ProjectTaskComposer = observer(function ProjectTaskComposer({
               key={targetProjectId}
               draftKey={projectDraftKey(projectId)}
               // gugu-dev#181 在项目里派任务:首句落成项目群里的一张任务卡,发完人留在项目块里(点卡把会话拼到右边)。
-              taskChatId={projectGroupsStore.chatIdOf(targetProjectId)}
+              taskChatId={accountProjectsStore.projectOfLocal(rowId)?.chatId}
               openAfterCreate={false}
               placeholder={placeholder}
               verb={verb}

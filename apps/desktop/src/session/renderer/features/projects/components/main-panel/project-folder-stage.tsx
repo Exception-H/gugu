@@ -11,6 +11,7 @@ import { rpc, rpcOn } from '@renderer/lib/ipc';
 import { useShowModal } from '@renderer/lib/modal/modal-provider';
 import { sidebarStore } from '@renderer/lib/stores/app-state';
 import { projectGroupsStore } from '@renderer/features/projects/stores/project-groups-store';
+import { accountProjectsStore } from '@renderer/features/projects/stores/account-projects-store';
 import { machineRegistry } from '@renderer/lib/machine-routing';
 import { remoteHostsStore } from '@renderer/features/remote-hosts/remote-hosts-store';
 import { useEnsureMounted } from '@renderer/features/projects/hooks/use-ensure-mounted';
@@ -64,7 +65,7 @@ export function useProjectFolderStage(projectId: string, { floating = false, onC
   const runMachine = useProjectRunMachine(
     rowId,
     projectMachines.map((machine) => ({ key: scopeKey(machine.id), online: machine.online })),
-    projectGroupsStore.chatIdOf(rowId),
+    accountProjectsStore.projectOfLocal(rowId)?.chatId,
   );
   const scopedFolders = foldersInScope(folders, runMachine.selected, (id) => machineRegistry.machineOf(id) ?? null, (deviceId) => {
     const state = remoteHostsStore.connectionState(deviceId);

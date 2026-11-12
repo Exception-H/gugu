@@ -7,8 +7,7 @@ import { expect, it, vi } from 'vitest';
 
 const state = vi.hoisted(() => ({
   navigate: vi.fn(), expand: vi.fn(), toggle: vi.fn(), beside: vi.fn(), show: vi.fn(), screen: false, topicSplit: vi.fn(),
-  group: undefined as string | undefined,
-  rows: [] as Array<{ kind: 'group'; id: string; chatId: string; name: string }>,
+  rows: [] as Array<{ kind: 'group' | 'local'; id: string; chatId: string; name: string }>,
   openChat: vi.fn(),
   signals: null as null | { groupUnread: Map<string, number>; groupCallingTopic: Map<string, { chatId: string; name: string }> },
 }));
@@ -46,7 +45,6 @@ vi.mock('./project-row-parts', () => ({ ProjectNeedsYouDot: () => null, ProjectR
 vi.mock('./sidebar-list-switch', () => ({ SidebarUnreadCount: () => null }));
 vi.mock('@/lib/sidebarChatsBridge', () => ({ useSidebarChatSignals: () => state.signals }));
 vi.mock('@/lib/topicSplitRequest', () => ({ requestTopicSplit: state.topicSplit }));
-vi.mock('@renderer/features/projects/stores/project-groups-store', () => ({ projectGroupsStore: { chatIdOf: () => state.group } }));
 vi.mock('@renderer/features/chats/open-chat', () => ({ openChatOnScreen: state.openChat }));
 vi.mock('./use-session-drop-target', () => ({ useSessionDropTarget: () => ({ bind: () => ({}) }) }));
 vi.mock('@renderer/features/sessions/set-session-parent-flow', () => ({ moveSessionUnder: vi.fn() }));
@@ -87,7 +85,7 @@ it('a project row whose count comes from a topic calling you opens that topic be
   const host = document.createElement('div');
   document.body.append(host);
   const root = createRoot(host);
-  state.group = 'business-group';
+  state.rows = [{ kind: 'local', id: 'business', chatId: 'business-group', name: 'Research' }];
   try {
     // Control: the count is the group's own main line — only the group opens.
     state.signals = { groupUnread: new Map([['business-group', 2]]), groupCallingTopic: new Map() };
@@ -102,7 +100,7 @@ it('a project row whose count comes from a topic calling you opens that topic be
     expect(state.topicSplit).toHaveBeenCalledWith({ chatId: 'topic-1', name: 'Release', sourceChatId: 'business-group', focusComposer: true });
     expect(state.show).toHaveBeenLastCalledWith({ kind: 'project', projectId: 'business' });
   } finally {
-    state.group = undefined;
+    state.rows = [];
     state.signals = null;
     await act(async () => root.unmount());
     host.remove();

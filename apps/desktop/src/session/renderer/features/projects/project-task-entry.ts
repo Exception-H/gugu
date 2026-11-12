@@ -1,8 +1,7 @@
 import { readChatSummary } from '@/lib/chatSummariesBridge';
 import { setComposerVerb } from '@/lib/composerVerbBridge';
 import { composerDrafts, projectDraftKey } from '@renderer/features/sessions/composer-drafts';
-import { sidebarStore } from '@renderer/lib/stores/app-state';
-import { projectGroupsStore } from './stores/project-groups-store';
+import { accountProjectsStore } from './stores/account-projects-store';
 
 /**
  * 去这个项目里开新任务(gugu-dev#181):侧栏项目行的「+」、新建会话页 / 项目首页托盘里换项目都走这一条,调用方随后进项目块。
@@ -11,6 +10,6 @@ import { projectGroupsStore } from './stores/project-groups-store';
  */
 export function prepareProjectTask(projectId: string, carryFrom?: string): void {
   if (carryFrom) composerDrafts.moveToEmpty(carryFrom, projectDraftKey(projectId));
-  const chatId = projectGroupsStore.chatIdOf(sidebarStore.rowProjectIdOf(projectId));
+  const chatId = accountProjectsStore.projectOfLocal(projectId)?.chatId;
   if (chatId && readChatSummary(chatId)?.hasMessages) setComposerVerb(chatId, 'task');
 }

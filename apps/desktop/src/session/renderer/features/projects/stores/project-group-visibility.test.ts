@@ -50,7 +50,7 @@ describe('project group visibility across Projects and Chats', () => {
     ]);
     sidebar.machines = { machineOf: () => null, label: () => null, homeDir: () => null };
     groups.start(() => [], () => [], () => sidebar.sidebarProjects.map(({ id }) => id));
-    await vi.waitFor(() => expect(groups.bindingKnown('visible-project')).toBe(true));
+    await groups.refresh(null);
     groups.applyBindings(null, [
       { projectId: 'visible-project', chatId: 'visible-group' },
       { projectId: 'hidden-project', chatId: 'hidden-group' },
@@ -60,7 +60,6 @@ describe('project group visibility across Projects and Chats', () => {
     // hidden-group has no local project here: its row is the group itself, which is not a project row of any binding.
     expect(sidebar.sidebarProjects.map(({ id }) => id)).toEqual(['visible-project', 'hidden-group']);
     expect([...readProjectGroupChats()]).toEqual(['visible-group']);
-    expect(groups.chatIdOf('hidden-project')).toBe('hidden-group');
     expect(groups.projectOfChat('hidden-group')).toBe('hidden-project');
     expect(groups.rowProjectOfChat('visible-group')).toBe('visible-project');
     expect(groups.rowProjectOfChat('hidden-group')).toBeUndefined();
@@ -90,7 +89,7 @@ describe('project group visibility across Projects and Chats', () => {
     };
     const sessions = () => [{ projectId: 'hidden-project', sessionId: 'session-agent', agentUserId: 'agent' }];
     groups.start(() => [], sessions, () => sidebar.sidebarProjects.map(({ id }) => id));
-    await vi.waitFor(() => expect(groups.bindingKnown('local-project')).toBe(true));
+    await groups.refresh(null);
     groups.applyBindings(null, ['local-project', 'remote-project', 'hidden-project'].map((projectId) => ({ projectId, chatId: 'shared-group' })));
 
     expect(sidebar.sidebarProjects.map(({ id }) => id)).toEqual(['local-project']);
