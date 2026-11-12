@@ -260,7 +260,7 @@ export function parseModelTranscript(text: string, offsetMs: number): Transcript
  * 模型在静音 / 噪音上会编字(recording-archive 的读数):一秒超过 25 个字、或同一句来回重复,就整段不要。
  */
 export function looksHallucinated(lines: readonly TranscriptLine[], durationMs: number): boolean {
-  const chars = lines.reduce((n, l) => n + l.text.length, 0)
+  const chars = lines.reduce((n, l) => n + Array.from(l.text).length, 0)
   if (durationMs > 0 && chars / (durationMs / 1000) > 25) return true
   const counts = new Map<string, number>()
   for (const l of lines) {
