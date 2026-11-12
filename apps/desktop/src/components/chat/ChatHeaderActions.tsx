@@ -93,7 +93,7 @@ export const ChatHeaderActions = observer(function ChatHeaderActions({
     <DropdownMenu.Root open={showHeaderMenu} modal={false} onOpenChange={(open) => open ? onToggleHeaderMenu() : onCloseHeaderMenu()}>
       <DropdownMenu.Trigger ref={moreButtonRef} data-testid={AUTOMATION_TEST_IDS.chatHeaderMoreButton} title={t('header.more')} aria-pressed={showHeaderMenu}
         render={<IconButton on={showHeaderMenu || undefined} aria-label={t('header.more')}><MoreHorizontal /></IconButton>} />
-      {showHeaderMenu && <DropdownMenu.Content data-testid={AUTOMATION_TEST_IDS.groupHeaderMenu} side="bottom" align="end" sideOffset={4} style={{ minWidth: 220, maxHeight: 'var(--available-height)', overflowY: 'auto' }}>
+      {showHeaderMenu && <DropdownMenu.Content data-testid={AUTOMATION_TEST_IDS.groupHeaderMenu} side="bottom" align="end" sideOffset={4} style={{ minWidth: 220 }}>
         {groupId && narrow && <MenuItem onClick={() => openPopup('apps')} icon={<LayoutGrid size={16} />}>{t('header.groupApps')}</MenuItem>}
         <MenuItem data-testid={AUTOMATION_TEST_IDS.chatHeaderSearchButton} onClick={onSearch} icon={<Search size={16} />} shortcut={isRoomChat ? '⌘F' : undefined}>
           {t(isRoomChat ? 'header.searchHistory' : 'header.searchChat')}
