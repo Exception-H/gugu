@@ -19,7 +19,7 @@ export default {
     "deviceAccess": "设备连接与授权",
     "onThisComputer": "资料保存在这台电脑上", "onAssistantDevice": "资料保存在助理所在的设备上",
     "ungrouped": "其他", "hasIndex": "查看说明与索引", "missingIndex": "还没有条目说明", "longTerm": "长期了解与约定",
-    "guguProjects": "与咕咕项目页使用同一份项目。", "noGuguProjects": "还没有咕咕项目。",
+    "guguProjects": "与咕咕项目页使用同一份项目。", "noGuguProjects": "还没有咕咕项目。", "stale": "上次的",
     "projectOrganizePrompt": "请先读取咕咕已有项目，帮我整理项目资料与索引。不要创建第二套项目；需要接入已有文件夹时，沿用咕咕的项目和挂载文件夹操作，先核对归属。",
     "projectFolderSessions_one": "{{count}} 个会话",
     "projectFolderSessions_other": "{{count}} 个会话"
@@ -52,8 +52,8 @@ export default {
     },
     "desktop": {
       "guguBody": "你的个人助理，帮你记安排、办事情。",
-      "projectsBody": "和 Agent 一起推进工作，一个项目就是一个群。在「消息」里的「项目」。",
-      "chatsBody": "和朋友及彼此的 Agent 沟通、协作。在「消息」里的「对话」。"
+      "projectsBody": "和 Agent 一起推进工作，一个项目就是一个群。在「消息」的列表里。",
+      "chatsBody": "和朋友及彼此的 Agent 沟通、协作。也在「消息」的列表里。"
     }
   },
   "hints": {
@@ -62,8 +62,7 @@ export default {
       "collaboration": "在这里找项目和朋友，点进去就能开始协作。"
     },
     "desktop": {
-      "assistant": "你的个人助理在这里，记安排、办事情直接告诉它。",
-      "collaboration": "一个项目一个群，和 Agent 一起推进工作。"
+      "assistant": "你的个人助理在这里，记安排、办事情直接告诉它。"
     },
     "dismiss": "知道了"
   },

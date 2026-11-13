@@ -19,7 +19,7 @@ export default {
     "deviceAccess": "Device connections and permissions",
     "onThisComputer": "Stored on this computer", "onAssistantDevice": "Stored on the assistant’s device",
     "ungrouped": "Other", "hasIndex": "View instructions and index", "missingIndex": "No entry instructions yet", "longTerm": "Long-term knowledge and preferences",
-    "guguProjects": "The same projects as the Gugu projects page.", "noGuguProjects": "No Gugu projects yet.",
+    "guguProjects": "The same projects as the Gugu projects page.", "noGuguProjects": "No Gugu projects yet.", "stale": "Stale",
     "projectOrganizePrompt": "Read existing Gugu projects and help organize their documents and indexes. Do not create a separate project registry. Reuse Gugu project and folder attachment operations and check ownership before linking an existing folder.",
     "projectFolderSessions_one": "{{count}} conversation",
     "projectFolderSessions_other": "{{count}} conversations"
@@ -52,8 +52,8 @@ export default {
     },
     "desktop": {
       "guguBody": "Your personal assistant for plans and everyday tasks.",
-      "projectsBody": "Work with Agents in a group for each project. Find Projects in Messages.",
-      "chatsBody": "Talk and collaborate with friends and each other’s Agents. Find Chats in Messages."
+      "projectsBody": "Work with Agents in a group for each project. Find them in the Messages list.",
+      "chatsBody": "Talk and collaborate with friends and each other’s Agents. Also in the Messages list."
     }
   },
   "hints": {
@@ -62,8 +62,7 @@ export default {
       "collaboration": "Find projects and friends here. Open one to start collaborating."
     },
     "desktop": {
-      "assistant": "Your personal assistant is here. Tell it your plans and tasks.",
-      "collaboration": "Each project is a group. Work with Agents to move it forward."
+      "assistant": "Your personal assistant is here. Tell it your plans and tasks."
     },
     "dismiss": "Got it"
   },

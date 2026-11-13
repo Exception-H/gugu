@@ -64,7 +64,7 @@ export function ExtensionTabPane({
    * never the surface.
    */
   filePath?: string;
-  /** `filePath` was opened by the host for an agent or an App (`open_in_tab`, `files.openWith`), not by the person. */
+  /** `filePath` was opened by the host for an App (`files.openWith`), not by the person or an agent it works for. */
   byHost?: boolean;
   /** G1 With `filePath` and no session: the working copy (a project's folder, on any machine) the file is in (a page opened beside another). */
   workspace?: string;

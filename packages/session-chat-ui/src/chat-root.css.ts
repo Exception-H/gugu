@@ -6,7 +6,7 @@
  * should now pass a VE class or a raw CSS class string.
  */
 
-import { keyframes, style } from '@vanilla-extract/css';
+import { globalStyle, keyframes, style } from '@vanilla-extract/css';
 import { vars } from './styles/theme.css';
 import {
   CHAT_CONTENT_GUTTER_PX,
@@ -191,10 +191,8 @@ export const pinBackdrop = style({
 });
 
 /**
- * A user message's summary sticks in front of its own message (@@@pin-cover in ChatRoot): resting, it lies
- * exactly over the message's first two lines, and it sticks at the pin line as the message scrolls up. It is drawn
- * while stuck (ChatRoot decides when: at once for a message that fits, only after it has gone for one that folds),
- * with its opaque backdrop, so the pinned strip never shows anything behind it.
+ * A user message's summary (@@@pin-cover in ChatRoot): it rests behind the bubble it repeats and comes in front of
+ * it once stuck, with its opaque backdrop, so the pinned strip never shows anything behind it.
  */
 export const pinSummaryLayer = style({
   // Takes no room: the message row after it moves up by its height (pinMessageRow). A negative margin here
@@ -202,11 +200,12 @@ export const pinSummaryLayer = style({
   height: 'var(--pin-layer-h)',
   boxSizing: 'border-box',
   paddingBottom: PIN_SUMMARY_GAP,
-  zIndex: 1,
-  visibility: 'hidden',
+  zIndex: -1,
   pointerEvents: 'none',
-  selectors: { '[data-pin-stuck="true"] > &': { visibility: 'visible', pointerEvents: 'auto' } },
+  selectors: { '[data-pin-stuck="true"] > &': { zIndex: 1, pointerEvents: 'auto' } },
 });
+// A message without a bubble (attachments only, or being edited) has nothing to rest behind.
+globalStyle(`[data-pin-stuck="false"] > ${pinSummaryLayer} [data-pin-summary][data-pin-bare]`, { visibility: 'hidden' });
 
 /** Page-colored, square strip, including its seam so body text cannot peek between the two pins. */
 export const activityPinBackdrop = style({

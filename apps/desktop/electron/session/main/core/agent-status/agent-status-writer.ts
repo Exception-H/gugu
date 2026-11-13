@@ -19,6 +19,7 @@ import { sessionsAliveInTmux } from '@main/core/sessions/session-process';
 import { db } from '@main/db/client';
 import { sessions } from '@main/db/schema';
 import { clearInterruptedTurn, recordInterruptedTurns } from './interrupted-turns';
+import { clearAnsweredAsk } from '../asks/answered-asks';
 import { events } from '@main/lib/events';
 import { HookCore, type Hookable } from '@main/lib/hookable';
 import { log } from '@main/lib/logger';
@@ -194,6 +195,11 @@ class AgentStatusWriter implements IInitializable, IDisposable, Hookable<AgentSt
       });
     }
     if (canonical.length === 0) return;
+    // A new turn: what the person last answered is past, as a failure is (answered-asks.ts). Answering lets a running
+    // turn go on and is no `Started`.
+    if (!before.running && canonical.some(e => e.kind === 'Started') && clearAnsweredAsk(sessionId)) {
+      events.emit(sessionChangedChannel, { sessionId, projectId: entry.projectId, changes: { lastAnswered: true } });
+    }
     const reading = readStatusLog(state);
     const previous = entry.written;
     // 不是新事实的不发布:从没有状态的行(没有状态源)被「停下」;这一批事件没让读数动(同一句话再说一遍、

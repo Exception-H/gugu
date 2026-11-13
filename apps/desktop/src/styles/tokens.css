@@ -1118,14 +1118,14 @@ button, [role="button"] {
    - 鼠标/触摸聚焦(:focus 但不 :focus-visible):不画。
    - 键盘聚焦:2px live 色环,外偏 2px,跟着元素圆角走。放在 @layer base:组件要换自己的焦点表达时用工具类覆盖得了。
    - 文字输入(input / textarea / contenteditable)以光标为焦点指示,不画环 —— 浏览器对它们鼠标点击也报 :focus-visible。
-   - 指针模态(根上 data-pointer-focus,见 lib/focus-modality.ts):点过之后单按修饰键,Chromium 也报 :focus-visible —— 不画。
-     自己写焦点样式的组件一律用 `:focus-visible:not([data-pointer-focus] *)`;Tailwind 的 focus-visible: 变体已是这个选择器。 */
+   - 指针模态(焦点元素自己带 data-pointer-focus,见 lib/focus-modality.ts):点过之后单按修饰键,Chromium 也报 :focus-visible —— 不画。
+     自己写焦点样式的组件一律用 `:focus-visible:not([data-pointer-focus])`;Tailwind 的 focus-visible: 变体已是这个选择器。 */
 :focus:not(:focus-visible) { outline: none; }
 @layer base {
-  :focus-visible:not([data-pointer-focus] *) { outline: 2px solid var(--focus-ring); outline-offset: 2px; }
+  :focus-visible:not([data-pointer-focus]) { outline: 2px solid var(--focus-ring); outline-offset: 2px; }
   /* 指针模态下浏览器自带的 :focus-visible 轮廓也不要。 */
-  [data-pointer-focus] :focus-visible { outline: none; }
-  :is(input:not([type='checkbox'], [type='radio'], [type='range'], [type='button'], [type='submit']), textarea, [contenteditable]):focus-visible:not([data-pointer-focus] *) { outline: none; }
+  [data-pointer-focus]:focus-visible { outline: none; }
+  :is(input:not([type='checkbox'], [type='radio'], [type='range'], [type='button'], [type='submit']), textarea, [contenteditable]):focus-visible:not([data-pointer-focus]) { outline: none; }
 }
 
 /* ───────────── theme batch D(宿主组件:二维码、形象工坊、看图 / 文档预览)───────────── */
@@ -2193,6 +2193,9 @@ body.barcode-scanner-active #root {
 .gg-chip[data-appearance='plain'] { background: transparent; }
 /* 计数徽标:同一 chip 的圆形变体(未读数) */
 .gg-chip[data-shape='count'] { min-width: 18px; padding: 0 5px; justify-content: center; font-variant-numeric: tabular-nums; }
+/* 小灰点:同一 chip 的无数字变体 —— 有新消息、没有叫到你(#2548)。装饰色 --faint-fg:非文字的指示 ≥3:1(WCAG 1.4.11)。
+   四周各让 5px:占一枚一位数计数(18×18)的位置、落在它正中 —— 与上下行的数同一列,收起成头像列时也落在数落的那个角上。 */
+.gg-chip[data-shape='dot'] { flex: none; width: 8px; height: 8px; margin: 5px; padding: 0; background: var(--faint-fg); }
 
 /* #5111 设置→账户 头像上传钮的**内容**。钮本身是 ui/Button variant=ghost(hover/press/disabled
    全部由那份变体表出,这里不重复一遍);这三条只管钮里面那块 40px 的头像与上传中的遮罩。 */
@@ -2252,7 +2255,7 @@ body.barcode-scanner-active #root {
 }
 .gg-member-join-name { font-size: inherit; line-height: inherit; cursor: pointer; }
 .gg-member-join-name:hover,
-.gg-member-join-name:focus-visible:not([data-pointer-focus] *) { background: transparent; color: var(--primary); text-decoration: underline; }
+.gg-member-join-name:focus-visible:not([data-pointer-focus]) { background: transparent; color: var(--primary); text-decoration: underline; }
 
 .gg-topic-anchor { position: relative; }
 .gg-topic-anchor::before {

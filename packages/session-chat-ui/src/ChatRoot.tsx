@@ -83,6 +83,7 @@ import type { ChatItem, ChatMessage, TranscriptTurn } from './model';
 import type { ChatState, ScrollMode } from './state/chat-state';
 import { activeTurnWithInputs, latestVisibleTurnId, pendingPromptLanded, projectPendingMessages, type PendingMessageProjectionCache } from './state/pending-prompt';
 import { isEmptyAgentTurn, joinsFoldRunAt } from './state/turn-fold';
+import { canBeContinued, continuesPreviousTurn, withContinuedActiveTurn } from './state/conversation-segments';
 import {
   flattenTier, lastConversationMessage,
   isDeliveredFromAgent,
@@ -90,7 +91,7 @@ import {
   collectUserTurnUnits,
   trailingDayKey,
   BACKGROUND_TASKS_ID,
-  BACKGROUND_TASKS_TOGGLE,
+  backgroundTasksView,
 } from './state/flatten';
 import type { UnitsView } from './state/flatten';
 import { segmentCtxFor } from './state/segment-ctx';
@@ -349,7 +350,9 @@ export function ChatRoot(props: ChatRootProps) {
   const pendingMessageCache: PendingMessageProjectionCache = new WeakMap();
   const projectedInputs = createMemo(() => {
     const s = state();
-    return projectPendingMessages(s.transcript.state.committedTurns, s.transcript.state.activeTurnSnapshot, s.session.state.pendingMessages, pendingMessageCache);
+    const projected = projectPendingMessages(s.transcript.state.committedTurns, s.transcript.state.activeTurnSnapshot, s.session.state.pendingMessages, pendingMessageCache);
+    // A running turn that continues the last one renders together with it (#2587).
+    return props.context.theme.layout.agentConversation ? withContinuedActiveTurn(projected) : projected;
   });
   const projectedCommitted = createMemo(() => projectedInputs().committed, undefined,
     { equals: (a, b) => a.length === b.length && a.every((turn, index) => turn === b[index]) });
@@ -618,7 +621,10 @@ export function ChatRoot(props: ChatRootProps) {
       // The previous acknowledgement stops being the latest when another turn arrives.
       (prevSource.length === 0 || !isEmptyAgentTurn(prevSource[prevSource.length - 1])) &&
       // 新来的那一轮要并进上一条还没收尾的折叠(#4981)时,只 flatten 新的画不出合并,走整条重建。
-      !joinsFoldRunAt(next, prevSource.length, ctx.foldTurnProcess === true)
+      !joinsFoldRunAt(next, prevSource.length, ctx.foldTurnProcess === true) &&
+      // 新来的那一轮接续上一轮(#2587)时同理:只 flatten 新的画不出接续,走整条重建。
+      !(ctx.agentConversation && prevSource.length > 0 && next[prevSource.length] !== undefined
+        && canBeContinued(prevSource[prevSource.length - 1]!) && continuesPreviousTurn(next[prevSource.length]!, prevSource[prevSource.length - 1]))
     ) {
       // Incremental append: only process the new tail.
       const tail = next.slice(prevSource.length);
@@ -836,12 +842,8 @@ export function ChatRoot(props: ChatRootProps) {
     const owner = activeLayout().backgroundOwner;
     if (!owner || owner === BACKGROUND_TASKS_ID) return null;
     const tasks = state().session.state.backgroundTasks;
-    return {
-      ownerId: owner,
-      commands: tasks.commands,
-      subagents: tasks.subagents,
-      expanded: viewState().isCollapsed(BACKGROUND_TASKS_TOGGLE),
-    };
+    const view = backgroundTasksView(tasks, (id) => viewState().isCollapsed(id));
+    return { ownerId: owner, commands: view.commands, subagents: view.subagents, expanded: view.expanded };
   });
 
   let pendingPromptCommittedTurns = state().transcript.state.committedTurns;
@@ -932,16 +934,11 @@ export function ChatRoot(props: ChatRootProps) {
   const placeRow = (el: HTMLElement, idx: number, top: number, laneH: number | null) => {
     // Native sticky positioning supplies the reversible push-out. Under reduced motion,
     // hide the complete row as soon as that push starts instead of sliding a partial row.
-    // When a user lane's summary is drawn (owner 2026-11-10, msg:225dbdad): a message that fits unfolded sticks the
-    // moment its top reaches the pin line and is pushed off by the next one, like a physical card. A message the
-    // transcript folds is too tall to push along: its summary appears only once the whole message has scrolled out
-    // above the viewport. Where it is drawn is layout (@@@pin-cover), so a late flag shows it late, or over its
-    // message's top for that frame, never beside it.
     const summary = laneH !== null && pinAnchorSet().has(idx);
-    // Where the sticking element's top sits in the lane: the summary's rest position, or the activity row's top.
-    const lead = summary ? pinLead(idx) : units().at(idx)?.gapBefore ?? 0;
+    // Where the sticking element's top rests in the lane: the summary's rest position, or the activity row's top.
+    const lead = summary ? pinRest(idx) : units().at(idx)?.gapBefore ?? 0;
     const pinLine = laneH === null ? 0 : shadowScrollTop + userTopGap + activityPinOffset(idx) - lead;
-    const stuck = laneH !== null && (summary && pinGeometry().get(idx)?.folds ? shadowScrollTop > top + virt.size(idx) - 0.5 : pinLine > top + 0.5);
+    const stuck = laneH !== null && pinLine > top + 0.5;
     if (el.dataset.pinStuck !== String(stuck)) el.dataset.pinStuck = String(stuck);
     const leaving = laneH !== null && pinLine > top + laneH - (summary ? lead + pinHeight(idx) : virt.size(idx)) + 0.5;
     if (el.dataset.pinLeaving !== String(leaving)) el.dataset.pinLeaving = String(leaving);
@@ -980,6 +977,14 @@ export function ChatRoot(props: ChatRootProps) {
         finalReplyId: finalReplyId(),
         latestConversationMessageId: latestConversationMessageId(),
         background: backgroundAttachment(),
+  });
+
+  /** What a row is measured with: the estimate's inputs plus what the reader has folded and unfolded. */
+  const measureContext = (insetX = 0): MeasureCtx => ({
+    ...estimateContext(),
+    width: Math.max(0, containerWidth() - 2 * insetX),
+    isCollapsed: (id: string) => viewState().isCollapsed(id),
+    expanded: (id: string) => viewState().isCollapsed(id),
   });
 
   // ── Count sync effect ─────────────────────────────────────────────────────
@@ -1163,10 +1168,10 @@ export function ChatRoot(props: ChatRootProps) {
    * @@@sticky-user-lanes — a user message stays at the top while its turn is on screen, as a two-line
    * summary, and the browser does the sticking. Each user message row (a "pin anchor") is placed in a
    * lane that spans its turn: from its own top to the next anchor's top (the last one: to the end of
-   * the content). The message scrolls as any row; right below it in the lane sits its summary,
-   * `position: sticky`, so the summary takes over in the same compositor frame as the message leaves,
-   * and is pushed off by the lane's end, i.e. by the next user message. Every message pins, folded or
-   * expanded, long or short: the summary has the same one or two lines either way (owner 2026-11-07).
+   * the content). The message scrolls as any row; behind its bubble's last lines in the lane rests its
+   * summary, `position: sticky` (@@@pin-cover), so the summary takes over in the same compositor frame as
+   * the message leaves, and is pushed off by the lane's end, i.e. by the next user message. Every message
+   * pins, folded or expanded, long or short: the summary has the same one or two lines either way.
    *
    * It used to be a JS-positioned copy outside the scroller, placed from the scroll event in rAF.
    * The compositor scrolls first, so that copy was always a frame behind: one frame of the bubble cut
@@ -1198,21 +1203,19 @@ export function ChatRoot(props: ChatRootProps) {
   );
   const pinAnchorSet = createMemo(() => new Set(pinAnchors()));
   /**
-   * Each anchor's stuck summary (PinnedUserSummary): its height, one or two lines whatever the message's length,
-   * where it rests, over the message's bubble (the row's top gap plus any attachments above the bubble), and whether
-   * the message folds (the transcript's own 展开全文 decision).
+   * Each anchor's stuck summary (PinnedUserSummary): its height, one or two lines whatever the message's length, and
+   * where it rests below the lane's top: behind the last `height` px of the message's bubble (@@@pin-cover).
    */
   const pinGeometry = createMemo(() => {
-    const ctx = estimateContext();
+    const ctx = measureContext();
     return new Map(pinAnchors().map(index => {
       const unit = untrack(() => units().at(index)!);
       const s = pinSummary(unit.data as ChatMessage, ctx, UNIT_REGISTRY.message!.vars as MessageVars);
-      return [index, { height: s.height + PIN_SUMMARY_GAP, lead: (unit.gapBefore ?? 0) + s.bubbleTop, folds: s.folds }];
+      return [index, { height: s.height + PIN_SUMMARY_GAP, rest: (unit.gapBefore ?? 0) + s.rest }];
     }));
   });
   const pinHeight = (idx: number) => pinGeometry().get(idx)?.height ?? 0;
-  /** How far below its lane's top a summary rests (0 for a lane without one). */
-  const pinLead = (idx: number) => pinGeometry().get(idx)?.lead ?? 0;
+  const pinRest = (idx: number) => pinGeometry().get(idx)?.rest ?? 0;
 
   /**
    * Where a lane ends. Normally the next anchor. In the agent conversation a delivered message is a bubble of
@@ -1592,25 +1595,7 @@ export function ChatRoot(props: ChatRootProps) {
     if (!unitDef) return;
     const c = u.chrome;
     const unitInsetX = c?.insetX ?? 0;
-    const ctx: MeasureCtx = {
-      theme: theme(),
-      translate: props.context.translate,
-      commands: commands(),
-      selfIdentity: props.context.selfIdentity(),
-      chatName: props.context.chatName,
-      appName: props.context.appName,
-      width: Math.max(0, containerWidth() - 2 * unitInsetX),
-      isCollapsed: (id: string) => viewState().isCollapsed(id),
-      expanded: (id: string) => viewState().isCollapsed(id),
-      caches: caches(),
-      measureEpoch: measureEpoch(),
-      expandedId: expandedUserId(),
-      bodySize: bodySizeOf,
-      editingMessage: editingMessage(),
-      finalReplyId: finalReplyId(),
-      latestConversationMessageId: latestConversationMessageId(),
-      background: backgroundAttachment(),
-    };
+    const ctx = measureContext(unitInsetX);
     const contentH = unitDef.measure(u.data, ctx, unitDef.vars ?? {});
     const h = unitReservedHeight(u, contentH);
     const delta = virt.setSize(ui, h);
@@ -2047,7 +2032,7 @@ export function ChatRoot(props: ChatRootProps) {
       const end = pin === undefined ? undefined : pinEnds().find(boundary => boundary > pin);
       // A user message itself lands with its bubble on the pin line, not under its own summary (@@@pin-cover).
       const topInset = pin !== undefined && (end === undefined || idx < end)
-        ? pinHeight(pin) + userTopGap : pinAnchorSet().has(idx) ? Math.max(0, userTopGap - pinLead(idx)) : 0;
+        ? pinHeight(pin) + userTopGap : pinAnchorSet().has(idx) ? Math.max(0, userTopGap - (us.at(idx)?.gapBefore ?? 0)) : 0;
       return itemScrollTarget({ rowTop: virt.top(idx) + padTop(), rowHeight: rowH,
         viewportHeight: Math.max(0, el.clientHeight - padBottom()), topInset, align, offset: extraOffset });
     };
@@ -2470,19 +2455,19 @@ export function ChatRoot(props: ChatRootProps) {
                                 });
                               }}
                               data-index={String(unitIndex)}
-                              style={pinAnchorSet().has(unitIndex) ? { '--pin-layer-h': `${pinLead(unitIndex) + pinHeight(unitIndex)}px` } : {}}
+                              style={pinAnchorSet().has(unitIndex) ? { '--pin-layer-h': `${pinRest(unitIndex) + pinHeight(unitIndex)}px` } : {}}
                             >
-                              {/* @@@pin-cover — a user message's two-line summary sticks in front of the message itself. Resting, it
-                                  lies exactly over the message's bubble top (lane top + `pinLead`), i.e. over the same first
-                                  lines it repeats; stuck at the pin line, it still covers wherever those lines are while they are on
-                                  screen, since they sit above the pin line then. So the message and its summary never show the same
-                                  lines twice, whatever the scroll path or the main thread is doing; `data-pin-stuck` only decides
-                                  whether it is drawn (see placeRow: at once for a message that fits, after it has gone for one that folds). Opaque and above every row of
-                                  the turn, the pinned strip shows nothing behind it. */}
+                              {/* @@@pin-cover — a user message's two-line summary rests behind the last `height` px of the message's
+                                  own bubble and sticks at the pin line: T = min(max(P, b - h), e - h - gap), which is what sticky
+                                  computes, so the compositor places it at every scroll position. A message as tall as its summary
+                                  (b - h = its top) sticks the moment it reaches the line; a taller one scrolls by until what is left
+                                  of it is exactly as tall as the summary. At that point the two share one box, so nothing of the
+                                  message shows beside its summary and the summary covers nothing else. `data-pin-stuck` only
+                                  raises the summary in front of the message; late, the message slides off it instead. */}
                               <Show when={pinAnchorSet().has(unitIndex)}>
-                                <div class={`${pinSticky} ${pinSummaryLayer}`} style={{ top: `${userTopGap - pinLead(unitIndex)}px`, 'padding-top': `${pinLead(unitIndex)}px` }}>
-                                  <div class={pinBackdrop} style={{ top: `${pinLead(unitIndex) - userTopGap}px` }} data-chat-pin-backdrop="" aria-hidden="true" />
-                                  <PinnedUserSummary item={u()!.data as ChatMessage} ctx={estimateContext()} vars={UNIT_REGISTRY.message!.vars as MessageVars} />
+                                <div class={`${pinSticky} ${pinSummaryLayer}`} style={{ top: `${userTopGap - pinRest(unitIndex)}px`, 'padding-top': `${pinRest(unitIndex)}px` }}>
+                                  <div class={pinBackdrop} style={{ top: `${pinRest(unitIndex) - userTopGap}px` }} data-chat-pin-backdrop="" aria-hidden="true" />
+                                  <PinnedUserSummary item={u()!.data as ChatMessage} ctx={measureContext()} vars={UNIT_REGISTRY.message!.vars as MessageVars} />
                                 </div>
                               </Show>
                               {/* An opened activity sticks its own header row, on the pin line whatever its collapsed top gap is. */}

@@ -45,6 +45,7 @@ export {
   // mirrors that project onto (spec ⑨「项目 = 群」) without deep-importing the session backend's projects/DB layer.
   emdashProjectName,
   emdashProjectRoot,
+  emdashProjectOfGroup,
   emdashTakeBirthGroup,
   // 资源库 → MCP:这条任务带上的那几台(会话能力包的桥问它)。
   emdashLibraryMcpForSession,
@@ -77,6 +78,8 @@ export {
   // agent 的 session_* 跨机器(owner 2026-09-30):别的机器发来的动作、本机发起方的自述、「这个 id 在不在本机」。
   // 同 runEmdashExtensionAction 那条教训:漏在这张清单外只会在真有人跨机器时才炸。
   runRemoteSessionAction,
+  // 离开这台机器的动作:本地项目 id 不出这台机器(cross-machine-sessions 的唯一出口 call 调它)。
+  assertOutboundProjectIds,
   readAssistantWorkReceipts,
   sessionCallerFacts,
   localSessionIds,
@@ -166,6 +169,8 @@ export {
   // 的 PTY 会话在对话页首轮就会 fail loud(❌ 不退回裸文本、更 ❌ 不退回 pty 打字)。
   setEmdashPtyChatStartupEnvelope,
   setSessionMessageRouter,
+  // 投递叫不醒时,宿主据此分「等人修」还是「退避再试」(session-injection 的 wake gate)。
+  getRuntimeUpgradeRequirement,
   // 手机看管 agent 的设备 RPC 处理器。经桥拿 ⇒ 与 router / conversation provider 同一份实例;
   // 宿主直接 import 会打出第二份,写侧的运行时状态就都看不见了。
   createSessionpageSessionDeviceRpcHandlers,
@@ -218,6 +223,6 @@ export { startSessionPtyAttachServer } from '@main/core/pty/attach/start-attach-
 export { broadcastDeviceSessionHostEvent, setDeviceSessionHostShellHandlers } from '@main/host-ws/device-session-host'
 export { setDirectTerminalResolver, type DirectTerminalResolver } from '@main/core/pty/direct-terminal/controller'
 // #113 这台机器的项目记到账号上:那一份,与「它可能变了」的信号(订阅在 boot 之后,同 onEmdashSessionpageReapTrigger)。
-export { listDeviceProjectRecords, onDeviceProjectsMaybeChanged } from '@main/core/projects/operations/device-project-records'
+export { deviceProjectsPublished, listDeviceProjectRecords, onDeviceProjectsMaybeChanged } from '@main/core/projects/operations/device-project-records'
 export { projectFoldersPublished } from '@main/core/extensions/extension-bridge'
 export { sessionBootTasks } from '../session/main/core/boot-tasks'

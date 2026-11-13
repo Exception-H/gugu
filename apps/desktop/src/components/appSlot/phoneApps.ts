@@ -12,6 +12,7 @@ import { APP_ICON_PIXELS, ICON_PIXELS, fileIconKey, iconSizeRefusal, iconTypeRef
 import { APP_RUNTIME_FORGET_PAGE, APP_RUNTIME_GATE_PAGE, appRuntimeScriptTag, injectAppRuntime } from '../../session/shared/extensions/app-runtime-protocol'
 import {
   attachmentInstallPlan,
+  attachmentSheetSource,
   couldUpdateUnasked,
   grantableBy,
   PACKAGE_MESSAGE_SELECT,
@@ -581,10 +582,10 @@ async function installAttachment(args: AttachmentPackage & { unasked?: boolean; 
     const request: InstallConsentAsk = {
       manifest: grantable,
       manifestDigest,
-      // Another publisher's under the same id is asked in full (摩擦单 F66): the plan says it replaces nothing it knows.
+      // Another publisher's under the same id — or another source's — is asked in full (摩擦单 F66): the plan says it replaces nothing it knows.
       installed: plan.kind === 'ask' ? plan.installed : before?.manifest,
       revokedPermissions: [...(plan.kind === 'ask' ? plan.revokedPermissions : before?.revokedPermissions ?? [])],
-      attachment: { from: publisher.name ?? '', ...(plan.kind === 'ask' && plan.replaces !== undefined ? { replaces: plan.replaces } : {}) },
+      attachment: attachmentSheetSource(publisher.name, plan),
     }
     const done = await agreeThenInstall(request, plan.kind === 'ask', args.consent ?? { kind: 'here' }, () => askHere(request, grantable), () =>
       store(manifest, files, { publisher, sha256: digest, manifestDigest, origin: 'attachment' }))

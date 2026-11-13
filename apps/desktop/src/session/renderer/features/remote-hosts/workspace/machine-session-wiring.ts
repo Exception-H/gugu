@@ -1,4 +1,4 @@
-import { hostFileTabTarget } from '@renderer/features/sessions/file-view/file-view-kinds';
+import { fileTabTarget } from '@renderer/features/sessions/file-view/file-view-kinds';
 import { sessionConversationTabId } from '@renderer/features/sessions/view/session-pane-policy';
 // #6264 一套工作台:看着别的机器上的一条会话时,这台电脑才有的那几件事 —— 会话视图本身与本机同一个。
 //  · 那台机器上的 agent 调 `open_in_tab` / 程序要「打开网页」:开进这条会话的工作区(remote-pane-viewer.ts)。屏上的
@@ -144,8 +144,8 @@ function openRequested(session: ViewedMachineSession, request: SessionpagePaneOp
   const from = sessionConversationTabId(view.paneLayout, session.sessionId);
   // 和本机 agent 打开同一个位置:对话右边并排(spec session-page「并排」)。
   if (request.target.kind === 'file') {
-    // An agent on that machine opened it (`session_open_in_tab`), not the person.
-    const tab = hostFileTabTarget(request.target.path);
+    // The tab a person's click opens it in: that machine checked it is in the session's working directory.
+    const tab = fileTabTarget(request.target.path);
     view.paneLayout.open(tab.kind, tab.args, { from, intent: 'navigate', activate: false });
   }
   else view.showPage(request.target.url, { reload: true, beside: true, activate: false });
