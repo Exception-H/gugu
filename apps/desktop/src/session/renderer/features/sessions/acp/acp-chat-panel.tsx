@@ -1819,6 +1819,15 @@ export const AcpChatPanel = observer(function AcpChatPanel({
       });
       return;
     }
+    if (!error && store.reconcileAwaitingLink) {
+      // 刚讲完的那一轮留在上面,线回来再对账补全(acp-chat-store @@@reconcile-across-link-loss)。
+      setCondition({
+        code: 'machine-unreachable',
+        label: translate('transcript.condition.turnAwaitsLink'),
+        detail: 'reconcile-awaiting-link',
+      });
+      return;
+    }
     if (!error && interruptedBy && !signInExpired && !signInMissing) {
       setCondition({
         code: 'turn-interrupted',
@@ -1978,7 +1987,7 @@ export const AcpChatPanel = observer(function AcpChatPanel({
       }
     })();
     setCondition(condition);
-  }, [store, store?.loadError, providerId, cliAuthMethod, openAgentAccount, translate, navigate, signInExpired, signInMissing, signInAgain, agent?.name, membershipLock, interruptedBy, restarting]);
+  }, [store, store?.loadError, store?.reconcileAwaitingLink, providerId, cliAuthMethod, openAgentAccount, translate, navigate, signInExpired, signInMissing, signInAgain, agent?.name, membershipLock, interruptedBy, restarting]);
 
   /**
    * 还在跑的后台命令与子智能体 → 消息列表末尾那一行(owner 2026-10-27:去掉右上角「摘要」卡,后台任务放进主对话)。
