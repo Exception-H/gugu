@@ -331,6 +331,7 @@ export {
   type EmdashPtyChatStartupEnvelope,
   type EmdashPtyChatStartupRequest,
 } from '@main/core/sessions/impl/emdash-pty-sessionpage-hook'
+export { getRuntimeUpgradeRequirement } from '@main/core/sessions/spawn-failure'
 export {
   setSessionMessageRouter,
   setSessionMessageOutboxReady,

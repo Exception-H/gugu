@@ -169,6 +169,8 @@ export {
   // 的 PTY 会话在对话页首轮就会 fail loud(❌ 不退回裸文本、更 ❌ 不退回 pty 打字)。
   setEmdashPtyChatStartupEnvelope,
   setSessionMessageRouter,
+  // 投递叫不醒时,宿主据此分「等人修」还是「退避再试」(session-injection 的 wake gate)。
+  getRuntimeUpgradeRequirement,
   // 手机看管 agent 的设备 RPC 处理器。经桥拿 ⇒ 与 router / conversation provider 同一份实例;
   // 宿主直接 import 会打出第二份,写侧的运行时状态就都看不见了。
   createSessionpageSessionDeviceRpcHandlers,
