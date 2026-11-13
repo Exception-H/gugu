@@ -498,7 +498,7 @@ async function createSessionSteps(
       workspace: { kind: 'repository-instance', workspaceId },
     },
     // 派的任务进群坐任务座位(不发入群提示),与桌面派任务同一口径。
-    ...(request.chatId ? { birthGroup: { chatId: request.chatId, asTask: Boolean(taskChatId) } } : {}),
+    ...(request.chatId ? { birthGroup: { chatId: request.chatId, asTask: Boolean(taskChatId), requestedBy: 'human' } } : {}),
   };
 
   const prepared = await prepareCreateSession(params);

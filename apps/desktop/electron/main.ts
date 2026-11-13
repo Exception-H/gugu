@@ -228,6 +228,7 @@ import {withAssistantWorkReply} from '@gugu/core/shared/assistantWorkReply'
 import { ASSISTANT_PROVISION_SELECT, pickAssistant, type AssistantProvisionRow } from '@gugu/core/shared/assistantProvision'
 import { landTaskCardFirstTurn } from './sessionpage/task-card-first-turn'
 import { withQuestionCard } from './sessionpage/question-card'
+import { requestAgentGroupJoinForAuth, resumeAgentGroupJoinsForAuth } from './sessionpage/agent-group-join-host'
 import {
   emdashAgentRegistry,
   type LocalSessionPeer,
@@ -4869,6 +4870,23 @@ app.whenReady().then(async () => {
         return emdash.runSessionAction(context, action as SessionAction, signal)
       }
       let record = action as Record<string, unknown>
+      // P0-2.1: the only door an Agent has into an existing group. The record is persisted first and the person answers
+      // on this session's timeline; this call returns only after that answer (or its timeout/refusal/offline outcome).
+      if (record.action === 'group_join_confirm') {
+        const chatId = typeof record.chat_id === 'string' ? record.chat_id.trim() : ''
+        const targetAgentId = typeof record.agent_user_id === 'string' ? record.agent_user_id.trim() : ''
+        if (!chatId || !targetAgentId) throw new Error('group_join_confirm: chat_id and agent_user_id are required')
+        const binding = await senderBinding(context, auth.userId)
+        if (!binding.guguAgentUserId) throw new Error('group_join_confirm: this session has no Agent identity to ask with')
+        return requestAgentGroupJoinForAuth({
+          sessionId: context.sessionId,
+          chatId,
+          targetAgentId,
+          actorUserId: auth.userId,
+          initiatorAgentId: binding.guguAgentUserId,
+          asTask: record.as_task === true,
+        }, { accessToken: auth.accessToken, userId: auth.userId })
+      }
       const projectResult = (result: unknown) => typeof record.action === 'string' && record.action.startsWith('project_')
         ? prepareProjectAgentNotice(result, {
           agentUserId: () => senderBinding(context, auth.userId).then((binding) => binding.guguAgentUserId),
@@ -5105,7 +5123,7 @@ app.whenReady().then(async () => {
     const sessionpageIdentityDeps = sessionpageIdentityHost.provisionDeps
     emdash.setSessionIdentityHost(sessionpageIdentityHost)
     emdash.setTaskNamer({
-      defaultName: (provider, taken) => sessionpageIdentityHost.defaultTaskName(provider, taken),
+      defaultName: (provider, taken, options) => sessionpageIdentityHost.defaultTaskName(provider, taken, options),
       // A task rename renames its agent: the shell's contacts re-read the published name.
       renameBound: async (sessionId, agentUserId, name, source) => {
         await sessionpageIdentityHost.renameBound(sessionId, agentUserId, name)
@@ -6509,6 +6527,13 @@ app.whenReady().then(async () => {
                 // 而它问的是账号级的事实,和「哪条会话」无关 ⇒ 不该挂在用户按下回车之后。
                 if (auth.accessToken && auth.userId) {
                   refreshAgentNamingFacts({ accessToken: auth.accessToken, userId: auth.userId })
+                  // P0-2.1: the pending rows are the authority. A restart lost only the in-memory Ask; this re-asks each
+                  // still-pending, still-unarchived operation under its original id. No answer here adds nobody.
+                  void resumeAgentGroupJoinsForAuth({ accessToken: auth.accessToken, userId: auth.userId })
+                    .then((outcomes) => {
+                      if (outcomes.length > 0) createLogger('group-join').info({ outcomes }, 'resumed pending group-join confirmations')
+                    })
+                    .catch((error: unknown) => createLogger('group-join').warn({ err: String(error) }, 'could not resume pending group-join confirmations'))
                 }
                 runSessionpageReap('boot-owner')
                 return

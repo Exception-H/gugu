@@ -8,9 +8,9 @@
 import type { ComposerAttachment } from '@gugu/session-ui/react/components';
 import type { TurnFileRef } from '@gugu/session-core/session-record/contract';
 import { AttachmentsError } from '@gugu/core/cloud/attachmentsApi';
-import { useMemo, useRef, type Dispatch, type SetStateAction } from 'react';
+import { useEffect, useMemo, useRef, type Dispatch, type SetStateAction } from 'react';
 import { placeTaskAttachment, prepareTaskAttachment, type TaskAttachmentPlacement } from '@/lib/attachmentsEndpoint';
-import { selectedScreenshot, screenshotQuality, toggleScreenshotQuality, retryScreenshot, screenshotPreview } from '@/lib/pastedScreenshot';
+import { selectedScreenshot, screenshotQuality, toggleScreenshotQuality, retryScreenshot, screenshotPreview, releaseScreenshotPreview } from '@/lib/pastedScreenshot';
 import { formatBytes } from '@renderer/utils/formatBytes';
 import { log } from '@renderer/utils/logger';
 import type { SessionMessageLookupKey } from '@renderer/localization/messages';
@@ -20,7 +20,7 @@ type Translate = (key: SessionMessageLookupKey, values?: Record<string, string |
 export type { TaskAttachmentTarget } from '@/lib/taskAttachmentTarget';
 import type { TaskAttachmentTarget } from '@/lib/taskAttachmentTarget';
 
-type Upload = { placement: TaskAttachmentPlacement; file: File; controller: AbortController; settled: Promise<boolean>; ref: TurnFileRef | null; status: 'running' | 'done' | 'failed'; confirmed: number; total: number };
+type Upload = { placement: TaskAttachmentPlacement; file: File; previewSource?: File; controller: AbortController; settled: Promise<boolean>; ref: TurnFileRef | null; status: 'running' | 'done' | 'failed'; confirmed: number; total: number };
 
 function progressMeta(sent: number, total: number): string {
   const percent = total > 0 ? Math.min(100, Math.floor((sent / total) * 100)) : 100;
@@ -62,6 +62,9 @@ export function createComposerFileUploads(readArgs: () => ComposerFileUploadArgs
   const start = (chipId: string, file: File) => {
     const controller = new AbortController();
     const previous = uploads.get(chipId);
+    // A retry or quality toggle replaces the old upload: release its preview before the new one is created, or the
+    // old blob URL is never referenced again.
+    if (previous) releaseScreenshotPreview(previous.previewSource ?? previous.file);
     const placement = previous?.placement ?? {};
     const retained = placement.upload?.started && !placement.upload.restartRequired;
     const upload: Upload = { placement, file, controller, settled: Promise.resolve(false), ref: null, status: 'running', confirmed: retained ? previous?.confirmed ?? 0 : 0, total: previous?.total ?? file.size };
@@ -84,6 +87,9 @@ export function createComposerFileUploads(readArgs: () => ComposerFileUploadArgs
       selected = source;
       total = source.size;
       const previewUrl = quality ? await screenshotPreview(source) : undefined;
+      // The preview belongs to the file it was made from (compression may have produced a new File), so remember that
+      // owner and release the URL through it rather than through the original pick.
+      if (previewUrl) upload.previewSource = source;
       controller.signal.throwIfAborted();
       if (active()) patch(chipId, { name: source.name, mimeType: source.type, ...(previewUrl ? { previewUrl } : {}) });
       progress();
@@ -121,6 +127,7 @@ export function createComposerFileUploads(readArgs: () => ComposerFileUploadArgs
     const upload = uploads.get(chipId);
     if (!upload || !readArgs().resumable || !screenshotQuality(upload.file)) return;
     upload.controller.abort();
+    releaseScreenshotPreview(upload.previewSource ?? upload.file);
     uploads.delete(chipId);
     named.delete(chipId);
     toggleScreenshotQuality(upload.file);
@@ -150,6 +157,7 @@ export function createComposerFileUploads(readArgs: () => ComposerFileUploadArgs
     for (const [chipId, upload] of uploads) {
       if (ids.has(chipId)) continue;
       upload.controller.abort();
+      releaseScreenshotPreview(upload.previewSource ?? upload.file);
       uploads.delete(chipId);
     }
     for (const chipId of named.keys()) if (!ids.has(chipId)) named.delete(chipId);
@@ -183,7 +191,9 @@ export function createComposerFileUploads(readArgs: () => ComposerFileUploadArgs
 
   /** 这一枚发出去了 / 不要了:不再管(还在放就取消)。 */
   const forget = ((chipId: string) => {
-    uploads.get(chipId)?.controller.abort();
+    const upload = uploads.get(chipId);
+    upload?.controller.abort();
+    if (upload) releaseScreenshotPreview(upload.previewSource ?? upload.file);
     uploads.delete(chipId);
     named.delete(chipId);
   });
@@ -193,7 +203,10 @@ export function createComposerFileUploads(readArgs: () => ComposerFileUploadArgs
 
   /** 发出去了:账清空(文件留在私聊文件夹里,这一轮的引用指着它们);私聊下次再问。 */
   const clear = (() => {
-    for (const upload of uploads.values()) upload.controller.abort();
+    for (const upload of uploads.values()) {
+      upload.controller.abort();
+      releaseScreenshotPreview(upload.previewSource ?? upload.file);
+    }
     uploads.clear();
     named.clear();
     target.current = null;
@@ -205,5 +218,10 @@ export function createComposerFileUploads(readArgs: () => ComposerFileUploadArgs
 export function useComposerFileUploads(args: ComposerFileUploadArgs) {
   const latest = useRef(args);
   latest.current = args;
-  return useMemo(() => createComposerFileUploads(() => latest.current), []);
+  const uploads = useMemo(() => createComposerFileUploads(() => latest.current), []);
+  // 挂载期结束(切走会话、关掉输入框)就把还在放的上传掐掉。
+  // ❌ 只靠「移除附件」「发送成功」这些显式动作去取消,用户直接切走时传输会在后台跑到完。
+  const clear = uploads.clear;
+  useEffect(() => clear, [clear]);
+  return uploads;
 }

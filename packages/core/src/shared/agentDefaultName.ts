@@ -16,7 +16,13 @@
 import { coreLogger } from '../log'
 import { normalizeAgentType, VALID_AGENT_TYPES } from '../agentTypes'
 import { getAgentTypeLabel } from './enums/agentTypeModels'
-export type OwnedAgentLike = { display_name: string }
+import { IMPLICIT_SESSION_HOME_PROJECT_ID } from './sessionProject'
+export type OwnedAgentLike = { display_name: string; projectId?: string | null }
+
+/** A missing project is the implicit task workspace, never "every project". */
+export function agentDisplayNameScope(projectId: string | null | undefined): string {
+  return projectId?.trim() || IMPLICIT_SESSION_HOME_PROJECT_ID
+}
 
 function escapeRegExp(text: string): string {
   return text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
@@ -63,11 +69,20 @@ export function nextAgentDefaultName(
     reservedNames?: Iterable<string>
     /** Highest number the server has recorded for this label (0 = none yet). */
     floor?: number
+    /**
+     * 只数这个作用域里的名字（项目 id；空 = 隐式任务工作区）。不给 = 沿用旧的全量行为。
+     * `reservedNames` 由调用方按作用域取好；这里只管过滤 `ownedAgents`。
+     */
+    scope?: string | null
   } = {},
 ): string {
+  const scope = options.scope === undefined ? undefined : agentDisplayNameScope(options.scope)
+  const names = ownedAgents
+    .filter((agent) => scope === undefined || agentDisplayNameScope(agent.projectId) === scope)
+    .map((agent) => agent.display_name)
   // 起点比每个已知的「<label> <n>」都大,所以不会与其中任何一个逐字相同 —— 不重名由构造保证,不用再撞名往后跳。
   let highest = options.floor ?? 0
-  for (const name of [...ownedAgents.map((a) => a.display_name), ...(options.reservedNames ?? [])]) {
+  for (const name of [...names, ...(options.reservedNames ?? [])]) {
     highest = Math.max(highest, agentNameSerial(name, label) ?? 0)
   }
   return `${label} ${highest + 1}`

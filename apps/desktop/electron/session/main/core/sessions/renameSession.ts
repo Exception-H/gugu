@@ -6,7 +6,15 @@ import { events } from '@main/lib/events';
 import { sessionChangedChannel } from '@shared/core/sessions/sessionEvents';
 import { MAX_SESSION_TITLE_LENGTH } from '@shared/core/sessions/sessions';
 import { sessionEvents } from './session-events';
-import { boundTaskName, onTaskNamesChanged, taskName, taskNamer } from './task-name';
+import {
+  assertNoTaskNameConflict,
+  assertTaskNameAvailable,
+  boundTaskName,
+  onTaskNamesChanged,
+  taskName,
+  taskNamer,
+  withTaskNameLock,
+} from './task-name';
 
 /**
  * Renaming a task renames its one name (task-name.ts): a bound session's identity, otherwise its
@@ -66,23 +74,41 @@ async function renameTask(sessionId: string, rawName: string, source: 'manual' |
     if (source === 'auto') return false; // an empty automatic title is no name
     throw new Error(`Session ${sessionId} cannot be renamed to an empty name`);
   }
-  const row = readRow(sessionId);
-  if (!row) throw new Error(`Session ${sessionId} not found`);
-  const current = taskName(row);
-  if (current === name) return false;
-  if (source === 'auto' && !isAgentDefaultName(current, row.provider)) return false;
-  const bound = boundTaskName(sessionId);
-  if (bound) {
-    // The roster write announces the new name (onTaskNamesChanged); publication follows.
-    await taskNamer().renameBound(sessionId, bound.agentUserId, name, source);
+  // A manual rename is a read-check-write over persistence. A bound rename writes the roster (not a
+  // SQLite row), so the process lock is the only place that can make the two paths share one critical
+  // section; the unbound write additionally re-checks inside its own transaction.
+  return withTaskNameLock(async () => {
+    const row = readRow(sessionId);
+    if (!row) throw new Error(`Session ${sessionId} not found`);
+    const current = taskName(row);
+    if (current === name) return false;
+    if (source === 'auto' && !isAgentDefaultName(current, row.provider)) return false;
+
+    const bound = boundTaskName(sessionId);
+    if (source === 'manual') assertTaskNameAvailable(row.projectId, name, sessionId);
+    if (bound) {
+      // The roster write announces the new name (onTaskNamesChanged); publication follows.
+      await taskNamer().renameBound(sessionId, bound.agentUserId, name, source);
+      return true;
+    }
+    db.transaction((tx) => {
+      if (source === 'manual') {
+        // Re-read inside the transaction: the check and the write see the same snapshot.
+        const rows = tx
+          .select({ id: sessions.id, config: sessions.config })
+          .from(sessions)
+          .where(eq(sessions.projectId, row.projectId))
+          .all();
+        assertNoTaskNameConflict(rows, name, sessionId, row.projectId);
+      }
+      tx.update(sessions)
+        .set({ config: { ...row.config!, agentDisplayName: name } })
+        .where(eq(sessions.id, sessionId))
+        .run();
+    });
+    announceTaskName(sessionId, row.projectId, name);
     return true;
-  }
-  db.update(sessions)
-    .set({ config: { ...row.config!, agentDisplayName: name } })
-    .where(eq(sessions.id, sessionId))
-    .run();
-  announceTaskName(sessionId, row.projectId, name);
-  return true;
+  });
 }
 
 /** Search and every renderer follow one announcement per name change. */

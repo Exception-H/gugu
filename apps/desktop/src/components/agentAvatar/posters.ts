@@ -34,6 +34,27 @@ const log = rendererLogger('agent-avatar/posters')
 
 const drawn = new Map<string, Promise<string>>()
 const ready = new Map<string, string>()
+/** 最多留几张定格:256px 一张,再往上就是白占内存。 */
+const POSTER_CACHE_LIMIT = 24
+
+/**
+ * 记下一张画好的定格,超了就把最旧那张收回去。
+ * 定格是 blob 地址(见 runtime.still),不 revoke 浏览器就一直替我们拿着那份图 ——
+ * 换形象换得勤的时候,内存只涨不落。
+ * 淘汰的那张如果刚好还在屏幕上,会先露出打包的同色脸、紧接着重画一张,不会裂图。
+ */
+function rememberPoster(key: string, url: string): void {
+  ready.set(key, url)
+  while (ready.size > POSTER_CACHE_LIMIT) {
+    const oldest = ready.keys().next()
+    if (oldest.done || oldest.value === key) break
+    const victim = oldest.value
+    const stale = ready.get(victim)
+    ready.delete(victim)
+    drawn.delete(victim)
+    if (stale) URL.revokeObjectURL(stale)
+  }
+}
 const listeners = new Set<() => void>()
 let version = 0
 
@@ -49,7 +70,7 @@ export function settledAgentLookPoster(look: AgentLook): Promise<string> {
     drawn.set(key, p)
     p.then(
       (url) => {
-        ready.set(key, url)
+        rememberPoster(key, url)
         version++
         for (const fn of listeners) fn()
       },

@@ -36,6 +36,12 @@ export function useCreateSessionState(
      * 空仓库无法建分支这些创建前置校验全部不存在 —— 创建这个动作不再可能失败。
      */
     runInProjectDir?: boolean;
+    /**
+     * 新建 Agent 的显示名种子（由 `taskNameFor` 的作用域自增经 RPC 给出）。
+     * 给了就不再走 generateSessionName 的 ASCII slug；`rawName` 同时让输入框保留中文。
+     */
+    nameSeed?: string;
+    rawName?: boolean;
   }
 ) {
   const { autoGenerateName: autoGenerateNameSetting } = useSessionSettings();
@@ -63,7 +69,8 @@ export function useCreateSessionState(
   const { data: randomName, isPending: isRandomPending } = useQuery({
     queryKey: ['generateSessionName', 'random', randomKey],
     queryFn: () => rpc.sessionCreate.generateSessionName({}),
-    enabled: autoGenerateName && !hasLinkedEntity,
+    // A scoped display-name seed already answers the name; the random slug must not overwrite it.
+    enabled: autoGenerateName && !hasLinkedEntity && opts?.nameSeed === undefined,
     refetchOnWindowFocus: false,
   });
 
@@ -100,6 +107,7 @@ export function useCreateSessionState(
 
   // Pick the effective generated name and pending state based on linked type + selection.
   const generatedName = (() => {
+    if (opts?.nameSeed !== undefined) return opts.nameSeed.trim() || undefined;
     if (linkedType === 'issue' && linkedIssue !== null) {
       return directIssueSessionName ?? (shouldGenerateFromIssue ? issueGeneratedName : undefined);
     }
@@ -119,8 +127,9 @@ export function useCreateSessionState(
 
   const sessionName = useSessionName({
     generatedName,
-    isPending,
+    isPending: opts?.nameSeed !== undefined ? false : isPending,
     resetKey: projectId,
+    raw: opts?.rawName,
   });
 
   const workspaceConfig = useWorkspaceConfig({ repositoryWorkspaceId });

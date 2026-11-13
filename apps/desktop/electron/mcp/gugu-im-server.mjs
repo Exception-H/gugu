@@ -1973,7 +1973,18 @@ async function handleGroup(args, deps) {
   if (args.action === 'add-agent') {
     const requested = typeof args.agent === 'string' ? args.agent.trim() : ''
     const [agent] = requested ? await resolveRecipientAddresses(decodeRecipientList([requested], 'agent'), deps, 'agent') : [deps.context.agentId]
-    return JSON.stringify({ ...await admin.addAgent(chatId, agent), agent_user_id: agent })
+    // P0-2.1: an Agent adding an Agent to an existing group is only an intent. The host persists a pending operation and
+    // asks a person on this session's timeline; only an explicit answer calls chat.add_group_agent. No ask surface here
+    // (headless/older host) = refuse, never fall back to adding directly. The database still checks membership/rules.
+    if (typeof deps.context.runHostAction !== 'function') {
+      throw new Error('group_add_agent: adding an Agent needs a person to confirm it in this session, and this host cannot ask one')
+    }
+    const confirmed = await deps.context.runHostAction({ action: 'group_join_confirm', chat_id: chatId, agent_user_id: agent, as_task: false })
+    const status = confirmed && typeof confirmed === 'object' ? confirmed.status : undefined
+    if (!['joined', 'pending_approval', 'already_member', 'denied', 'expired', 'withdrawn', 'unavailable', 'in_progress', 'failed'].includes(status)) {
+      throw new Error('group_add_agent: unexpected membership result')
+    }
+    return JSON.stringify({ ...confirmed, agent_user_id: agent })
   }
   if (await chatKindOf(deps, chatId) !== 'group') throw new Error(`group_${args.action}: chat_id must identify a group`)
   if (args.action === 'info') return JSON.stringify(await admin.info(chatId))
@@ -2610,7 +2621,7 @@ export const TOOL_DEFS = [
   {
     name: 'group_add_agent',
     writer: true,
-    description: 'Add yourself or one of your owner’s Agents to a group. Omit agent to add yourself. Uses your own group role; agent approval still applies. Returns joined, pending_approval or already_member. Other identities use message_invite.',
+    description: 'Ask your owner to add yourself or one of your owner’s Agents to a group. Omit agent to add yourself. The request is pending until a person confirms it on this session; refusal, timeout or offline never adds anyone. After confirmation the database still checks your group role and approval rule. Returns joined, pending_approval, already_member, denied, expired, withdrawn, unavailable or failed. Other identities use message_invite.',
     schema: z.object({
       chat_id: chatIdSchema.describe(`The group to join, from group_list.`),
       agent: z.string().trim().min(1).optional().describe('Optional: the agent to add when it is not you — one of your owner\'s agents as "aid:<Agent ID>" (or its older spelling "user:<uuid>"), "gugu:<number>", or "session:<id>" for a session on this machine (from session_spawn / session_children / session_peers). Omit it to add yourself.'),

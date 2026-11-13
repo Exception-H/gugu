@@ -1,6 +1,7 @@
-import { taskNameFor } from '../task-name';
+import { assertNoTaskNameConflict, TaskNameConflictError, taskNameFor } from '../task-name';
 import { mcpLibraryService } from '@main/core/mcp-library/service';
 import type { AgentProviderId } from '@gugu/session-plugins/agents';
+import { eq } from 'drizzle-orm';
 import { err, ok, type Result } from '@gugu/session-shared';
 import {
   composerPlatformModel,
@@ -20,11 +21,17 @@ import { sessions } from '@main/db/schema';
 import type { SessionRow } from '@main/db/schema';
 import { events } from '@main/lib/events';
 import { sessionCreatedChannel } from '@shared/core/sessions/sessionEvents';
+import { mapSessionRowToSession } from '../utils';
 import type {
   CreateSessionError,
   CreateSessionParams,
   CreateSessionSuccess,
 } from '@shared/core/sessions/create-session';
+import type {
+  CreateResidentSessionParams,
+  CreateResidentSessionSuccess,
+} from '@shared/core/sessions/create-resident-session';
+import type { SessionRuntime } from '@shared/core/sessions/sessions';
 
 type ConvInsert = typeof sessions.$inferInsert;
 
@@ -34,6 +41,14 @@ type ConvInsert = typeof sessions.$inferInsert;
  * 只对**本机**会话提问:判据用本机执行上下文,拿它去回答一个远端项目的问题会得到另一台机器的答案
  * (本机没装 = 挡掉一个在远端完全正常的会话)。远端项目维持既有行为。
  */
+async function preflightHarnessFor(
+  provider: AgentProviderId,
+  runtime: SessionRuntime
+): Promise<HarnessUnavailable | null> {
+  // 与建会话同一个缺省:问的是真会起的那条腿的程序(#6335)。
+  return checkLocalHarnessAvailable(provider, runtime === 'acp' ? 'acp' : 'tui');
+}
+
 async function preflightHarness(
   ic: InitialSession
 ): Promise<HarnessUnavailable | null> {
@@ -44,7 +59,7 @@ async function preflightHarness(
   if (ic.origin?.kind === 'import') return null;
 
   // 与下面建会话同一个缺省(`runtime: ic.type ?? 'pty'`):问的是真会起的那条腿的程序(#6335)。
-  return checkLocalHarnessAvailable(ic.provider, ic.type === 'acp' ? 'acp' : 'tui');
+  return preflightHarnessFor(ic.provider as AgentProviderId, ic.type ?? 'pty');
 }
 
 type InitialSession = NonNullable<CreateSessionParams['sessionConfig']['initialSession']>;
@@ -175,4 +190,136 @@ export async function createSession(
   });
 
   return ok(finalizeCreateSession(prepared.data, convRow));
+}
+
+export interface PreparedResidentSession {
+  projectId: string;
+  workspaceId: string;
+  convInsert: ConvInsert;
+}
+
+/**
+ * 常驻 Agent 的准备:只校验项目 / 工作区 / 启动闸,并构造一行**没有首轮**的会话。
+ *
+ * ❌ 不铸身份、不进群、不起进程 —— 这些要等主人发第一条消息(0.5)才发生。
+ * 与普通 createSession 共用同一套项目与 workspace 校验;首轮豁免来自 `origin: 'resident'`
+ * (build-session-row.ts),不是给 create 加开关。
+ */
+export async function prepareResidentSession(
+  params: CreateResidentSessionParams
+): Promise<Result<PreparedResidentSession, CreateSessionError>> {
+  if (!projectManager.getProject(params.projectId)) {
+    // 隐式任务工作区由调用方先 ensure(渲染层 ensureImplicitSessionHomeProjectId;
+    // 无界面服务端用 resolveAgentSessionProject(''))。第一刀不在创建动作里顺手建项目。
+    return err({ type: 'project-not-found' });
+  }
+
+  const unavailable = await preflightHarnessFor(params.agent.provider, params.agent.runtime);
+  if (unavailable) {
+    return err({
+      type: 'harness-unavailable',
+      reason: unavailable.reason,
+      providerId: unavailable.providerId,
+      harnessName: unavailable.harnessName,
+      detail: unavailable.detail,
+    });
+  }
+
+  const { workspaceId } = params.workspaceConfig.workspace;
+  const folder = await resolveProjectFolder(params.projectId, workspaceId);
+  if (!folder) {
+    return err({
+      type: 'provision-failed',
+      message: `工作区 ${workspaceId} 不是项目 ${params.projectId} 的文件夹:既不是它的根目录,也没有挂在它下面`,
+    });
+  }
+
+  const convInsert = buildSessionRow({
+    id: params.agent.id,
+    projectId: params.projectId,
+    workspaceId,
+    agentDisplayName: await taskNameFor(params.agent.provider, params.agent.displayName, params.projectId),
+    provider: params.agent.provider,
+    runtime: params.agent.runtime,
+    origin: { kind: 'resident' },
+    resident: true,
+    permissionMode: params.agent.permissionMode,
+    model: params.agent.model,
+    effort: params.agent.effort,
+    // 首启由第一次真正发送走 hydrate/session-life,不在创建时认领。
+    claimsFirstSpawn: false,
+  });
+
+  return ok({ projectId: params.projectId, workspaceId, convInsert });
+}
+
+/** 常驻行的落库:与 commitCreateSession 同一件事,独立类型以免动普通创建路径。 */
+export function commitResidentSession(
+  prepared: PreparedResidentSession,
+  tx: DrizzleTx
+): SessionRow {
+  // A resident agent is created with a user-visible name before any identity exists. Two concurrent
+  // submits carrying the same name must not both land: check inside the same transaction that inserts
+  // the row (the name check and the write share one snapshot; the losing insert throws loudly).
+  const name = prepared.convInsert.config?.agentDisplayName?.trim();
+  if (name) {
+    const rows = tx
+      .select({ id: sessions.id, config: sessions.config })
+      .from(sessions)
+      .where(eq(sessions.projectId, prepared.convInsert.projectId))
+      .all();
+    assertNoTaskNameConflict(rows, name, prepared.convInsert.id, prepared.convInsert.projectId);
+  }
+  const [row] = tx.insert(sessions).values(prepared.convInsert).returning().all();
+  return row;
+}
+
+/** 落库后的出生与事件;没有出生群,也没有首轮可以补发。 */
+export function finalizeResidentSession(
+  _prepared: PreparedResidentSession,
+  convRow: SessionRow
+): CreateResidentSessionSuccess {
+  const session = sessionBorn(convRow, 'createResidentSession');
+  events.emit(sessionCreatedChannel, { session });
+  return { session };
+}
+
+export async function createResidentSession(
+  params: CreateResidentSessionParams
+): Promise<Result<CreateResidentSessionSuccess, CreateSessionError>> {
+  // 幂等:同一次提交重试复用同一个 agent.id;已存在且是同一请求的 resident 行就原样返回。
+  const [existing] = await db.select().from(sessions).where(eq(sessions.id, params.agent.id)).limit(1);
+  if (existing) {
+    const sameRequest =
+      existing.config?.resident === true &&
+      existing.projectId === params.projectId &&
+      existing.provider === params.agent.provider &&
+      existing.runtime === params.agent.runtime;
+    if (!sameRequest) {
+      return err({
+        type: 'provision-failed',
+        message: `session ${params.agent.id} already exists with a different creation request`,
+      });
+    }
+    return ok({ session: mapSessionRowToSession(existing) });
+  }
+
+  const prepared = await prepareResidentSession(params);
+  if (!prepared.success) return prepared;
+
+  let convRow!: SessionRow;
+  try {
+    db.transaction((tx) => {
+      convRow = commitResidentSession(prepared.data, tx);
+    });
+  } catch (error) {
+    // A duplicate name is a user-facing creation failure, not a half-written row: the transaction has
+    // rolled back, so report it through the same Result channel as project / workspace failures.
+    if (error instanceof TaskNameConflictError) {
+      return err({ type: 'provision-failed', message: error.message });
+    }
+    throw error;
+  }
+
+  return ok(finalizeResidentSession(prepared.data, convRow));
 }

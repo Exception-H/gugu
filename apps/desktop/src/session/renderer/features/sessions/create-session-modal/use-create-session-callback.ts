@@ -58,6 +58,11 @@ interface UseCreateSessionCallbackParams {
   openAfterCreate?: boolean;
   /** #6264 建任务之前先做的一步(别的机器上还没装所选的家:先在那台机器上装好)。失败 = 不建,原因说出来。 */
   beforeCreate?: () => Promise<void>;
+  /**
+   * 新建 Agent 表单里人填的显示名。缺省 = 沿用任务入口的作用域默认名（0.6），
+   * 普通 NewSessionComposer 不传，行为不变。
+   */
+  agentDisplayName?: string;
 }
 
 function retainNewerInput(submitted: string, current: string): string {
@@ -77,6 +82,7 @@ export function useCreateSessionCallback({
   taskChatId,
   openAfterCreate = true,
   beforeCreate,
+  agentDisplayName,
 }: UseCreateSessionCallbackParams): {
   handleCreateSession: () => void;
   canCreate: boolean;
@@ -206,6 +212,7 @@ export function useCreateSessionCallback({
     const baseSession = buildInitialSession(input, {
       startupOrigin: 'session-page',
       id: sessionId,
+      ...(agentDisplayName?.trim() ? { title: agentDisplayName.trim() } : {}),
     });
     if (!baseSession) { finishSubmission(submission, true); setIsCreating(false); return; }
     const deviceId = machineRegistry.machineOf(selectedProjectId);
@@ -273,7 +280,7 @@ export function useCreateSessionCallback({
       },
       workspaceConfig: resolvedWorkspaceConfig,
       // 对话里派的新任务(taskChatId)进群坐任务座位:不发入群提示;群成员里「新建 Agent」照常提示。
-      ...(birthChatId ? { birthGroup: { chatId: birthChatId, asTask: Boolean(taskChatId) } } : {}),
+      ...(birthChatId ? { birthGroup: { chatId: birthChatId, asTask: Boolean(taskChatId), requestedBy: 'human' as const } } : {}),
     };
 
     const deferFirstTurn = baseSession.type === 'acp' && files.length > 0;
@@ -367,6 +374,7 @@ export function useCreateSessionCallback({
     birthChatId,
     taskChatId,
     openAfterCreate,
+    agentDisplayName,
     state,
     initialSession,
     draft,

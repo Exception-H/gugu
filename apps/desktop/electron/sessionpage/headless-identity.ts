@@ -90,7 +90,7 @@ export function wireHeadlessSessionpageIdentity(hostIpc: HostIpc): { dispose(): 
   })
   setSessionIdentityHost(identity)
   setTaskNamer({
-    defaultName: (provider, taken) => identity.defaultTaskName(provider, taken),
+    defaultName: (provider, taken, options) => identity.defaultTaskName(provider, taken, options),
     renameBound: (sessionId, agentUserId, name) => identity.renameBound(sessionId, agentUserId, name),
   })
   const nativeInbox = startNativeConversationInboxHost({

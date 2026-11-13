@@ -138,17 +138,24 @@ export function writeCachedTimeline(key: TimelineCacheKey, timeline: AgentWatchT
   const id = keyOf(key)
   const turns = [...timeline.turns] as TranscriptTurn[]
   const sizes = turns.map(sizeOf)
-  // 从第 start 轮起整份的 JSON 长度 = 两个括号 + 各轮 + 轮间逗号。
-  const bytesFrom = (start: number) => sizes.slice(start).reduce((sum, size) => sum + size + 1, 1)
-  for (let i = 0; i < turns.length && bytesFrom(0) > MAX_ENTRY_BYTES; i++) {
-    const bare = withoutFetchedImages(turns[i], bytesFrom(0) - MAX_ENTRY_BYTES)
+  // 整份的 JSON 长度 = 两个括号 + 各轮 + 轮间逗号。维护一个滚动总数:
+  // ❌ 别像原来那样每轮都 `sizes.slice(start).reduce(...)` —— 那是 O(n²),长会话流式更新时
+  // (约 1.5 秒一次写入)整条时间线反复重加一遍,手机上越用越顿。
+  let total = sizes.reduce((sum, size) => sum + size + 1, 1)
+  for (let i = 0; i < turns.length && total > MAX_ENTRY_BYTES; i++) {
+    const bare = withoutFetchedImages(turns[i], total - MAX_ENTRY_BYTES)
     if (bare === turns[i]) continue
-    sizes[i] = sizeOf(bare)
+    const stripped = sizeOf(bare)
+    total += stripped - sizes[i]
+    sizes[i] = stripped
     turns[i] = bare
   }
   let start = 0
-  while (turns.length - start > 1 && bytesFrom(start) > MAX_ENTRY_BYTES) start++
-  const bytes = bytesFrom(start)
+  while (turns.length - start > 1 && total > MAX_ENTRY_BYTES) {
+    total -= sizes[start] + 1
+    start++
+  }
+  const bytes = total
   const trimmed = start > 0
   const entry: CachedEntry = {
     key: id,

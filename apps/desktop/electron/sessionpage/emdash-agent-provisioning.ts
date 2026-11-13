@@ -1,6 +1,7 @@
 import type { SessionBootTasks } from '@gugu/core/shared/sessionBootTasks'
 import { isImplicitSessionHomeProjectId } from '@gugu/core/shared/sessionProject'
 import { createGroupAdmin } from '@gugu/core/cloud/groupAdmin'
+import { requestAgentGroupJoinForAuth } from './agent-group-join-host'
 // @@@sessionpage TASKPAGE-FUSION — AUTO-PROVISIONING (Part C, the real thing). Turns a session-page session
 // whose exact provider/surface declares addressable identity into a gugu agent at session start, so agents can
 // message each other in the shipped product with NO test hook. Two delivery transports feed the SAME
@@ -169,8 +170,14 @@ export async function defaultTaskAgentName(
   taken: readonly string[],
   ownerUserId: string | null,
   env: NodeJS.ProcessEnv = process.env,
+  options: { scoped?: boolean } = {},
 ): Promise<string> {
   const label = getAgentTypeLabel(normalizeAgentType(providerId))
+  // Scoped (`taken` is one project / the implicit task workspace): the account-wide roster and the
+  // account serial floor belong to another visible scope and must not advance this counter.
+  if (options.scoped) {
+    return nextAgentDefaultName([], label, { reservedNames: taken })
+  }
   const roster = await listAgents(env, { includeGuests: true })
   const owned = ownerUserId ? agentsForOwner(roster, ownerUserId) : roster
   const name = nextAgentDefaultName(owned.map((a) => ({ display_name: a.name })), label, {
@@ -421,14 +428,27 @@ export function assertSessionpageIdentityForReattach(sessionId: string): void {
  * (cap, approval queue). Nothing here fails the identity: what happened is logged, and a pending approval is the
  * group's to settle.
  */
-async function joinBirthGroup(accessToken: string, ownerUserId: string, group: BirthGroup | null | undefined, agentUserId: string, log: ReturnType<typeof createLogger>): Promise<void> {
+async function joinBirthGroup(accessToken: string, ownerUserId: string, sessionId: string, group: BirthGroup | null | undefined, agentUserId: string, log: ReturnType<typeof createLogger>): Promise<void> {
   if (!group) return
   const { chatId, asTask } = group
   try {
-    const data = await createGroupAdmin(makeChatClient(accessToken), ownerUserId).addAgent(chatId, agentUserId, { asTask })
-    log.info({ agentUserId, chatId, asTask, status: data.status }, 'agent born in a chat: asked to join it, the group answered')
+    // A person who picked the group in the composer already gave the confirmation for this exact join. A chat_id that
+    // came from a tool/remote caller (the default) is only an intent: it must become a persisted pending record and wait
+    // for a person on this session's timeline. No answer, a refusal, a timeout or this host being offline adds nobody.
+    if (group.requestedBy === 'human') {
+      const data = await createGroupAdmin(makeChatClient(accessToken), ownerUserId).addAgent(chatId, agentUserId, {
+        asTask, authorization: { kind: 'human' },
+      })
+      log.info({ agentUserId, chatId, asTask, status: data.status }, 'agent born in a chat: the person had chosen it, the group answered')
+      return
+    }
+    const result = await requestAgentGroupJoinForAuth({
+      sessionId, chatId, targetAgentId: agentUserId, actorUserId: ownerUserId, initiatorAgentId: agentUserId, asTask,
+    }, { accessToken, userId: ownerUserId })
+    log.info({ agentUserId, chatId, asTask, operationId: result.operationId, status: result.status },
+      'agent born in a chat: joining waits for an explicit human confirmation')
   } catch (error) {
-    log.warn({ agentUserId, chatId, error: error instanceof Error ? error.message : String(error) }, 'agent born in a chat could not join it')
+    log.warn({ agentUserId, chatId, error: error instanceof Error ? error.message : String(error) }, 'agent born in a chat could not ask to join it')
   }
 }
 
@@ -1250,7 +1270,14 @@ function startCloudProvision(job: {
     }
     // Born in a chat — joined now, once, while the identity is new: what reads this agent's groups waits for this
     // work (awaitSessionpageCloudIdentity), so its first session already counts that group.
-    if (job.birthGroup) await joinBirthGroup(job.ownerAuth.accessToken, job.ownerAuth.userId, await job.birthGroup(), job.guguAgentUserId, log)
+    // A person-chosen birth group still lands before the identity is announced (as before). An Agent-originated one
+    // now stops at a pending human confirmation: do not hang provisioning on that answer; the durable record and the
+    // Ask outlive this function.
+    if (job.birthGroup) {
+      const group = await job.birthGroup()
+      const joining = joinBirthGroup(job.ownerAuth.accessToken, job.ownerAuth.userId, job.sessionId, group, job.guguAgentUserId, log)
+      if (group?.requestedBy === 'human') await joining
+    }
     const current = (await listAgents(job.env, { includeGuests: true })).find((a) => a.gugu_user_id === job.guguAgentUserId)
     await updateAgent({ guguUserId: job.guguAgentUserId }, {
       cache: {
@@ -1638,7 +1665,8 @@ async function joinProjectGroup(
   const takeSeat = async (groupId: string): Promise<string> => {
     const admin = createGroupAdmin(chat, ownerUserId)
     // 任务 agent 进项目群坐任务座位:主动、不发入群提示(gugu-dev#181)。
-    const result = await admin.addAgent(groupId, guguAgentUserId, { asTask: true })
+    // The project group is the project's own system group; seating its Agent is the project's human-chosen consequence.
+    const result = await admin.addAgent(groupId, guguAgentUserId, { asTask: true, authorization: { kind: 'human' } })
     if (result.status === 'pending_approval') throw new Error('Project Agent join requires approval')
     await rememberProjectGroupId(projectId, groupId, ownerUserId, env)
     return groupId

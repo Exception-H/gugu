@@ -27,7 +27,10 @@ export function groupJoinError(error: { message: string }): Error {
 export async function addGroupAgent(chatId: string, agentUserId: string, role: string): Promise<GroupAgentJoinOutcome> {
   const admin = await currentGroupAdmin()
   let result
-  try { result = await admin.addAgent(chatId, agentUserId) } catch (error) { throw groupJoinError(error as Error) }
+  try {
+    // A person clicked『拉进群』: that click is the explicit human authorization.
+    result = await admin.addAgent(chatId, agentUserId, { authorization: { kind: 'human' } })
+  } catch (error) { throw groupJoinError(error as Error) }
   if (result.status === 'pending_approval') return 'pending_approval'
   if (role !== 'member') {
     if (role !== 'admin') throw new Error('Invalid group role')

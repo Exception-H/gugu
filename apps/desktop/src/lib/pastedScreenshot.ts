@@ -3,18 +3,25 @@ export const SCREENSHOT_TARGET_BYTES = 300 * 1024;
 export type ScreenshotQuality = 'compressed' | 'original';
 type Screenshot = { quality: ScreenshotQuality; compressed?: Promise<File>; failed?: boolean };
 const screenshots = new WeakMap<File, Screenshot>();
-const previews = new WeakMap<File, Promise<string>>();
+const previews = new WeakMap<File, string>();
+
 export function screenshotPreview(file: File): Promise<string> {
   let preview = previews.get(file);
   if (!preview) {
-    preview = file.arrayBuffer().then(bytes => {
-      let binary = '';
-      for (const byte of new Uint8Array(bytes)) binary += String.fromCharCode(byte);
-      return `data:${file.type};base64,${btoa(binary)}`;
-    });
+    // 预览只给 <img> 看,交给浏览器惰性解码。
+    // ❌ 别逐字节拼字符串再 btoa:2000px 的原图会在主线程上占住几百毫秒,粘贴时输入框直接顿住。
+    preview = URL.createObjectURL(file);
     previews.set(file, preview);
   }
-  return preview;
+  return Promise.resolve(preview);
+}
+
+/** 这枚文件不要了:把预览 URL 收回去 —— 不收的话那张图的字节会一直挂在渲染进程里。 */
+export function releaseScreenshotPreview(file: File): void {
+  const preview = previews.get(file);
+  if (!preview) return;
+  previews.delete(file);
+  URL.revokeObjectURL(preview);
 }
 
 /** Only clipboard PNG/JPEG screenshots opt in; picked files and animated images keep their bytes. */

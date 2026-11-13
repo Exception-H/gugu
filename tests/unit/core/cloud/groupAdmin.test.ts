@@ -17,10 +17,20 @@ describe('the common group transport', () => {
   it('asks for a task seat only when told to, with the same argument shape every time', async () => {
     const rpc = vi.fn(async () => ({ data: { chat_id: 'group', status: 'joined' }, error: null }))
     const admin = createGroupAdmin({ rpc }, 'owner')
-    await admin.addAgent('group', 'agent-1', { asTask: true })
-    await admin.addAgent('group', 'agent-2')
+    await admin.addAgent('group', 'agent-1', { asTask: true, authorization: { kind: 'human' } })
+    await admin.addAgent('group', 'agent-2', { authorization: { kind: 'human' } })
     expect(rpc).toHaveBeenNthCalledWith(1, 'add_group_agent', { p_chat_id: 'group', p_agent_user_id: 'agent-1', p_message: null, p_as_user_id: 'owner', p_as_task: true })
     expect(rpc).toHaveBeenNthCalledWith(2, 'add_group_agent', { p_chat_id: 'group', p_agent_user_id: 'agent-2', p_message: null, p_as_user_id: 'owner', p_as_task: false })
+  })
+  it('refuses an Agent-initiated join unless a host-confirmed operation is supplied', async () => {
+    const rpc = vi.fn(async () => ({ data: { chat_id: 'group', status: 'joined' }, error: null }))
+    const admin = createGroupAdmin({ rpc }, 'owner')
+    // TypeScript requires the field, but a .mjs caller can omit it: the runtime gate is the point.
+    await expect((admin.addAgent as unknown as (c: string, a: string) => Promise<unknown>)('group', 'agent-1'))
+      .rejects.toThrow(/explicit human confirmation/)
+    await expect(admin.addAgent('group', 'agent-1', { authorization: { kind: 'agent-confirmed', operationId: '  ' } }))
+      .rejects.toThrow(/confirmed operation id/)
+    expect(rpc).not.toHaveBeenCalled()
   })
   it('propagates the database permission error without inventing success', async () => {
     await expect(createGroupAdmin({ rpc: async () => ({ data: null, error: { message: 'group_manager_required' } }) }, 'agent')

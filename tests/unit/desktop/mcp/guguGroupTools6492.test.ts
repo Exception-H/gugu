@@ -59,7 +59,15 @@ function harness(options: {
     threadRootId: null,
     guguHome: '/tmp/gugu-group-test',
     getAccessToken: async () => `x.${Buffer.from(JSON.stringify({ sub: 'owner-1' })).toString('base64url')}.x`,
-    runHostAction: async (action: { action: string }) => {
+    runHostAction: async (action: { action: string; chat_id?: string; agent_user_id?: string; as_task?: boolean }) => {
+      if (action.action === 'group_join_confirm') {
+        // Stand in for the host's persisted pending record + a person who answered "allow": the host is the only caller
+        // of add_group_agent now, and it still passes the human-confirmed operation through to the same RPC.
+        const result = await restRpc('add_group_agent', {
+          p_chat_id: action.chat_id, p_agent_user_id: action.agent_user_id, p_message: null, p_as_user_id: SELF, p_as_task: action.as_task ?? false,
+        }) as { status: string; request_id?: string }
+        return { ...result, chat_id: action.chat_id, agent_user_id: action.agent_user_id, operation_id: 'op-1' }
+      }
       if (action.action !== 'peers') throw new Error(`unexpected host action ${action.action}`)
       return options.peers ?? []
     },
@@ -109,7 +117,7 @@ describe('group_add_agent through the shared actor door', () => {
   test('adds itself with the caller’s actor, without a second owner-role preflight', async () => {
     const h = harness()
     expect(JSON.parse(await h.call('group_add_agent', { chat_id: GROUP })))
-      .toEqual({ status: 'joined', chat_id: GROUP, agent_user_id: `user:${SELF}` })
+      .toEqual({ status: 'joined', chat_id: GROUP, agent_user_id: `user:${SELF}`, operation_id: 'op-1' })
     expect(h.rpcs).toEqual([{ name: 'add_group_agent', body: { p_chat_id: GROUP, p_agent_user_id: SELF, p_message: null, p_as_user_id: SELF, p_as_task: false } }])
   })
   test('already_member is authoritative from the database', async () => {
@@ -133,6 +141,31 @@ describe('group_add_agent through the shared actor door', () => {
       await h.call('group_add_agent', { chat_id: GROUP, agent: address })
       expect(h.rpcs.find((call) => call.name === 'add_group_agent')?.body).toMatchObject({ p_agent_user_id: SIBLING, p_as_user_id: SELF })
     }
+  })
+  test('a refusal from the confirmed operation adds nobody and is returned as denied', async () => {
+    // Replace the host's answer with a person declining: no add_group_agent RPC may happen.
+    const call = async (name: string, args: Record<string, unknown>) => {
+      const context = {
+        agentId: SELF, threadRootId: null, guguHome: '/tmp/x',
+        getAccessToken: async () => `x.${Buffer.from(JSON.stringify({ sub: 'owner-1' })).toString('base64url')}.x`,
+        runHostAction: async (action: { action: string }) => {
+          if (action.action === 'group_join_confirm') return { status: 'denied', operation_id: 'op-1' }
+          return []
+        },
+      }
+      return callToolImpl(context, name, args, { restRpc: async () => { throw new Error('the refused join must not call the database') }, restGet: async () => [{ kind: 'group' }] })
+    }
+    const out = JSON.parse(await call('group_add_agent', { chat_id: GROUP }))
+    expect(out).toMatchObject({ status: 'denied', operation_id: 'op-1' })
+  })
+  test('a host with no Ask surface refuses instead of adding directly', async () => {
+    const context = {
+      agentId: SELF, threadRootId: null, guguHome: '/tmp/x',
+      getAccessToken: async () => `x.${Buffer.from(JSON.stringify({ sub: 'owner-1' })).toString('base64url')}.x`,
+    }
+    await expect(callToolImpl(context, 'group_add_agent', { chat_id: GROUP }, {
+      restRpc: async () => { throw new Error('must not call the database') }, restGet: async () => [{ kind: 'group' }],
+    })).rejects.toThrow(/cannot ask one/)
   })
   test('propagates ownership/admission rejection from the one database check', async () => {
     for (const detail of ['agent_not_owned', 'actor_not_member', 'member_limit_reached']) {

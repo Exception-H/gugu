@@ -17,7 +17,14 @@ import type {
   ProvisionSessionResult,
   ProvisionWorkspaceError,
 } from '@shared/core/sessions/create-session';
-import { createSession } from './operations/createSession';
+import type {
+  CreateResidentSessionParams,
+  CreateResidentSessionSuccess,
+} from '@shared/core/sessions/create-resident-session';
+import {
+  createResidentSession as createResidentSessionOp,
+  createSession,
+} from './operations/createSession';
 import type { TeardownSessionError } from './provision-session-error';
 import { sessionWorkspaceManager } from './session-workspace-manager';
 
@@ -32,6 +39,12 @@ export class SessionService {
 
   async createSession(params: CreateSessionParams): Promise<Result<CreateSessionSuccess, CreateSessionError>> {
     return createSession(params);
+  }
+
+  async createResidentSession(
+    params: CreateResidentSessionParams
+  ): Promise<Result<CreateResidentSessionSuccess, CreateSessionError>> {
+    return createResidentSessionOp(params);
   }
 
   /**

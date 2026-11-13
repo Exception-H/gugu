@@ -1,6 +1,6 @@
 import { useShownAgentName } from '@/hooks/useShownAgentName'
 import { useNativeAgentChats } from '@/hooks/useNativeAgentChats'
-import { useState, useEffect, useMemo, useRef, useCallback, type KeyboardEventHandler, type ReactNode } from 'react'
+import { useState, useEffect, useMemo, useRef, useCallback, useDeferredValue, type KeyboardEventHandler, type ReactNode } from 'react'
 import { useTranslation } from 'react-i18next'
 import { BellOff, ChevronDown, ChevronRight, FolderClosed, MessageCircle, MessageSquare, Plus, Search, SquarePen, UserRound, Users, X, Zap } from '@/lib/icons'
 import { Sheet } from './ui/Sheet'
@@ -116,6 +116,9 @@ const LIST_SCROLL_STYLE: React.CSSProperties = { flex: 1, overflowY: 'auto', pad
 const MOBILE_LIST_SCROLL_STYLE: React.CSSProperties = { flex: 1, minHeight: 0, overflowY: 'auto', padding: 'var(--spacing-xs) var(--spacing-sm) var(--phone-nav-clearance)' }
 // 侧栏那一份不自己滚:滚的是会话页侧栏那一个滚动容器(置顶 / 项目 / 对话共用)。左右与侧栏的行同一道留白。
 const SIDEBAR_LIST_STYLE: React.CSSProperties = { padding: '0 12px 8px' }
+// 会话列表的行:不进视口就不排版。content-visibility 让浏览器跳过屏幕外那几百行的布局与绘制,
+// contain-intrinsic-size 的 auto 让它在真渲染过一次之后记住行高,滚动条不会跳。
+const LAZY_ROW_STYLE: React.CSSProperties = { contentVisibility: 'auto', containIntrinsicSize: 'auto 60px' }
 const NO_JOINED_GROUPS: readonly JoinedGroup[] = []
 
 const LOADING_STATE_STYLE: React.CSSProperties = { padding: '24px', textAlign: 'center', color: COLOR_PLACEHOLDER, fontSize: 'var(--font-body)' }
@@ -278,6 +281,10 @@ function ChatRow({ chat, agentStatus, isActive, topicsExpanded, onToggleTopics, 
       <ListRow
         data-chat-id={chat.id}
         data-chat-row={chat.id}
+        // 会话攒多了以后,一次把几百行全排一遍是切换和滚动卡住的主因。
+        // content-visibility 让浏览器跳过屏幕外那一行的布局与绘制:DOM 还在,
+        // 键盘焦点导航(focusChatRow 靠 querySelector 找元素)和 ⌘F 都不受影响。
+        style={LAZY_ROW_STYLE}
         draggable={!mobile}
         onDragStart={(event) => startChatDrag(event, chat, displayName)}
         onDragEnd={clearDraggedScreenContent}
@@ -578,7 +585,9 @@ export function ChatListPanel({
   // 现在能走到这个排序键的「无消息会话」只剩群、以及被置顶/标未读/有草稿的单聊(见下面 isListed)。
   const byTime = compareChatsByActivityDesc
   // 侧栏那一份不搜:搜索是 ⌘K 那一个面板(gugu-dev#181 ⑯);这里只有对话页自己那个搜索框。
-  const listQuery = searchQuery
+  // 搜索走延后值:每敲一个字都要重筛、重排、给所有命中行重建 React 元素,会话一多输入框就跟不上手。
+  // ❌ 别把它同步回 searchQuery —— 输入框本身要即时反映按键,延后的只是列表那一次重算。
+  const listQuery = useDeferredValue(searchQuery)
   // 高亮哪一行:侧栏那一份认会话页正看着的那块对话,对话页那一份认它自己打开的那条。
   const selectedChatId = inSidebar ? sidebarView.focusedChatId : activeChatId
   const matchesSearch = (chat: ChatItem) => {
