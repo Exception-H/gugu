@@ -226,3 +226,17 @@ it('phone and desktop show the same notifications for the same tasks: old read f
   expect(shown[0]).toEqual({ count: '3', rows: ['wait', 'newer-failure', 'older-failure'], listed: 43 })
   expect(shown[1]).toEqual(shown[0])
 })
+
+it.each([false, true])('an answered App install stays below the waits, muted, uncounted, saying its outcome and where (phone=%s)', async mobile => {
+  const installed = { ...task('installer'), agentStatus: 'working', status: { status: 'working', detail: 'running' }, unseen: false,
+    lastAnswered: { itemId: 'ask-1', kind: 'permission' as const, source: 'app-install' as const, optionId: 'allow',
+      option: { optionId: 'allow', name: 'Install', kind: 'allow_once' }, resolvedBy: 'mobile', resolvedAt: Date.UTC(2026, 10, 12) } }
+  const declined = { ...installed, conversationId: 'decliner', agent: { userId: 'decliner' }, title: 'decliner',
+    lastAnswered: { ...installed.lastAnswered, optionId: 'decline', option: { optionId: 'decline', name: 'Decline', kind: 'reject_once' }, resolvedBy: 'desktop', resolvedAt: Date.UTC(2026, 10, 11) } }
+  state.sessions = [installed, declined, task('approval')]
+  await mount(mobile); await open()
+  expect(document.querySelector('[data-testid="notification-count"]')?.textContent).toBe('1')
+  expect(rows().map(row => row.dataset.sessionLine)).toEqual(['approval', 'installer', 'decliner'])
+  expect(rows().map(row => row.querySelector('.gg-list-row-subtitle')?.textContent)).toEqual(['等你批准', '已在手机端同意', '已在桌面端拒绝'])
+  expect(rows().slice(1).every(row => !!row.querySelector('.gg-list-row-title .text-\\[var\\(--muted-fg\\)\\]') && !row.querySelector('.gg-list-row-trailing [data-shape="count"]'))).toBe(true)
+})

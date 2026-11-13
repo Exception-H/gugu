@@ -10,6 +10,7 @@ import type { WindowLiveReadRequest, WindowLiveAckRequest, WindowCommitPage, Win
 import { priorInputAdmission, sameInput, type InputAdmissionPayload } from './input-admission';
 import { ask, withdrawAll } from '../asks';
 import { hostAsks, resetAsks, respond as respondAsk, respondQuestion as respondAskQuestion } from '../asks/ask';
+import { answeredAskOf, readAnsweredAsks, recordAnsweredAsk } from '../asks/answered-asks';
 import { askSourceSpec } from '../asks/sources';
 import { readAgentQuestionRecords, rememberAgentQuestion } from '../sessions/agent-question-store';
 import { nativeConversationAliases, nativeConversationUnread, nativeOwnerNotificationUnread } from '../sessions/session-conversation-read';
@@ -42,6 +43,7 @@ import {
   type SessionpageSessionUpdateResult,
   type SessionpageSessionSubscribeRequest,
   type SessionpageSessionSummary,
+  type AnsweredAsk,
   type SessionpageSessionsListResult,
   type SessionpageSessionOptions,
   type SessionpageSessionsEvent,
@@ -67,7 +69,7 @@ import { agentIdsBySession, sessionAgents } from '@main/core/sessionpage/session
 import { db } from '@main/db/client';
 import { sessions, projects, type SessionRow } from '@main/db/schema';
 import { persistedWorkspacePath } from '@main/core/projects/utils';
-import { tapMainEvents } from '@main/lib/events';
+import { events, tapMainEvents } from '@main/lib/events';
 import { listSessionSchedules } from '@main/core/automations/repo';
 import {
   automationChangedChannel,
@@ -717,11 +719,12 @@ function sessionList(agents: ReadonlyMap<string, { agentId: string; chatId: stri
   const projectById = new Map<string, SessionpageProjectSummary>();
   const sessions: SessionpageSessionSummary[] = [];
   const schedules = schedulesBySession(listSessionSchedules());
+  const answered = readAnsweredAsks();
 
   for (const { session, project } of rows) {
     if (!visibleIds.has(project.id)) continue;
     projectById.set(project.id, project);
-    sessions.push(summaryOf(session, agents, schedules));
+    sessions.push(summaryOf(session, agents, schedules, answered));
   }
   // 还没开过会话的项目也要列:手机新建会话只能挑这里列出的项目,刚在电脑上打开的项目 ❌ 因为没会话就看不见
   // (#6985:在手机上给一台刚加的机器开第一条会话)。只列本机项目,与侧栏同一个口径:隐式的任务工作区不算
@@ -737,7 +740,7 @@ function sessionList(agents: ReadonlyMap<string, { agentId: string; chatId: stri
 /** 一条会话的摘要,与 `listSessions` 同一个投影;建会话时交回发起方,它就不用自己拼一份「不知道」的。 */
 export async function sessionSummary(conversationId: string): Promise<SessionpageSessionSummary | null> {
   const [row] = db.select().from(sessions).where(eq(sessions.id, conversationId)).limit(1).all();
-  return row ? summaryOf(row, await sessionAgents(process.env), schedulesBySession(listSessionSchedules())) : null;
+  return row ? summaryOf(row, await sessionAgents(process.env), schedulesBySession(listSessionSchedules()), readAnsweredAsks()) : null;
 }
 
 /**
@@ -747,7 +750,8 @@ export async function sessionSummary(conversationId: string): Promise<Sessionpag
 function summaryOf(
   session: SessionRow,
   agents: ReadonlyMap<string, { agentId: string; chatId: string | null }> | null,
-  schedules: ReadonlyMap<string, SessionSchedule[]>
+  schedules: ReadonlyMap<string, SessionSchedule[]>,
+  answered: ReadonlyMap<string, AnsweredAsk>
 ): SessionpageSessionSummary {
   const agent = agents?.get(session.id);
   const location = locateRow(session);
@@ -788,6 +792,7 @@ function summaryOf(
     spawnedByExtensionId: session.spawnedByExtensionId ?? null,
     bornInChatId: sessionBornInChatId(session.config),
     schedule: sessionScheduleDigest(schedules.get(session.id) ?? []),
+    lastAnswered: answered.get(session.id) ?? null,
   };
 }
 
@@ -1343,7 +1348,7 @@ const sessionsSubscriptions = new Map<string, { stop: () => void }>();
 const SESSIONS_PUSH_DEBOUNCE_MS = 200;
 
 /** 列表上看得见、又不经状态写入者的变化:会话增删、这几格元信息,以及会话给自己排的定时。 */
-const LISTED_FIELDS = ['title', 'isPinned', 'isPinnedToSidebar', 'archivedAt', 'parentSessionId', 'nativeUnreadKeys', 'nativeLastMessage', 'nativeOwnerNotificationSeq', 'nativeOwnerNotificationEpoch'];
+const LISTED_FIELDS = ['title', 'isPinned', 'isPinnedToSidebar', 'archivedAt', 'parentSessionId', 'nativeUnreadKeys', 'nativeLastMessage', 'nativeOwnerNotificationSeq', 'nativeOwnerNotificationEpoch', 'lastAnswered'];
 function changesSessionList(channel: string, data: unknown): boolean {
   if (channel === sessionCreatedChannel.name) {
     return true;
@@ -1614,6 +1619,19 @@ export async function respond(
 ): Promise<SessionTimelineResult<SessionpageSessionRespondResult>> {
   const row = readSessionRow(input.conversationId);
   if (!row) return fail('session_not_found', '这台机器上没有这条会话');
+  const result = await respondOn(row, input);
+  // Every surface answers through here, so the list learns of an answer once, whichever device gave it.
+  if (result.ok && result.value.accepted) {
+    recordAnsweredAsk(row.id, answeredAskOf(result.value.settlement));
+    events.emit(sessionChangedChannel, { sessionId: row.id, projectId: row.projectId, changes: { lastAnswered: true } });
+  }
+  return result;
+}
+
+async function respondOn(
+  row: SessionRow,
+  input: SessionpageSessionRespondRequest
+): Promise<SessionTimelineResult<SessionpageSessionRespondResult>> {
   const target = writeTargetFrom(row);
 
   const acquired = await acquire(input.conversationId);

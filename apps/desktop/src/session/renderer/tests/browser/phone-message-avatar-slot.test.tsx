@@ -36,7 +36,7 @@ beforeEach(() => { harness = createReactHarness() })
 afterEach(() => { harness.cleanup(); delete document.documentElement.dataset.theme })
 
 const waiting: NeedsYouTask = {
-  deviceId: 'host', machine: 'Test host', local: false, phoneHost: false,
+  deviceId: 'host', machine: 'Test host', local: false, phoneHost: false, handled: null,
   session: { conversationId: 'waiting', title: 'Codex 1', agent: { userId: 'codex' }, status: { status: 'needs_user', detail: 'approval' }, runtime: 'acp', supported: true } as NeedsYouTask['session'],
 }
 const assistant: PhoneAssistantState = { available: true, assistant: null, chatId: null, cloudDeviceId: null,
