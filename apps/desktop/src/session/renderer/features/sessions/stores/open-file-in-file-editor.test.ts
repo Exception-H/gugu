@@ -510,11 +510,11 @@ describe('task file preview routing', () => {
     await vi.waitFor(() =>
       expect(onResult).toHaveBeenCalledWith({ success: true, openedWith: null })
     );
-    // 开在对话右边并排,❌ 盖住对话(spec gugu-plugin「在工作区打开文件」)。Opened for an agent, not the person: `byHost`,
-    // so the page drawing it reads nothing outside the working copy.
+    // 开在对话右边并排,❌ 盖住对话(spec gugu-plugin「在工作区打开文件」)。The tab a person's click opens it in, with
+    // the same reading rights: no `byHost`, which is an App's (`files.openWith`) alone.
     expect(mocks.paneLayoutOpen).toHaveBeenCalledWith(
       'workspace.file',
-      { filePath: '/tmp/Application Support/note.md', byHost: true },
+      { filePath: '/tmp/Application Support/note.md' },
       { from: null, intent: 'beside', activate: false }
     );
     dispose();
