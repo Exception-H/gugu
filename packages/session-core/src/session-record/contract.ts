@@ -33,7 +33,7 @@ export type { SessionLiveReply } from './live-reply';
  * person answers it wherever they follow that session, and the first answer settles it (`respond`). `kind` says how a
  * surface draws it; `payload` is that kind's own.
  */
-export const ASK_SOURCES = ['harness-permission', 'harness-question', 'agent-question', 'app-install'] as const;
+export const ASK_SOURCES = ['harness-permission', 'harness-question', 'agent-question', 'app-install', 'device-capability'] as const;
 export type AskSource = (typeof ASK_SOURCES)[number];
 export type AskOrigin = { source: AskSource; payload?: unknown };
 
@@ -769,6 +769,11 @@ export type SessionpageSessionSummary = {
   /** 置顶。置顶的行离开项目分组，聚到列表顶部的「置顶」区（与桌面侧栏同一条口径）。 */
   isPinned?: boolean;
   /**
+   * #2548 固定到左侧栏(桌面):agent 住在群或项目里的顶层会话,在桌面左侧栏里另有一行。与 `isPinned` 互相独立。
+   * 可选,理由同上:缺席 = 宿主版本还不报它,❌ 补 false。手机不读它。
+   */
+  isPinnedToSidebar?: boolean;
+  /**
    * 这条会话的状态**你还没看过**。桌面侧栏据此点亮注意力点、标题加粗。
    * ⚠️ 语义是「未读」不是「有事」：做完了但你没看过，也算未读。
    */
@@ -792,6 +797,11 @@ export type SessionpageSessionSummary = {
   chatId?: string;
   /** 起它的 App(`spawnedByExtensionId`);App 列 agent 时由发起方比对成「是不是我起的」。老宿主不带。 */
   spawnedByExtensionId?: string | null;
+  /**
+   * #2599 它是从哪个对话里建出来的:建时加入的那个群,否则派它的那张任务卡所在的对话(私聊或群)。桌面左侧栏按它定
+   * agent 住在哪(在群里建的住那个群),之后进群退群都不改。null = 不是从对话里建的;缺席 = 老宿主不报(按不知道读)。
+   */
+  bornInChatId?: string | null;
   /**
    * 为什么这条会话没有记录可读(`supported: false` 时):`not-started` = agent 还没真正开出会话
    * (建的时候没起来);`harness-unsupported` = 这一家的记录还没有接。老宿主不带这一格。

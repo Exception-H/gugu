@@ -292,13 +292,16 @@ export default {
     "markUnreadFailed": "标记未读失败，请重试",
     "muted": "消息免打扰",
     "newMessage": "收到一条新消息",
+    "newsNotCallingYou": "有新消息，但没有叫到你",
+    "sendPreview": "[{{count}} 个附件]",
     "noResults": "未找到对话",
     "searchMessagesTitle": "搜索消息",
     "listLabel": "对话列表",
     "pin": "置顶",
     "scan": "扫一扫",
     "search": "搜索",
-    "unpin": "取消置顶"
+    "unpin": "取消置顶",
+    "unpinFromSidebar": "取消固定到左侧栏"
   },
   "chatService": {
     "errors": {
@@ -462,7 +465,8 @@ export default {
       "unavailable": "发送未完成，请稍后重新发送"
     },
     "verb": {
-      "task": "新任务"
+      "task": "新任务",
+      "agent": "新智能体"
     },
     "whisperBanner": "悄悄话给 {{name}} · 仅你与对方可见",
     "whisperPlaceholder": "悄悄话给 {{name}}…"
@@ -809,6 +813,8 @@ export default {
       "removed": "对方已移除、未送达",
       "refused": "未送达",
       "failed": "发送失败",
+      "albumImagesFailed": "{{count}} 张未发出",
+      "albumFilesFailed": "{{count}} 个未发出",
       "failedActions": "发送失败消息操作",
       "failedHint": "发送失败，点击查看消息操作",
       "undelivered": "所在实例未运行、未送达",
@@ -864,6 +870,7 @@ export default {
   "outbox": {
     "selectFileAgain": "上传已中断，请重新选择文件。",
     "sourceNotSent": "原消息尚未送达，请先重试原消息再转发。",
+    "followedNotSent": "它跟着的那条消息没发出，请先重新发送那条。",
     "sourceDiscarded": "原消息未发出，已被丢弃",
     "deliveryTimeout": "投递超时 {{seconds}}s（网络挂起）",
     "discarded": "已丢弃",

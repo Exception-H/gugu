@@ -25,8 +25,7 @@ export const userCardGroup = style({});
 // ── Runtime geometry contract ─────────────────────────────────────────────────
 // Set per-instance via assignInlineVars in message.def.tsx.
 
-export const cardVars = createVariableThemeContract<MessageStyleVars & { height: number }>({
-  height: null,
+export const cardVars = createVariableThemeContract<MessageStyleVars>({
   userCardPadX: null,
   userCardPadY: null,
   cardBorder: null,
@@ -36,7 +35,11 @@ export const cardVars = createVariableThemeContract<MessageStyleVars & { height:
   attachChipW: null,
 });
 
-// No class-level `overflow` here, deliberately — unlike every sibling row root
+// The card's engine height is a plain inline `height` (UserMessageCard), never one of these custom properties: a custom
+// property inherits, so changing it restyles every node of the body — per streamed chunk, O(reply). Measured
+// 2026-11-12 on a 15k-char LaTeX reply: style recalc grew 5.6 → 63 ms per chunk along the reply.
+//
+// No class-level `overflow` on the card, deliberately — unlike every sibling row root
 // that is handed an engine height. `UserMessageCard` writes `overflow-y` inline
 // on every render (`hidden` while collapsed or animating, `auto` when expanded
 // at rest, so long messages stay scrollable), and a non-visible `overflow-y`
@@ -44,7 +47,6 @@ export const cardVars = createVariableThemeContract<MessageStyleVars & { height:
 // therefore contain a height surplus; measured, not assumed — see the
 // "user card contains a transient surplus" contract, which also keeps the
 // inline style from being dropped silently.
-export const cardRoot = style({ height: cardVars.height });
 
 // ── UserMessageCard ───────────────────────────────────────────────────────────
 

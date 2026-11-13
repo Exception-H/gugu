@@ -129,7 +129,7 @@ export interface DesktopFilePage {
   handedVersions?: readonly number[];
   /**
    * A person opened `handed` in this page from the host's UI (`@@@outside-file`): only then may it be read outside its
-   * working copy. Not for a file an agent or an App opened, nor a page an agent works.
+   * working copy. Not for a file an App opened, nor a page an agent works.
    */
   personOpened?: true;
   asAgent?: string | null;
@@ -266,7 +266,11 @@ function chatSurface(page: DesktopFilePage): FileSurface {
  * is `not-found`; whether anything has opened it since this computer started does not matter. The same files, gates and
  * watch either way: a folder is a folder.
  */
-export async function localRootOf(place: WorkspacePlace): Promise<{ workspaceRoot: string; projectId: string; workspaceId: string | null }> {
+/**
+ * A working copy's folder on this computer: `workspaceRoot` real, `recordedRoot` as its record names it — a server's task
+ * folder is recorded through the account link `accounts/<id>` → `account`, and an agent names its files that way.
+ */
+export async function localRootOf(place: WorkspacePlace): Promise<{ workspaceRoot: string; recordedRoot: string; projectId: string; workspaceId: string | null }> {
   const target = workspaceTarget(place);
   if ('folder' in target) {
     const { otherMachines } = await import('@main/core/sessions/session-family');
@@ -275,18 +279,18 @@ export async function localRootOf(place: WorkspacePlace): Promise<{ workspaceRoo
     const folder = await projectFolderOfWorkspace(target.folder.workspaceId);
     if (!folder) throw new AppFileError('not-found', 'This folder is no longer in a project on this computer');
     const workspaceRoot = await fs.realpath(folder.path).catch(() => { throw new AppFileError('not-found', `${folder.path} is no longer on this computer`); });
-    return { workspaceRoot, projectId: folder.projectId, workspaceId: folder.workspaceId };
+    return { workspaceRoot, recordedRoot: folder.path, projectId: folder.projectId, workspaceId: folder.workspaceId };
   }
   if ('project' in target) {
     const { projectRootFolder } = await import('@main/core/projects/operations/project-folders');
     const root = await projectRootFolder(target.project);
     if (!root) throw new AppFileError('not-found', `Project ${target.project} is not a project on this computer`);
-    return { workspaceRoot: await fs.realpath(root.path), projectId: target.project, workspaceId: root.workspaceId };
+    return { workspaceRoot: await fs.realpath(root.path), recordedRoot: root.path, projectId: target.project, workspaceId: root.workspaceId };
   }
   const { agentSessionContext } = await import('@main/core/extensions/extension-agent-context');
   const session = await agentSessionContext(target.session);
   if (!session?.workspaceRoot) throw new AppFileError('not-found', 'This task has no working folder on this computer');
-  return { workspaceRoot: await fs.realpath(session.workspaceRoot), projectId: session.projectId, workspaceId: session.workspaceId ?? null };
+  return { workspaceRoot: await fs.realpath(session.workspaceRoot), recordedRoot: session.workspaceRoot, projectId: session.projectId, workspaceId: session.workspaceId ?? null };
 }
 
 async function localFolder(page: DesktopFilePage, place: WorkspacePlace): Promise<LocalSurface & { projectId: string; workspaceId: string | null }> {

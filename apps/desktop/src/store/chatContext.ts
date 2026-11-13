@@ -50,6 +50,8 @@ export type SendMessageOptions = {
   clientMessageId?: string
   /** 投递前置(agent 私聊的会话页会话就绪):outbox 在投递前 await,不挡乐观行上屏(C1)。 */
   beforeDeliver?: () => Promise<void>
+  /** A message delivered before this one (the files it was sent with). */
+  dependsOn?: string
 }
 
 export type SendAttachmentOptions = {
@@ -59,7 +61,6 @@ export type SendAttachmentOptions = {
   caption?: string
   threadRootId?: string | null
   isThreadRoot?: boolean
-  onSent?: (file: File, index: number) => void
 }
 
 export interface ChatContextValue {
@@ -121,8 +122,9 @@ export interface ChatContextValue {
   // @@@threads (#1531) — isThreadRoot：新建话题首条 INSERT 即标 root，触发器据此把 agent 回复路由进本条 thread。
   sendMessage: (content: string, opts?: SendMessageOptions) => Promise<string | undefined>
   /** `toUserIds`: who the copy addresses in its new chat (a forward's @), as a sent message's `to_user_ids`. */
-  forwardMessage: (source: MessageItem | Extract<AppForwardFilesDetail, { files: unknown }>['files'][number], targetChatId: string, opts?: { toUserIds?: string[] }) => Promise<void>
+  forwardMessage: (source: MessageItem | Extract<AppForwardFilesDetail, { files: unknown }>['files'][number], targetChatId: string, opts?: { toUserIds?: string[]; sendGroup?: { id: string; size: number } }) => Promise<void>
   createTopic: (input: CreateTopicInput) => Promise<CreatedTopic | null>
+  /** Resolves with the last file's message once the files are on screen; their bytes upload afterwards, failing on their own rows. */
   sendAttachmentsToChat: (chatId: string, files: File[], opts?: SendAttachmentOptions) => Promise<string | undefined>
   sendAttachments: (files: File[], opts?: SendAttachmentOptions) => Promise<string | undefined>
   sendMessageToChat: (chatId: string, content: string, opts?: SendMessageOptions) => Promise<string | undefined>

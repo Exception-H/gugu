@@ -184,6 +184,7 @@ import { GUGU_CLIENT_COMMAND_MCP, isGuguClientCommand } from '@gugu/session-core
 import { classifyProviderPermissionMode } from '@gugu/session-core/acp/client';
 import { useSessionMessages } from '@renderer/localization/use-session-messages';
 import { useBoundChatView } from './use-bound-chat-view';
+import { useSessionHeroCopy } from './use-session-hero-copy';
 import { useLastTurnSignInRequired } from './use-last-turn-sign-in';
 import { useAgentAuthStatus } from '@renderer/lib/stores/use-agent-auth-status';
 import { isAuthExpired } from '@renderer/lib/stores/harness-auth-expiry';
@@ -1818,6 +1819,15 @@ export const AcpChatPanel = observer(function AcpChatPanel({
       });
       return;
     }
+    if (!error && store.reconcileAwaitingLink) {
+      // 刚讲完的那一轮留在上面,线回来再对账补全(acp-chat-store @@@reconcile-across-link-loss)。
+      setCondition({
+        code: 'machine-unreachable',
+        label: translate('transcript.condition.turnAwaitsLink'),
+        detail: 'reconcile-awaiting-link',
+      });
+      return;
+    }
     if (!error && interruptedBy && !signInExpired && !signInMissing) {
       setCondition({
         code: 'turn-interrupted',
@@ -1977,7 +1987,7 @@ export const AcpChatPanel = observer(function AcpChatPanel({
       }
     })();
     setCondition(condition);
-  }, [store, store?.loadError, providerId, cliAuthMethod, openAgentAccount, translate, navigate, signInExpired, signInMissing, signInAgain, agent?.name, membershipLock, interruptedBy, restarting]);
+  }, [store, store?.loadError, store?.reconcileAwaitingLink, providerId, cliAuthMethod, openAgentAccount, translate, navigate, signInExpired, signInMissing, signInAgain, agent?.name, membershipLock, interruptedBy, restarting]);
 
   /**
    * 还在跑的后台命令与子智能体 → 消息列表末尾那一行(owner 2026-10-27:去掉右上角「摘要」卡,后台任务放进主对话)。
@@ -2042,6 +2052,7 @@ export const AcpChatPanel = observer(function AcpChatPanel({
       })),
     [promptLibrary]
   );
+  const hero = useSessionHeroCopy();
   const handleSelectSuggestion = useCallback(
     (suggestion: ThreadSuggestion) => {
       // submitPrompt toasts a failure; the suggestion stays on screen to click again.
@@ -2307,7 +2318,8 @@ export const AcpChatPanel = observer(function AcpChatPanel({
         heroSlot &&
         createPortal(
           <ThreadWelcome
-            title={translate('chat.hero')}
+            title={hero.title}
+            description={hero.description}
             suggestions={welcomeSuggestions}
             onSelectSuggestion={handleSelectSuggestion}
             suggestionsLabel={translate('chat.suggestions')}
