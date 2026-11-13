@@ -948,6 +948,7 @@ function getSessionpageLocalDelivery(): SessionpageLocalDeliveryRouter {
     },
     // 引擎进程还在跑 = 唤醒什么也起不了(唯一事实在会话页 bundle 的 session-process)。桥没加载 = 没有进程。
     processRunning: (sessionId) => loadEmdashBridge()?.sessionProcess(sessionId) != null,
+    runtimeUpgradeRequired: (sessionId) => loadEmdashBridge()?.getRuntimeUpgradeRequirement(sessionId) != null,
     onWakeComplete: (agentUserId) => kickInboxForAgent(agentUserId, 'wake-complete'),
   }))
 }
@@ -3803,6 +3804,7 @@ function recordDeviceSleep(sleep: { since: number; until: number; source: 'nativ
  * ❌ 不能用收件箱那一脚代替:两者取的不是同一批行。
  */
 function onSessionpageSessionLive(agentUserId: string, sessionId: string, trigger = 'session-live'): void {
+  if (trigger === 'session-live') getSessionpageLocalDelivery().sessionLive(sessionId)
   kickInboxForAgent(agentUserId, trigger)
   void (async () => {
     const emdash = loadEmdashBridge()
