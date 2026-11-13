@@ -12,11 +12,12 @@ vi.mock('@main/db/client', () => ({
     return mocks.db;
   },
 }));
-vi.mock('@gugu/session-plugins/agents', () => ({
+vi.mock('@gugu/session-plugins/agents', async (importOriginal) => ({
+  ...await importOriginal<typeof import('@gugu/session-plugins/agents')>(),
   resolveSessionpageSessionIntegration: () => ({ identity: 'addressable', messageTransport: 'router' }),
 }));
 vi.mock('@main/core/projects/utils', () => ({ resolveSession: () => null }));
-vi.mock('@main/lib/logger', () => ({ log: { warn: vi.fn() } }));
+vi.mock('@main/lib/logger', async () => ({ log: (await import('@tooling/utils/logger-mock')).createLoggerMock() }));
 vi.mock('@main/lib/events', () => ({ events: { emit: vi.fn() } }));
 
 import { sessionBootTasks } from '../boot-tasks';

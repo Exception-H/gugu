@@ -75,7 +75,7 @@ vi.mock('@main/core/sessions/session-workspace-manager', () => ({
   cleanupDetachedSessions: vi.fn(),
 }));
 vi.mock('@main/lib/events', () => ({ events: { emit: vi.fn() } }));
-vi.mock('@main/lib/logger', () => ({ log: { warn: vi.fn(), error: vi.fn(), info: vi.fn() } }));
+vi.mock('@main/lib/logger', async () => ({ log: (await import('@tooling/utils/logger-mock')).createLoggerMock() }));
 vi.mock('./session-events', () => ({ sessionEvents: { _emit: vi.fn() } }));
 
 vi.mock('@main/core/session-import/host-source', () => ({ hasLocalSessionSource: () => false }));
