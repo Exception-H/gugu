@@ -280,7 +280,7 @@ export const extensionsController = createRPCController({
     tabKind: string;
     /** The file of its workspace this tab was opened for (an extension claimed its type). */
     filePath?: string;
-    /** The host opened that file for an agent or an App, not a person: a file outside is not read through it (`@@@outside-file`). */
+    /** The host opened that file for an App, not a person or an agent of theirs: a file outside is not read through it (`@@@outside-file`). */
     byHost?: boolean;
     /** The chat file it was opened for (L3). */
     itemId?: string;

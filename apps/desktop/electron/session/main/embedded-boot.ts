@@ -106,6 +106,7 @@ import {
 } from '@main/core/extensions/extension-background'
 import { rpcRouter } from '@main/rpc' // ← the complete router, every controller
 import { initializeDatabase } from '@main/db/initialize'
+import { stopTaskTurnSearch } from '@main/core/search/task-turn-search'
 import { startTurnTextBackfillWorker, stopTurnTextBackfillWorker, type SearchBackfillLogger } from '@main/db/turn-text-backfill-runner'
 import { migrateProjectKind } from '@main/core/projects/operations/migrate-project-kind'
 import { closeDatabase, db, sqlite } from '@main/db/client'
@@ -144,6 +145,7 @@ import {
 } from '@main/core/browser/browser-partition-cleanup'
 import { projectSettingsService } from '@main/core/projects/settings/project-settings-service'
 import { getProjectById, getProjects } from '@main/core/projects/operations/getProjects'
+import { machineLocalProjectsOf } from '@main/core/projects/project-public-id'
 import { resolveAgentSessionProject } from '@main/core/projects/operations/resolve-agent-session-project'
 import { resolveAssistantSessionWorkspace } from '@main/core/projects/operations/task-directory-workspace'
 import { runPendingAssistantProjectCleanup } from '@main/core/projects/operations/assistant-project-cleanup'
@@ -187,6 +189,7 @@ import { providerConsumesStartupPrompt } from '@gugu/session-core/agents/plugins
 import { pluginRegistry, type AgentProviderId } from '@gugu/session-plugins/agents'
 import {
   localSessionIds,
+  assertOutboundProjectIds,
   resolveCreateModelChoice,
   runRemoteSessionAction,
   runSessionAction,
@@ -199,6 +202,7 @@ import {
 } from '@main/core/sessions/session-orchestration'
 import { sharedRemotePaneRoute } from '@main/core/session-timeline/remote-pane'
 import { releaseSubscriptionsOf } from '@main/core/session-timeline/controller'
+import { releasePlacementsOf } from '@main/core/sessions/first-turn-placement'
 import { setSessionAcpSessionStopper, sessionWorkspaceManager } from '@main/core/sessions/session-workspace-manager'
 import { prSyncScheduler } from '@main/core/pull-requests/pr-sync-scheduler'
 import { disposeLocalPtySessions } from '@main/core/pty/local-pty'
@@ -208,6 +212,7 @@ import { automationsService } from '@main/core/automations/automations-service'
 import { appService } from '@main/core/app/service'
 import { appSettingsService } from '@main/core/settings/settings-service'
 import { settleTerminalEnabled } from '@main/core/settings/terminal-visibility'
+import { upgradeProjectPinsToSidebarOnce } from '@main/core/sessions/sidebar-pin-upgrade'
 import { browserWebContentsRegistry } from '@main/core/browser/browser-webcontents-registry'
 import { setBrowserCorsRelaxationSettings } from '@main/core/browser/browser-profile-session'
 import { promptLibraryService } from '@main/core/prompt-library/service'
@@ -264,6 +269,7 @@ export {
   adoptLegacyTaskNames,
   runRemoteSessionAction,
   runSessionAction,
+  assertOutboundProjectIds,
   sessionCallerFacts,
   type SessionAction,
   type SessionCallerContext,
@@ -325,6 +331,7 @@ export {
   type EmdashPtyChatStartupEnvelope,
   type EmdashPtyChatStartupRequest,
 } from '@main/core/sessions/impl/emdash-pty-sessionpage-hook'
+export { getRuntimeUpgradeRequirement } from '@main/core/sessions/spawn-failure'
 export {
   setSessionMessageRouter,
   setSessionMessageOutboxReady,
@@ -487,6 +494,8 @@ export async function bootSessionHostCore(options: SessionHostBootOptions): Prom
   setHostIpc(options.hostIpc)
   // 经网络连进来的线(别的电脑、手机)开的时间线 / 会话列表订阅,线断了一并拆:寿命跟着连接走,❌ 另设保活。
   options.hostIpc.onConnectionClosed?.(releaseSubscriptionsOf)
+  // #2558 一条线断了,它正在放的首轮附件不会再放完:那几句照已放好的发出,❌ 一直等。
+  options.hostIpc.onConnectionClosed?.(releasePlacementsOf)
   const { ipcMain } = options.hostIpc
   const { browserFeatures } = options
   // 首启默认组(161 10-15):这个 profile 是不是第一次启动,只有在任何东西建出 App 的记录目录之前才看得出来 —— 所以最先。
@@ -727,6 +736,12 @@ export async function bootSessionHostCore(options: SessionHostBootOptions): Prom
   await appSettingsService.initialize()
   // 「终端」开关还没定值(升级上来的第一次启动)就按老用户迁移规则算一次写回,渲染层与新会话都读这一份。
   await settleTerminalEnabled().catch((e) => log.warn('terminal setting: migration failed; it stays off until set', { error: e }))
+  // #2548 一张表侧栏的第一次启动:项目里置顶的会话一并固定到左侧栏(标记守着,只一次)。失败不拦启动:标记没写,下次启动重来。
+  try {
+    upgradeProjectPinsToSidebarOnce()
+  } catch (e) {
+    log.error('sidebar pin upgrade failed; it runs again on the next start', { error: e })
+  }
   if (browserFeatures) {
     browserWebContentsRegistry.setKeyboardSettings(await appSettingsService.get('keyboard'))
   }
@@ -832,6 +847,7 @@ let stopPtyRecordSync: () => void = () => {}
 
 async function disposeEmdashModuleOnce(): Promise<void> {
   stopTurnTextBackfillWorker()
+  stopTaskTurnSearch()
   const failures: unknown[] = []
   const runPhase = async (phase: string, action: () => void | Promise<void>): Promise<void> => {
     const startedAt = performance.now()
@@ -2070,6 +2086,8 @@ export async function emdashProjectName(projectId: string): Promise<string | nul
   return project?.name ?? null
 }
 export async function emdashProjectRoot(projectId: string): Promise<string | null> { return (await getProjectById(projectId))?.path ?? null }
+/** This device's project for a chat, as the account records it (device_projects): the same pick an agent's project:<chat> gets. */
+export async function emdashProjectOfGroup(chatId: string): Promise<string | undefined> { return (await machineLocalProjectsOf(chatId))[0] }
 /** The chat a conversation's agent was born in, taken at its first mint (birth-groups.ts). */
 export async function emdashTakeBirthGroup(sessionId: string): Promise<BirthGroup | null> {
   return (await import('@main/core/sessions/birth-groups')).takeBirthGroup(sessionId)
@@ -2474,6 +2492,7 @@ export function sessionpageSessionDigest(): Array<{
   lastInteractedAt: string | null
   supported: boolean
   isPinned: boolean
+  isPinnedToSidebar: boolean
   unseen: boolean
   parentConversationId: string | null
   agentUserId?: string | null
@@ -2504,6 +2523,7 @@ export function sessionpageSessionDigest(): Array<{
       // 这里三项都读得到(本地库就在手边),所以给确定值;❌ 不写 `?? false` 之类的兜底,
       // 缺席的语义在读侧(normalizeSessionDigest)是「老宿主不报」,与这里给不出值不是一回事。
       isPinned: session.isPinned === true,
+      isPinnedToSidebar: session.isPinnedToSidebar === true,
       unseen: session.unseen === true,
       parentConversationId: session.parentConversationId ?? null,
       // #7199 花名册是异步读的、这里是同步的:用上一轮读到的(心跳每轮都来,晚一拍);一次都没读到就不带这一格。

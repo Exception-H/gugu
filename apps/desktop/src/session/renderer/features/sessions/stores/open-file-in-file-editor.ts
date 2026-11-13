@@ -351,7 +351,9 @@ export function openHostRequestedFileInSessionWhenReady({
         // click path draws the line.
         // 宿主替 agent(或 App)打开的:开在对话右边并排,❌ 盖住对话;用户正看着别的也 ❌ 切走(spec gugu-plugin「在工作区打开文件」)。
         if (external) {
-          const tab = hostFileTabTarget(path, true);
+          // The tab a person's click opens an outside file in (`openExternalFilePath`), with the same reading rights: the
+          // agent's own access to it was checked on its machine (`requireAgentFileAccess`). Never handed to a program here.
+          const tab = fileTabTarget(path, true);
           session.viewModel.paneLayout.open(
             tab.kind,
             tab.args,
@@ -360,7 +362,7 @@ export function openHostRequestedFileInSessionWhenReady({
           onResult({ success: true, openedWith: null });
         } else if (tabKind) {
           // 摩擦单 F122 «Open with X», named by the caller (main checked X claims it): what「用哪个打开」does once picked.
-          session.viewModel.paneLayout.open(tabKind, { filePath: path, byHost: true }, { from: sessionConversationTabId(session.viewModel.paneLayout, sessionId), intent: 'beside', activate: false });
+          session.viewModel.paneLayout.open(tabKind, { filePath: path }, { from: sessionConversationTabId(session.viewModel.paneLayout, sessionId), intent: 'beside', activate: false });
           onResult({ success: true, openedWith: tabKind });
         } else {
           // Reported, not predicted: the host says what actually opened because the

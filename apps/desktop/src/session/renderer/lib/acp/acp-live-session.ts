@@ -163,6 +163,11 @@ export class AcpLiveSession {
     });
   }
 
+  /** 这条会话所在的那条线此刻通着就当场 resolve,断着就等它重连上。 */
+  whenConnected(signal: AbortSignal): Promise<number> {
+    return this.client.connection.whenConnected(signal);
+  }
+
   getToolImage(itemId: string, index: number) {
     return this.client.getToolImage({ sessionId: this.sessionId, itemId, index });
   }

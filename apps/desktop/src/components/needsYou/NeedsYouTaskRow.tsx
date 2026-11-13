@@ -5,6 +5,8 @@ import { sessionPresentation } from '@/mobile/agent-watch/watch-status'
 import { agentStatusText } from '@/lib/agentStatusText'
 import { displayStatusOf } from '@gugu/core/shared/ui/agentConversationStatusModels'
 import { observer } from 'mobx-react-lite'
+import { useTranslation } from 'react-i18next'
+import { responderName } from '@/mobile/agent-watch/responder'
 import { Avatar } from '../Avatar'
 import { AgentContactStatusMark } from '../AgentContactStatusMark'
 import { ListRow } from '../ui/ListRow'
@@ -21,16 +23,24 @@ export const NeedsYouTaskRow = observer(function NeedsYouTaskRow({ task, onClick
   onClick: React.MouseEventHandler<HTMLElement>
   onKeyDown: React.KeyboardEventHandler<HTMLElement>
 }) {
+  const { t } = useTranslation('main')
   const { identitiesById } = useChatStore('identitiesById')
-  const { session } = task
-  const presentation = sessionPresentation(session, true)
+  const { session, handled } = task
+  // A handled approval is drawn as read history: no status mark, its outcome in place of the state.
+  const presentation = handled ? null : sessionPresentation(session, true)
+  const by = handled && responderName(handled.resolvedBy, t)
   const agentId = session.agent?.userId
   const agent = agentId ? identitiesById[agentId] : undefined
   const [name, title] = useShownAgentName([
     { name: agent?.display_name || session.title, createdAt: agent?.created_at ?? undefined },
     { name: session.title, createdAt: agent?.created_at ?? undefined },
   ])
-  const time = Date.parse(session.lastInteractedAt ?? '')
+  const time = handled?.resolvedAt ?? Date.parse(session.lastInteractedAt ?? '')
+  // The outcome in this surface's words, from the option's kind: the host's option names and title are only its fallback text.
+  const outcome = handled?.option?.kind?.startsWith('allow') ? 'Allowed' : handled?.option?.kind?.startsWith('reject') ? 'Declined' : handled?.kind === 'question' ? 'Answered' : ''
+  const state = handled
+    ? [by ? t(`agentWatch.settlement.handled${outcome}By`, { by }) : t(`agentWatch.settlement.handled${outcome}`)]
+    : presentation ? [agentStatusText(presentation.label)] : []
   return <ListRow
     data-session-line={session.conversationId}
     mobile={mobile}
@@ -45,7 +55,7 @@ export const NeedsYouTaskRow = observer(function NeedsYouTaskRow({ task, onClick
     </PhoneMessageAvatar>}
     title={emphasis ? name : <span className="font-normal text-[var(--muted-fg)]">{name}</span>}
     meta={Number.isFinite(time) ? formatCalendarDay(new Date(time).toISOString()) : undefined}
-    subtitle={presentation && [agentStatusText(presentation.label), ...(title === name ? [] : [title])].join(' · ')}
+    subtitle={state.length > 0 ? [...state, ...(title === name ? [] : [title])].join(' · ') : undefined}
     trailing={emphasis ? <Chip tone="accent" shape="count">1</Chip> : undefined}
   />
 })

@@ -81,7 +81,7 @@ import { log } from '@renderer/utils/logger';
 import { sessionHasPriorContext } from '@shared/core/sessions/prior-context';
 import type { Session } from '@shared/core/sessions/sessions';
 import { sessionRegistry } from '../stores/session-registry';
-import { type AcpLoadError, isTerminalLoadError, resultError, toLoadError } from './acp-load-error';
+import { type AcpLoadError, isConnectionLostError, isTerminalLoadError, resultError, toLoadError } from './acp-load-error';
 import { bindSessionTerminalOutputs } from './acp-terminal-output-binding';
 import { recordedContextUsage } from './recorded-context-usage';
 import { notifyCommittedTurn } from '@renderer/lib/session-output-observers';
@@ -158,6 +158,11 @@ export class AcpChatStore {
 
   session: AcpLiveSession | null = null;
   historyLoading = true;
+  /**
+   * 一轮讲完后的对账撞上断线:那一轮原样留在屏上,等线回来再对一次账(`_refreshHistory`)。true 时消息列表末尾说
+   * 「连接断了,连上后补全这一轮」。
+   */
+  reconcileAwaitingLink = false;
   /** A failure of opening / attaching this page; a failed session-life view says its own (`loadError`). */
   private _loadError: AcpLoadError | null = null;
   private _draftSubmissionId = crypto.randomUUID();
@@ -373,6 +378,7 @@ export class AcpChatStore {
       pendingPermissionMode: observable.ref,
       modelSettingError: observable,
       historyLoading: observable,
+      reconcileAwaitingLink: observable,
       _loadError: observable.ref,
       _lifeRetriedVersion: observable,
       transcriptPendingId: observable,
@@ -933,6 +939,16 @@ export class AcpChatStore {
     }
   }
 
+  /** How a start in progress is said — the pending row and the loading overlay read this one answer. The platform stage is
+   * the model-access request (ticket): said as it is, so a slow or stuck one is visible and stoppable. */
+  startPhaseOf(view: LifeView | null): PendingPrompt['starting'] {
+    if (view === null || !lifeIsStarting(view)) return undefined;
+    if (view.stage?.at === 'platform') return 'connecting';
+    const record = this._sessionRecord();
+    const resumes = !!(record?.providerSessionId || record?.forkFromProviderSessionId || this.runtimeView?.forkFromProviderSessionId);
+    return resumes ? 'restoring' : 'starting';
+  }
+
   private _projectLifeHead(view: LifeView | null, sender: readonly SessionInput[]): void {
     const session = this.chatState.session;
     const prior = session.state.pendingPrompt;
@@ -951,9 +967,7 @@ export class AcpChatStore {
         })),
       ] },
     } : view;
-    const record = this._sessionRecord();
-    const resumes = !!(record?.providerSessionId || record?.forkFromProviderSessionId || this.runtimeView?.forkFromProviderSessionId);
-    const starting: PendingPrompt['starting'] = view !== null && lifeIsStarting(view) ? (resumes ? 'restoring' : 'starting') : undefined;
+    const starting = this.startPhaseOf(view);
     const transcriptState = this.chatState.transcript.state;
     const turns = [...transcriptState.committedTurns, ...(transcriptState.activeTurnSnapshot ? [transcriptState.activeTurnSnapshot] : [])];
     const projections = new Set([...(this.stoppedRowId ? [stoppedTurnId(this.stoppedRowId)] : []), ...this.failedRowIds.map(failedTurnId)]);
@@ -2112,16 +2126,18 @@ export class AcpChatStore {
   /**
    * 打开时照旧走原来那条开场(请宿主起它)的几种:
    *  · 侧边聊天:它就是为这一问开出来的运行时分叉;
-   *  · 新建会话带着第一句、还没认领首启:那句话是人已经发出去的,当场起;
    *  · 持久分叉还没分出去:分叉这一步就发生在首启;
    *  · provider 那侧的会话已失效:那条路不起,只画库里那份并说原因。
+   *
+   * ❌ 新建会话带着第一句:那句话在建的那一刻就进了它的待发队列,是**入队**把它起起来的(宿主,同一次建任务调用里);
+   * 页面照常停着、跟着会话表挂上去,队首那句由待发队列画。#2558:页面曾在这里替它起一次 —— 那次起不带那句话,
+   * 附件还没放完时它先拿到引擎会话号,晚到的入队就被读成「跑过了」而丢掉,页面一片空白。
    */
   private _opensThroughStartup(): boolean {
     if (this.isTransient) return true;
     const record = this._sessionRecord();
     if (!record) return false;
     return record.providerSessionState === 'missing'
-      || pendingInitialQueue(record) !== undefined
       || pendingPersistentFork(record) !== undefined;
   }
 
@@ -3313,6 +3329,7 @@ export class AcpChatStore {
     const retainedFrameId = retainedFrame?.id ?? null;
     const retainedPending = this.chatState.session.state.pendingPrompt;
     let merged = false;
+    let linkLost: unknown = null;
     const session = this._requireSession('acpFailure.refreshHistory');
     if (session) {
       try {
@@ -3324,17 +3341,42 @@ export class AcpChatStore {
             this._runtimeCursor = null;
             this.reattachAfterHostReload();
           }
-        } else if (failed) this._toastError('acpFailure.refreshHistory', failed.error);
+        } else if (failed && isConnectionLostError(failed.error)) linkLost = failed.error;
+        else if (failed) this._toastError('acpFailure.refreshHistory', failed.error);
         else merged = true;
       } catch (error) {
-        // 对账本身失败也要把帧交还，否则它会一直压在最新内容上面；❌ 静默吞掉这次失败。
-        log.warn('Failed to reconcile transcript after a committed turn', {
-          error: error instanceof Error ? error.message : String(error),
-        });
-        this._toastError('acpFailure.refreshHistory', error);
+        if (isConnectionLostError(error)) linkLost = error;
+        else {
+          // 对账本身失败也要把帧交还，否则它会一直压在最新内容上面；❌ 静默吞掉这次失败。
+          log.warn('Failed to reconcile transcript after a committed turn', {
+            error: error instanceof Error ? error.message : String(error),
+          });
+          this._toastError('acpFailure.refreshHistory', error);
+        }
       }
     }
     if (refreshGeneration !== this._historyGeneration) return;
+    if (linkLost && session) {
+      // @@@reconcile-across-link-loss - 对账的那一问随断线没了:宿主那边这一轮好好的,只是这边还没读到。
+      // 刚讲完的那一帧原样留着(❌ 交还 —— 交还 = 整条从屏上消失,已提交列表里又还没有它),线回来再对一次账。
+      // 等的是这条会话自己那条线(同 session-attachment),❌ 定时器重试。
+      log.warn('Transcript reconciliation waits for the connection', {
+        sessionId: this.sessionId,
+        error: linkLost instanceof Error ? linkLost.message : String(linkLost),
+      });
+      runInAction(() => { this.reconcileAwaitingLink = true; });
+      const wait = new AbortController();
+      this._unsubs.push(() => {
+        wait.abort();
+        runInAction(() => { this.reconcileAwaitingLink = false; });
+      });
+      void session.whenConnected(wait.signal).then(() => {
+        if (this._disposed || this.session !== session || refreshGeneration !== this._historyGeneration) return;
+        runInAction(() => { this.reconcileAwaitingLink = false; });
+        void this._refreshHistory(options);
+      }, () => undefined);
+      return;
+    }
     // seed 先把活动轮清掉、下面再放回去:两步必须是转录的同一次更新(Solid `batch`)。分成两次的话,
     // 活动轮的每一行都会被卸掉重挂 —— 正在流式的那几段话淡入从头再放一遍,整段一闪(owner 10-27 录像:
     // 前一轮派出的后台 agent 每报一次进度,这一轮已经写出的话就闪一下)。
@@ -3454,12 +3496,7 @@ function containsUserPrompt(turn: TranscriptTurn | null, prompt: QueuedPrompt): 
   );
 }
 
-type StartRecord = Pick<Session, 'providerSessionId' | 'initialQueue' | 'forkFromProviderSessionId'>;
-
-/** 新建会话还没认领首启时带着的那几句(第一句在队首):有就打开它就当场请宿主起(#980 照旧)。 */
-function pendingInitialQueue(record: StartRecord): Session['initialQueue'] {
-  return record.providerSessionId === undefined && record.initialQueue?.length ? record.initialQueue : undefined;
-}
+type StartRecord = Pick<Session, 'providerSessionId' | 'forkFromProviderSessionId'>;
 
 /**
  * 持久分叉还没分出去时的来源 provider 会话。⚠️ 只在**还没认领首启**时发起:`providerSessionId` 一旦有值,

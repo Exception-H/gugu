@@ -52,6 +52,7 @@ import {
 } from 'electron'
 import { listAgents, listDevices, listReapedAgents, provisionSessionpageAgentOneTrip, resolveMachineHardwareId, type DeviceTableClient, type RuntimeAuthProvider } from '@gugu/core'
 import { claimDeviceFreeCredits, readDeviceClaimStatus } from './device-free-credits'
+import { askForCapability } from './device-actions/capability-ask'
 import { createDeviceActionsRuntime, nativeComponentsDir, type DeviceActionsRuntime } from './device-actions/runtime'
 import { captureReading, currentReading, historyReading } from './session/main/core/resource-monitor/reading'
 import { setMacFootprintReader } from './session/main/core/resource-monitor/footprint'
@@ -112,7 +113,7 @@ import { detectLocalSigning, downloadDmg, pickMacDmgFile, shouldUseDmgPath } fro
 import type { LocalSigning } from './macDmgUpdater'
 import { createSelectAccountHandler, webAuthnKeychainGroup } from './macWebAuthn'
 import { isOAuthCallback } from '../shared/oauth-callback'
-import { OAuthCallbackInbox } from './oauth-callback-inbox'
+import { OpenedLinkMailbox } from './opened-link-mailbox'
 import { googleAuthorizationUrl, googleIdentityLinkUrl } from '../shared/google-authorization-url'
 import { isOAuthAttemptRedirect } from '../shared/oauth-attempt'
 import {
@@ -314,7 +315,7 @@ import { MAIN_UI_EVENTS } from '../src/lib/mainUiEvents'
 import { createSessionpageIdentityHost } from './sessionpage/sessionpage-identity-host'
 import { createSessionpageProjectGroupHost, ensureProjectNoticeAccess } from './sessionpage/sessionpage-project-group-binding'
 import { prepareProjectAgentNotice } from './sessionpage/project-agent-notice'
-import { onProjectGroupMappingChanged } from './sessionpage/sessionpage-project-groups'
+import { forgetProjectGroupId, onProjectGroupMappingChanged } from './sessionpage/sessionpage-project-groups'
 import { readSessionpageOpenTarget } from './sessionpage/sessionpage-agent-mapping'
 import {
   clearLocalSessionDeliveryFailuresForTest,
@@ -362,6 +363,7 @@ import { sessionPlatformModel } from './session/main/core/sessions/platform-mode
 import { providerSessionIdForSession } from './session/main/core/sessions/provider-session-id'
 import { SESSIONPAGE_SESSION_RELOAD_CHANNEL } from '../src/session/shared/core/agents/session-reload'
 import { SESSIONPAGE_PLATFORM_RETRY_CHANNEL } from '../src/session/shared/core/agents/platform-model'
+import { subscribeBackendRecovered } from '@gugu/core/cloud/backendReachability'
 import {
   VOICE_NOTE_MEETINGS_CHANNEL,
   VOICE_NOTE_MICROPHONE_CHANNEL,
@@ -550,6 +552,7 @@ import {
   installDevtoolsLock,
   isDevtoolsLocked,
 } from './devtools-lock'
+import { installPageFullscreen, PAGE_FULLSCREEN_PREFERENCES } from './page-fullscreen'
 import { applyApplicationMenu } from './app-menu'
 import { createMainRendererGoneHandler, createMainRendererResponsivenessLog, type CrashDialogChoice } from './renderer-crash-recovery'
 import { menuOpenSettingsChannel } from '@shared/events/appEvents'
@@ -700,6 +703,7 @@ installDevtoolsLock((url) => {
   // 走到这里说明前面几层漏了 —— 这是要查的 bug,不是正常态,所以留证不静默。
   devtoolsLockLogger.error({ url }, 'DevTools 在锁定态下被打开,已强制关闭')
 })
+installPageFullscreen()
 registerContentContextMenus(ipcMain)
 registerFileViewerMenus(app, () => currentHostCatalog().fileViewerMenu, (error) => {
   processGoneLogger.error({ error: String(error) }, 'Content context menu failed')
@@ -946,6 +950,7 @@ function getSessionpageLocalDelivery(): SessionpageLocalDeliveryRouter {
     },
     // 引擎进程还在跑 = 唤醒什么也起不了(唯一事实在会话页 bundle 的 session-process)。桥没加载 = 没有进程。
     processRunning: (sessionId) => loadEmdashBridge()?.sessionProcess(sessionId) != null,
+    runtimeUpgradeRequired: (sessionId) => loadEmdashBridge()?.getRuntimeUpgradeRequirement(sessionId) != null,
     onWakeComplete: (agentUserId) => kickInboxForAgent(agentUserId, 'wake-complete'),
   }))
 }
@@ -1629,7 +1634,8 @@ function createWindow(loadContents = true): void {
       // 2026-07-21 owner 改把它当生产力工具用，要更高信息密度 → 收到 100%（默认 1.0）。
       // 应用级缩放，不动逐像素核对过的设计稿 px；Cmd/Ctrl +/- 仍可临时调（菜单自带 zoom roles）。
       // 注:已装机用户若之前 Cmd+ 调过、Chromium 会按 origin 持久化那个值 → 需 Cmd+0 归位到此默认。
-      zoomFactor: 1.0
+      zoomFactor: 1.0,
+      ...PAGE_FULLSCREEN_PREFERENCES,
     })
   })
 
@@ -2399,9 +2405,9 @@ ipcMain.handle('updates:changelog', async (): Promise<unknown> => {
 })
 ipcMain.handle('app:get-version', () => app.getVersion())
 ipcMain.handle('auth:oauth-redirect', () => `${GUGU_LINK_SCHEME}://auth/callback`)
-ipcMain.handle('auth:take-callbacks', (event) => {
-  if (event.sender !== mainWindow?.webContents) throw new Error('OAuth callbacks are only available to the main window')
-  return oauthCallbacks.take()
+ipcMain.handle('opened-links:take', (event) => {
+  if (event.sender !== mainWindow?.webContents) throw new Error('Opened links are only available to the main window')
+  return openedLinks.take()
 })
 ipcMain.handle('auth:open-browser', async (event, raw: unknown) => {
   if (event.sender !== mainWindow?.webContents || typeof raw !== 'string') throw new Error('Invalid OAuth browser request')
@@ -2422,6 +2428,7 @@ const desktopFiles = createDesktopFileAccess({ auth: () => desktopAuthProvider()
   rpc: signedInFileRpc(() => desktopAuthProvider().getAuth(), makeChatClient),
   downloads: fileStoreDirectory(resolveGuguHome(process.env)), fetch: electronFetch, links: () => sshLinks,
   root: async projectId => { const bridge = loadEmdashBridge(); if (!bridge) throw new Error('Project registry is unavailable'); return bridge.emdashProjectRoot(projectId) },
+  project: async chatId => { const bridge = loadEmdashBridge(); if (!bridge) throw new Error('Project registry is unavailable'); return bridge.emdashProjectOfGroup(chatId) },
   deviceStore: join(resolveGuguHome(process.env), 'project-files'), identityDb: makeIdentityClient,
 })
 function drainProjectFiles() { void desktopFiles.drain().catch(error => createLogger('files').warn({ error: String(error) }, 'Project transfer reconciliation failed')) }
@@ -2516,6 +2523,14 @@ ipcMain.handle(VOICE_NOTE_MEETINGS_CHANNEL, () => {
 handleShellChannel(SESSIONPAGE_PLATFORM_RETRY_CHANNEL, (_event, sessionId: unknown) => {
   if (typeof sessionId !== 'string' || !sessionId.trim()) throw new Error('session id is required for a platform retry')
   clearPlatformIssueBackoff(sessionId.trim())
+})
+
+// 后端恢复(这个宿主的心跳失败过又答上,见 backendReachability):起不来、还压着消息的会话各自重来一次,
+// 先清它的取票退避 —— 和人点重试同一条路。没有窗口的宿主也一样。
+subscribeBackendRecovered(() => {
+  if (!sessionLifeBooted) return
+  const started = bootedSessionLife().startAfterOutage(clearPlatformIssueBackoff)
+  if (started.length) createLogger('session-life').info({ started }, 'backend recovered; restarting failed sessions')
 })
 
 /**
@@ -3403,20 +3418,22 @@ app.on('open-url', (event, url) => {
  * 与 electron-builder.cjs 的 protocols、扩展侧 linkTo 用的是同一条规则(core 的 linkScheme.mjs)。
  */
 const GUGU_LINK_SCHEME = guguLinkScheme({ tier: process.env.GUGU_TIER, devLaunch: Boolean(process.defaultApp) })
-const oauthCallbacks = new OAuthCallbackInbox(() => {
-  if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send('auth:callback-available')
+// Every link the OS hands this app is also shown to the main renderer (its opened-links stream: login takes the OAuth
+// callbacks, the product watches every link). Opening a link stays here (handleGuguLink).
+const openedLinks = new OpenedLinkMailbox(() => {
+  if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send('opened-links:available')
 })
-// A cold Windows/Linux OAuth callback must reach login even if the session-page host cannot boot.
-const coldOAuthCallback = process.argv.find((arg) => arg.startsWith(`${GUGU_LINK_SCHEME}://`) && isOAuthCallback(arg))
-if (coldOAuthCallback) oauthCallbacks.push(coldOAuthCallback)
+// A cold Windows/Linux link must reach the renderer even if the session-page host cannot boot.
+const coldOpenedLink = process.argv.find((arg) => arg.startsWith(`${GUGU_LINK_SCHEME}://`))
+if (coldOpenedLink) openedLinks.push(coldOpenedLink)
 /** 会话页后端还没起来时到的链接,起来后按到达顺序处理。 */
 const pendingGuguLinks: string[] = []
 let guguLinksReady = false
 
 function handleGuguLink(url: string): void {
   if (!url.startsWith(`${GUGU_LINK_SCHEME}://`)) return
+  openedLinks.push(url)
   if (isOAuthCallback(url)) {
-    oauthCallbacks.push(url)
     focusMainWindow()
     return
   }
@@ -3649,6 +3666,11 @@ function crossMachine(): CrossMachineSessions {
       })
     },
     requester,
+    outbound: async (action) => {
+      const bridge = loadEmdashBridge()
+      if (!bridge) throw new Error('Project registry is unavailable')
+      await bridge.assertOutboundProjectIds(action)
+    },
     // #7199 云电脑管家:地址同渲染层(开发实例的 GUGU_CLOUD_COMPUTER_URL,否则这套库的云端函数),带这台桌面登着的用户 JWT。
     cloudComputerState: async () => {
       try {
@@ -3785,6 +3807,7 @@ function recordDeviceSleep(sleep: { since: number; until: number; source: 'nativ
  * ❌ 不能用收件箱那一脚代替:两者取的不是同一批行。
  */
 function onSessionpageSessionLive(agentUserId: string, sessionId: string, trigger = 'session-live'): void {
+  if (trigger === 'session-live') getSessionpageLocalDelivery().sessionLive(sessionId)
   kickInboxForAgent(agentUserId, trigger)
   void (async () => {
     const emdash = loadEmdashBridge()
@@ -4345,10 +4368,17 @@ function loadEmdashBridge(): EmdashBridgeModule | null {
     // 占位凭据由宿主算(要用 engine-injection-contract 与 capability-bundle),注进会话页那侧的探针。
     emdashBridge.setProbePlatformEnvResolver(buildProbePlatformCredentials)
     // #2507 选中走模型注入的 API Key 连接(pi / opencode / CodeBuddy)时,目录照那把连接读:输入框列出并默认选中它的模型。
-    emdashBridge.setProbeConnectionModelResolver(createProbeConnectionCredentials(async (providerId) => {
-      const { resolveConnectionModel } = await import('./session/main/core/agents/harness-connections')
-      return resolveConnectionModel(providerId)
-    }))
+    emdashBridge.setProbeConnectionModelResolver(createProbeConnectionCredentials(
+      async (providerId) => {
+        const { resolveConnectionModel } = await import('./session/main/core/agents/harness-connections')
+        return resolveConnectionModel(providerId)
+      },
+      // key 走环境变量的家(Qwen、Copilot、ZCode、Hermes、Antigravity):菜单列出连接勾选的全部模型。
+      async (providerId) => {
+        const { currentConnectionMenuModels } = await import('./session/main/core/agents/harness-connections')
+        return currentConnectionMenuModels(providerId)
+      },
+    ))
     return emdashBridge
   } catch (err) {
     console.error('[sessionpage] FAILED to load session page module — session page backend disabled:', err)
@@ -4883,6 +4913,8 @@ app.whenReady().then(async () => {
           ...(typeof record.timeout_ms === 'number' ? { timeoutMs: record.timeout_ms } : {}),
           ...(caller ? { caller } : {}),
           signal,
+          // Only this computer's actions are called (device_scope_mismatch otherwise): what it lacks is asked here.
+          askGrant: () => askForCapability({ sessionId: context.sessionId, action: call.name, requester: { name: who?.name ?? 'Agent', agentUserId: who?.agentUserId ?? null }, runtime: deviceActionsRuntime(), signal }),
         })
         if (record.name === 'recordings.read' || record.name === 'photos.read') {
           const args = record.args && typeof record.args === 'object' ? record.args as Record<string, unknown> : {}
@@ -5199,9 +5231,9 @@ app.whenReady().then(async () => {
       onHostResume: resumeAllCodexAppServerTurnWaiters,
       // #2507 不上平台时,这一家选中的那把「走模型注入」的 API Key 连接(pi / opencode / CodeBuddy)。
       // 动态 import:连接那一层在加载时读库,与 agent-run-context 里同一个理由。
-      connectionModel: async ({ providerId, surface }) => {
+      connectionModel: async ({ providerId, surface, sessionId }) => {
         const { resolveConnectionModel } = await import('./session/main/core/agents/harness-connections')
-        const connection = await resolveConnectionModel(providerId)
+        const connection = await resolveConnectionModel(providerId, sessionId)
         if (!connection) return null
         const { connectionModelLaunch } = await import('./sessionpage/connection-model-launch')
         createLogger('sessionpage/platform').info(
@@ -6454,8 +6486,14 @@ app.whenReady().then(async () => {
           deviceId: () => localDeviceId(),
           client: (accessToken) => makeIdentityClient(accessToken) as unknown as DeviceProjectsRpcClient,
           records: () => emdash.listDeviceProjectRecords(),
+          dropBindings: async (ownerUserId, localProjectIds) => {
+            for (const projectId of localProjectIds) await forgetProjectGroupId(projectId, ownerUserId)
+          },
           warn: (message, fields) => createLogger('device-projects').warn(fields, message),
-          onPublished: () => emdash.projectFoldersPublished(),
+          onPublished: () => {
+            emdash.projectFoldersPublished()
+            emdash.deviceProjectsPublished()
+          },
         })
         try {
           emdash.onDeviceProjectsMaybeChanged(() => deviceProjectsPublisher?.notify())

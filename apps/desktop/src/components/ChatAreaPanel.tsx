@@ -159,7 +159,7 @@ function ChatAreaSurface({ viewportKey = 'chats', imPage = false, navigationTarg
     filePreviewCloseRef.current()
   }, [])
   // @@@message-forward (#899) - open the forward picker; the dialog calls handleForwardTo to fan out.
-  const handleForward = useCallback((msg: MessageItem) => setForwardMessages([msg]), [])
+  const handleForward = useCallback((msg: MessageItem | readonly MessageItem[]) => setForwardMessages([msg].flat()), []) // #2581 a send forwards whole
 
   const filePreview = useMessageFilePreview({ onForward: handleForward, mobile, visible: surfaceVisible, closeRightSurfaces, toast })
   const openFilePreview = filePreview.open
@@ -822,9 +822,7 @@ function ChatAreaSurface({ viewportKey = 'chats', imPage = false, navigationTarg
             await sendMessage(content, opts)
           }}
           placeholder={chrome?.placeholder} attachGlyph={chrome?.attachGlyph} attachMenu={chrome?.attachMenu}
-          onSendAttachments={async (files, opts) => {
-            await sendAttachments(files, opts)
-          }}
+          onSendAttachments={sendAttachments}
           quoteContent={quoteText}
           onQuoteConsumed={() => setQuoteText(null)}
           mentionToInsert={mentionToInsert}

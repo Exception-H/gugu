@@ -1,7 +1,7 @@
 import { useSessionInputNotice, type SessionInputNotice } from '../session-input-notice';
 import { sessionStartupFailureCopy } from '../session-input-failure-copy';
 import { useAttachmentFileSelection } from '@/hooks/useAttachmentFileSelection';
-import { agentSupportsConnectionManagement } from '@shared/core/agents/agent-payload';
+import { agentOffersConnections } from '@renderer/features/settings/agents-page/agent-account';
 import { useConnectionPanel } from '@renderer/features/settings/subscriptions/use-connection-panel';
 import { isTranscriptDelivery } from '@/lib/pendingSessionDeliveries';
 import { resolveDeliveredAttachment } from '@renderer/lib/chat/delivered-message-presentation';
@@ -26,7 +26,7 @@ import { takeComposerCarry, useComposerVerb } from '@/lib/composerVerbBridge';
 import { useSessionMessageQuotes } from './use-session-message-quotes';
 import { useSessionPromptEditor } from './use-session-prompt-editor';
 import { continueSessionTurn } from './continue-session-turn';
-import { projectGroupsStore } from '@renderer/features/projects/stores/project-groups-store';
+import { accountProjectsStore } from '@renderer/features/projects/stores/account-projects-store';
 import { SessionComposerVerbs, SessionVerbDock, sessionVerbKey } from '../session-verb-dock';
 import type { TurnFileRef } from '@gugu/session-core/session-record/contract';
 import { followConversationLink } from '@/lib/followConversationLink';
@@ -103,10 +103,8 @@ import { nudgeWorkspace } from '@renderer/features/sessions/stores/workspace-nud
 import { machineLabel } from '@renderer/lib/machine-clients';
 import { machineRegistry } from '@renderer/lib/machine-routing';
 import { isEmbedVisible } from '@renderer/lib/portal-container';
-import { remoteHostsStore } from '@renderer/features/remote-hosts/remote-hosts-store';
 import { platformModelIdFromRuntimeOption, platformOptionId } from '@/session/shared/platform-model-id';
 import { openComposerImage, openImageViewer } from '@/lib/imageViewer';
-import { useShowModal } from '@renderer/lib/modal/modal-provider';
 import { resolveSignInTarget } from '@renderer/features/settings/agents-page/agent-account';
 import { pushTaskDirectory, taskAttachmentUsesSsh } from '@/lib/taskAttachmentTarget';
 import { droppedDirectoryMention, pathMention } from '@renderer/lib/drag-files';
@@ -186,12 +184,11 @@ import { GUGU_CLIENT_COMMAND_MCP, isGuguClientCommand } from '@gugu/session-core
 import { classifyProviderPermissionMode } from '@gugu/session-core/acp/client';
 import { useSessionMessages } from '@renderer/localization/use-session-messages';
 import { useBoundChatView } from './use-bound-chat-view';
+import { useSessionHeroCopy } from './use-session-hero-copy';
 import { useLastTurnSignInRequired } from './use-last-turn-sign-in';
 import { useAgentAuthStatus } from '@renderer/lib/stores/use-agent-auth-status';
 import { isAuthExpired } from '@renderer/lib/stores/harness-auth-expiry';
-import { forceRefreshHarnessModelCatalog, useHarnessModelCatalog } from '@renderer/lib/stores/use-harness-model-catalog';
-import { harnessModelCredentialKey } from '@renderer/lib/stores/use-harness-model-credential';
-import { useQueryClient } from '@tanstack/react-query';
+import { useHarnessModelCatalog } from '@renderer/lib/stores/use-harness-model-catalog';
 import { filterSlashCommands } from './slash-command-matching';
 import { startupPlaceholderKey } from './startup-placeholder';
 import { canStartFreshSession } from '@shared/core/sessions/session-recovery';
@@ -326,7 +323,7 @@ const ComposerForStore = observer(function ComposerForStore({
   const scheduleMachine = machineRegistry.machineOf(store.projectId);
   const schedules = useSessionSchedules(scheduleMachine, store.sessionId);
   // gugu-dev#181 ⑫ 在会话里也能派:项目里的会话,卡落项目群;没有项目的会话(就是和这个 agent 的私聊),卡落那个私聊。
-  const groupChatId = projectGroupsStore.chatIdOf(store.projectId);
+  const groupChatId = accountProjectsStore.projectOfLocal(store.projectId)?.chatId;
   const verb = useComposerVerb(sessionVerbKey(store.sessionId));
   // 点了新任务框标签上的 ×:那一框写的话交回这里(composerVerbBridge 的 carry)。
   useEffect(() => {
@@ -1447,7 +1444,7 @@ const ComposerForStore = observer(function ComposerForStore({
       {agentUserId ? <AgentFailureSlot agentUserId={agentUserId} /> : null}
       {/* History and lifecycle loading share the message area; a pending input keeps its own live row. */}
       {contentOverlaySlot && life && lifeIsStarting(life) && !store.showHistoryLoading && !store.transcriptPendingId && !store.chatState.session.state.pendingMessages.length ? (
-        createPortal(<SessionChatLoading label={translate('transcript.starting')} stage={life.stage?.at} />, contentOverlaySlot)
+        createPortal(<SessionChatLoading label={translate(`transcript.${store.startPhaseOf(life) ?? 'starting'}`)} stage={life.stage?.at} />, contentOverlaySlot)
       ) : null}
       {/* Every send of a task page is in custody until the transcript has it, so its bubbles always show here. */}
       <SessionInputQueue sessionId={store.runtimeSessionId} waitingForConnection life={life}
@@ -1746,17 +1743,17 @@ export const AcpChatPanel = observer(function AcpChatPanel({
   // 现在它与其余故障走同一条路:消息列表末尾的一行(spec `session-always-openable`),
   // 所以这里不再需要一个把它从整页覆盖层里摘出来的标志 —— 整页覆盖层本身已经没有了。
 
-  /** Claude/Codex 就地配置连接，不换路由或代发消息；「我已登录」仍只重试原会话。 */
+  /**
+   * 「去登录」「重新登录」= 打开这一家的连接面板(#2507,与订阅页、资源库详情同一块),就地配置:不换路由、不代发消息,
+   * 关掉后回到原会话;「我已登录」仍只重试原会话。一个连接都没有时面板直接是「添加连接」表单。
+   * 能走到这里的家都声明了一种能在咕咕里发起的登录(`cliAuthMethod`),所以都有这个面板(`agentOffersConnections`)。
+   */
   const connections = useConnectionPanel();
   const machine = store ? machineRegistry.machineOf(store.projectId) : null;
   const openAgentAccount = useCallback((anchor?: HTMLElement) => {
     if (!providerId || !cliAuthMethod) return;
-    if (agent && agentSupportsConnectionManagement(agent)) {
-      connections.show(agent, machine, anchor);
-      return;
-    }
-    navigate('library', { tab: 'agents', agentId: providerId });
-  }, [cliAuthMethod, navigate, providerId, agent, machine, connections.show]);
+    if (agent && agentOffersConnections(agent)) connections.show(agent, machine, anchor);
+  }, [cliAuthMethod, providerId, agent, machine, connections.show]);
 
   /**
    * #6264「登录已失效」:最近一轮因这家的登录不能用了而失败,且这台电脑上它此刻仍标着失效。
@@ -1769,45 +1766,8 @@ export const AcpChatPanel = observer(function AcpChatPanel({
   const signInExpired = lastTurnSignIn && isAuthExpired(harnessAuth);
   // 同一个信号(这一轮因凭据不能用而失败),而这家在这台电脑上压根没登录过(MiMo 没 key 时):说「还没登录」。
   const signInMissing = lastTurnSignIn && !signInExpired && harnessAuth?.status?.kind === 'unauthenticated';
-  const showSignIn = useShowModal('agentSignInModal');
-  const queryClient = useQueryClient();
-  /** 声明连接管理能力的适配器进入共享面板；其他适配器沿用既有登录方式与所属机器。 */
-  const signInAgain = useCallback((anchor?: HTMLElement) => {
-    if (!providerId || !cliAuthMethod) return;
-    if (agent && agentSupportsConnectionManagement(agent)) {
-      connections.show(agent, machine, anchor);
-      return;
-    }
-    const refresh = () => {
-      void forceRefreshHarnessModelCatalog(queryClient, providerId, 'acp');
-      void queryClient.invalidateQueries({ queryKey: harnessModelCredentialKey(providerId) });
-    };
-    const cliArgs = cliAuthMethod.kind === 'cli-login' ? cliAuthMethod.args : [];
-    showSignIn({
-      providerId,
-      providerName: agent?.name ?? providerId,
-      steps: machine
-        ? [{ methodId: cliAuthMethod.id }]
-        : [
-            {
-              methodId: cliAuthMethod.id,
-              transport: cliAuthMethod.kind === 'acp-authenticate' ? 'acp-authenticate' : 'terminal',
-            },
-          ],
-      ...(machine
-        ? {
-            remote: {
-              deviceId: machine,
-              deviceLabel: remoteHostsStore.device(machine)?.label ?? machine,
-              headless: cliAuthMethod.kind === 'cli-login' && !!cliAuthMethod.headlessArgs,
-              command: [agent?.command?.split(/[\\/]/).filter(Boolean).pop() || providerId, ...cliArgs].join(' '),
-            },
-          }
-        : {}),
-      onSuccess: refresh,
-      onClose: refresh,
-    });
-  }, [agent?.name, agent?.command, cliAuthMethod, machine, providerId, queryClient, showSignIn, agent, connections.show]);
+  /** 与「去登录」同一个面板(见上):登录失效的那一家在这里重新登,或换一个连接。 */
+  const signInAgain = openAgentAccount;
 
   // #4900 登录 ❌ 不自动发起。owner 2026-09-04:「我不登录也行啊」——自动弹登录终端会
   // 连带跑起厂商的 `<cli> login`,浏览器随即弹出授权页,这就是「强登」本身。
@@ -1856,6 +1816,15 @@ export const AcpChatPanel = observer(function AcpChatPanel({
         detail: 'membership-required',
         // 「我开好了」= 让下拉重取目录:开成了,这一格自然变回 null。
         actions: reasonActions('membership-required', { joinMembership: openMembershipPage, retry: refreshPlatformModelCatalogs }, translate),
+      });
+      return;
+    }
+    if (!error && store.reconcileAwaitingLink) {
+      // 刚讲完的那一轮留在上面,线回来再对账补全(acp-chat-store @@@reconcile-across-link-loss)。
+      setCondition({
+        code: 'machine-unreachable',
+        label: translate('transcript.condition.turnAwaitsLink'),
+        detail: 'reconcile-awaiting-link',
       });
       return;
     }
@@ -2018,7 +1987,7 @@ export const AcpChatPanel = observer(function AcpChatPanel({
       }
     })();
     setCondition(condition);
-  }, [store, store?.loadError, providerId, cliAuthMethod, openAgentAccount, translate, navigate, signInExpired, signInMissing, signInAgain, agent?.name, membershipLock, interruptedBy, restarting]);
+  }, [store, store?.loadError, store?.reconcileAwaitingLink, providerId, cliAuthMethod, openAgentAccount, translate, navigate, signInExpired, signInMissing, signInAgain, agent?.name, membershipLock, interruptedBy, restarting]);
 
   /**
    * 还在跑的后台命令与子智能体 → 消息列表末尾那一行(owner 2026-10-27:去掉右上角「摘要」卡,后台任务放进主对话)。
@@ -2083,6 +2052,7 @@ export const AcpChatPanel = observer(function AcpChatPanel({
       })),
     [promptLibrary]
   );
+  const hero = useSessionHeroCopy();
   const handleSelectSuggestion = useCallback(
     (suggestion: ThreadSuggestion) => {
       // submitPrompt toasts a failure; the suggestion stays on screen to click again.
@@ -2348,7 +2318,8 @@ export const AcpChatPanel = observer(function AcpChatPanel({
         heroSlot &&
         createPortal(
           <ThreadWelcome
-            title={translate('chat.hero')}
+            title={hero.title}
+            description={hero.description}
             suggestions={welcomeSuggestions}
             onSelectSuggestion={handleSelectSuggestion}
             suggestionsLabel={translate('chat.suggestions')}

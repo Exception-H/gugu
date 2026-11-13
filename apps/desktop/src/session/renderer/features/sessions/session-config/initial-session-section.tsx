@@ -1,5 +1,5 @@
 import { useAttachmentFileSelection } from '@/hooks/useAttachmentFileSelection';
-import { agentSupportsConnectionManagement } from '@shared/core/agents/agent-payload';
+import { agentOffersConnections } from '@renderer/features/settings/agents-page/agent-account';
 import { useConnectionPanel } from '@renderer/features/settings/subscriptions/use-connection-panel';
 import { DEFAULT_FREE_PLATFORM_MODEL, DEFAULT_PLATFORM_MODEL_BY_PROVIDER } from '@shared/core/sessions/new-session-defaults';
 import {
@@ -76,7 +76,7 @@ import {
 } from './harness-model-field';
 import { useHarnessModelOptions } from './use-harness-model-options';
 import { platformEffortFacts, resolveCreateEfforts } from '@shared/core/agents/create-efforts';
-import { HARNESS_MODEL_CATALOG_QUERY_KEY, useHarnessModelCatalog, forceRefreshHarnessModelCatalog } from '@renderer/lib/stores/use-harness-model-catalog';
+import { useHarnessModelCatalog, forceRefreshHarnessModelCatalog } from '@renderer/lib/stores/use-harness-model-catalog';
 import { queryClient } from '@renderer/lib/query-client';
 import { useLibraryHost } from '@renderer/features/library/library-host';
 import { useHarnessModelCredential } from '@renderer/lib/stores/use-harness-model-credential';
@@ -463,6 +463,16 @@ export function resolveInitialEffort(
   return override && efforts.options[override] ? override : null;
 }
 
+/**
+ * 平台模型没有 harness model id,但它同样要记住用户选过的档 —— 用平台模型 id 当 key。
+ * ❌ 不能省成只按 provider 记:同一引擎下换平台模型,档位不一定还在(见 resolveInitialEffort)。
+ */
+function effortKeyOf(provider: string | null, model: string | null, platformModel: string | null): string | null {
+  if (!provider) return null;
+  if (platformModel) return `${provider}:platform:${platformModel}`;
+  return model ? `${provider}:${model}` : null;
+}
+
 export function useInitialSessionState(
   projectId?: string,
   initialProvider?: AgentProviderId,
@@ -485,7 +495,9 @@ export function useInitialSessionState(
   // 新会话默认通用。设置里开着「允许以终端（TUI）模式启动 agent」时,框里给「终端 | 通用」由人选(owner 10-30);
   // 编辑一条已存的自动化时,先由那条记录自己的展示播种。两者都只覆盖这一个框(`setSessionView`,❌ 写回任何全局设置)。
   const terminalEnabled = useTerminalEnabled();
-  const [sessionViewOverride, setSessionViewOverride] = useState<SessionView | null>(null);
+  // #2569 a draft handed over from another box (the sample project's first message) opens with what was picked there.
+  const handed = draft?.handoff?.picked;
+  const [sessionViewOverride, setSessionViewOverride] = useState<SessionView | null>(() => handed?.sessionView ?? null);
   const sessionViewPreference = sessionViewOverride ?? DEFAULT_SESSION_VIEW;
   // #6264 远端创建框:只经云端连着的机器只有聊天界面那条腿(终端画面走不了云端消息通道),
   // 所以钉在它上面 —— 显示「编程」却建出「通用」就是界面说假话。
@@ -518,17 +530,22 @@ export function useInitialSessionState(
   const [mentionContext, setMentionContext] = useState<string | undefined>();
   const [issueContext, setIssueContext] = useState<string | null>(null);
   const [permissionModeOverride, setPermissionModeOverride] = useState<GuguPermissionMode | null>(
-    null
+    () => handed?.permissionMode ?? null
   );
   const [issueContextEditorOpen, setIssueContextEditorOpen] = useState(false);
-  const [modelOverrides, setModelOverrides] = useState<Record<string, string>>({});
+  const [modelOverrides, setModelOverrides] = useState<Record<string, string>>(
+    () => (handed?.model ? { [handed.provider]: handed.model } : {})
+  );
   // 每个 provider 一格三态:平台模型 id / null(明确选了 harness)/ 缺席(还没表过态)。
   // 缺席与 null 必须分得开 —— 前者才轮得到 agent 级默认值说话。
   const [platformModelOverrides, setPlatformModelOverrides] = useState<
     Record<string, string | null>
-  >({});
+  >(() => (handed ? { [handed.provider]: handed.platformModel } : {}));
   // Keyed by `${provider}:${model}` — see resolveInitialEffort for why effort is per-model.
-  const [effortOverrides, setEffortOverrides] = useState<Record<string, string | null>>({});
+  const [effortOverrides, setEffortOverrides] = useState<Record<string, string | null>>(() => {
+    const key = handed ? effortKeyOf(handed.provider, handed.model, handed.platformModel) : null;
+    return key ? { [key]: handed!.effort } : {};
+  });
   const [issueMentionContexts, setIssueMentionContexts] = useState<Record<string, string>>({});
   // #4325 —— 待发队列(两条通道共用)。composer 是这些文件的唯一保管者:一件真的送达了才
   // 把它移走,所以「屏幕上还剩什么」逐字等于「重试还要发什么」,不需要第二份快照。
@@ -893,61 +910,17 @@ export function useInitialSessionState(
    *    于是解锁组、登录终端、弹窗的「去登录」对它们一概不出现。
    */
   const cliLoginMethod = signInTarget?.method ?? null;
-  /** Claude/Codex 复用连接面板，留在当前草稿；其他家保留资源库/远端登录入口。 */
+  /**
+   * 「去登录」= 打开这一家的连接面板(#2507,与订阅页、资源库详情同一块),留在当前草稿:完成或取消后回到这里,
+   * 输入、附件、任务选择都在。一个连接都没有时面板直接是「添加连接」表单。登哪台机器由面板按 `machine` 定。
+   * 能走到这里的家都有一种能在咕咕里发起的登录(`cliLoginMethod`),所以都有这个面板(`agentOffersConnections`)。
+   */
   const connections = useConnectionPanel();
-  const showAgentSignIn = useShowModal('agentSignInModal');
-  const remoteAgentCommand = agents?.find((agent) => agent.id === providerId)?.command ?? null;
   const openAgentAccount = useCallback((anchor?: HTMLElement) => {
     if (!providerId || !cliLoginMethod) return;
     const selectedAgent = agents?.find(item => item.id === providerId);
-    if (selectedAgent && agentSupportsConnectionManagement(selectedAgent)) {
-      connections.show(selectedAgent, machine, anchor);
-      return;
-    }
-    /**
-     * #6264 所选机器不是本机:在**那台机器上**登录,❌ 跳本机的资源库 —— 那一页画的是这台电脑的安装与登录
-     * (/opt/homebrew/bin/codex、「已登录」),当成那台机器的就是张冠李戴。窗口还是那一个登录窗口,
-     * 命令跑在那台机器上、链接在这台电脑的浏览器里开;登完 / 关窗都让那台机器的目录重问一遍。
-     */
-    const refreshAfterRemoteLogin = () =>
-      void queryClient.invalidateQueries({ queryKey: [...HARNESS_MODEL_CATALOG_QUERY_KEY, providerId] });
-    if (machine) {
-      // 别的机器上只有不靠回跳的登录能在那台机器上跑(浏览器在这台电脑上);协议登录的家说「到那台机器上敲」。
-      const cliLogin = cliLoginMethod.kind === 'cli-login' ? cliLoginMethod : null;
-      showAgentSignIn({
-        providerId,
-        providerName: agentDisplayName,
-        steps: [{ methodId: cliLoginMethod.id }],
-        remote: {
-          deviceId: machine,
-          deviceLabel: machineDevice?.label ?? machine,
-          headless: !!cliLogin?.headlessArgs,
-          command: [remoteAgentCommand?.split(/[\\/]/).filter(Boolean).pop() || providerId, ...(cliLogin?.args ?? [])].join(' '),
-        },
-        // 登没登成只有那台机器知道:登完 / 关窗都让这一家的目录(那台机器那一份在同一前缀下)重问。
-        onSuccess: refreshAfterRemoteLogin,
-        onClose: refreshAfterRemoteLogin,
-      });
-      return;
-    }
-    (
-      window as typeof window & {
-        __GUGU_OPEN_SESSIONPAGE_AGENT_INSTALL__?: (agentId: string) => void;
-      }
-    ).__GUGU_OPEN_SESSIONPAGE_AGENT_INSTALL__?.(providerId);
-    navigate('library', { tab: 'agents', agentId: providerId });
-  }, [
-    providerId,
-    cliLoginMethod,
-    connections.show,
-    agents,
-    navigate,
-    machine,
-    machineDevice,
-    showAgentSignIn,
-    agentDisplayName,
-    remoteAgentCommand,
-  ]);
+    if (selectedAgent && agentOffersConnections(selectedAgent)) connections.show(selectedAgent, machine, anchor);
+  }, [providerId, cliLoginMethod, connections.show, agents, machine]);
   // 上一家 —— 取消时回到它。用 ref 而不是 state:它只在切换发生时被读,不该驱动重渲染。
   const previousProviderRef = useRef<AgentProviderId | null>(null);
   // 同一家只提示一次,别在 catalog 每次刷新时重弹。
@@ -1115,15 +1088,7 @@ export function useInitialSessionState(
     platformModel: platformEffortFacts(platformModel, platformCatalog.models),
     leg: sessionpageSurface,
   });
-  // 平台模型没有 harness model id,但它同样要记住用户选过的档 —— 用平台模型 id 当 key。
-  // ❌ 不能省成只按 provider 记:同一引擎下换平台模型,档位不一定还在(见 resolveInitialEffort)。
-  const effortKey = providerId
-    ? platformModel
-      ? `${providerId}:platform:${platformModel}`
-      : model
-        ? `${providerId}:${model}`
-        : null
-    : null;
+  const effortKey = effortKeyOf(providerId, model, platformModel);
   const effort = resolveInitialEffort(
     modelEfforts,
     effortKey

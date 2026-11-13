@@ -49,7 +49,7 @@ import { FileIcon } from '@renderer/lib/editor/file-icon';
 export type ExtensionTabState = {
   filePath?: string;
   /**
-   * The host opened `filePath` for an agent or an App (`open_in_tab`, `files.openWith`), not the person: a file outside the
+   * The host opened `filePath` for an App (`files.openWith`), not the person or an agent of theirs (`open_in_tab`): a file outside the
    * working copy is not read through it (`@@@outside-file`). Its own tab: the person opening the same file gets one of their own.
    */
   byHost?: true;
@@ -72,7 +72,7 @@ export class ExtensionTabResource implements TabResource {
     readonly filePath: string | undefined = undefined,
     private readonly readTitle?: () => string,
     private readonly readHoldsUnsaved?: () => boolean,
-    /** The host opened `filePath` for an agent or an App (`ExtensionTabState.byHost`). */
+    /** The host opened `filePath` for an App (`ExtensionTabState.byHost`). */
     readonly byHost = false,
   ) {}
 
