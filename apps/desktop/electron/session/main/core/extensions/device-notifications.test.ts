@@ -11,7 +11,7 @@ const { settings, shown, state, instances, log } = vi.hoisted(() => ({
   log: { info: vi.fn(), warn: vi.fn() },
 }));
 vi.mock('@main/core/settings/settings-service', () => ({ appSettingsService: { get: async () => settings } }));
-vi.mock('@main/lib/logger', () => ({ log }));
+vi.mock('@main/lib/logger', async () => ({ log: (await import('@tooling/utils/logger-mock')).createLoggerMock(log) }));
 vi.mock('electron', async () => {
   const { EventEmitter } = await import('node:events');
   return { Notification: class extends EventEmitter {

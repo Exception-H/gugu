@@ -32,7 +32,7 @@ vi.mock('@main/core/extensions/app-files', () => ({ resourceChatOf: async (id: s
 vi.mock('@main/core/extensions/extension-programs', () => ({ onExtensionProgramNotification: () => () => {} }));
 vi.mock('@main/core/extensions/file-sync', () => ({ fileSync: {} }));
 vi.mock('@main/core/extensions/extension-projection-bridge', () => ({ extensionProjections: { isCleanup: () => false } }));
-vi.mock('@main/lib/logger', () => ({ log: { warn: vi.fn(), error: vi.fn(), info: vi.fn() } }));
+vi.mock('@main/lib/logger', async () => ({ log: (await import('@tooling/utils/logger-mock')).createLoggerMock() }));
 
 import NotificationSettingsCard from './NotificationSettingsCard';
 import { answerCall, type BridgeCaller } from '@main/core/extensions/extension-bridge';

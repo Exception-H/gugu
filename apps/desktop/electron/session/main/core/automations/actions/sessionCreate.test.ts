@@ -84,9 +84,7 @@ vi.mock('@main/core/sessions/session-service', () => ({
   sessionService: { provisionWorkspace: vi.fn() },
 }));
 vi.mock('@main/lib/events', () => ({ events: { emit: vi.fn() } }));
-vi.mock('@main/lib/logger', () => ({
-  log: { error: vi.fn(), warn: vi.fn(), info: vi.fn(), child: vi.fn(() => ({ debug: vi.fn() })) },
-}));
+vi.mock('@main/lib/logger', async () => ({ log: (await import('@tooling/utils/logger-mock')).createLoggerMock() }));
 vi.mock('@main/core/acp/controller', () => ({
   getAcpRuntimeClient: vi.fn(() => Promise.resolve({ startSession: mockAcpStartSession })),
 }));

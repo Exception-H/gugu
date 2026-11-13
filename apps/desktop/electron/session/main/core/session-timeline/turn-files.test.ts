@@ -6,7 +6,7 @@ import { openRuntimeFork, forkStore } from '../sessions/session-life-forks';
 const mocks = vi.hoisted(() => ({
   resolveAccountFile: vi.fn(), saveFileHandle: vi.fn(), agentOf: vi.fn(), deviceId: vi.fn(), stat: vi.fn(), warn: vi.fn(),
 }));
-vi.mock('@main/lib/logger', () => ({ log: { warn: mocks.warn } }));
+vi.mock('@main/lib/logger', async () => ({ log: (await import('@tooling/utils/logger-mock')).createLoggerMock({ warn: mocks.warn }) }));
 vi.mock('node:fs/promises', () => ({ stat: mocks.stat }));
 vi.mock('@main/core/extensions/account-token', () => ({ resolveAccountFile: mocks.resolveAccountFile }));
 vi.mock('@gugu/core/local/files/fileSnapshots', () => ({ saveFileHandle: mocks.saveFileHandle }));

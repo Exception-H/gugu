@@ -19,7 +19,7 @@ const sessionsElsewhere = vi.hoisted(() => vi.fn());
 const fileCapabilities = vi.hoisted(() => ({ granted: null as Set<string> | null }));
 const readWorkingCopy = vi.hoisted(() => vi.fn());
 vi.mock('@main/core/extensions/working-copy-files', () => ({ readWorkingCopy }));
-vi.mock('@main/lib/logger', () => ({ log: { warn: () => undefined, error: () => undefined, info: () => undefined } }));
+vi.mock('@main/lib/logger', async () => ({ log: (await import('@tooling/utils/logger-mock')).createLoggerMock() }));
 vi.mock('@main/core/extensions/extensions-root', () => ({
   extensionsService: () => ({
     get: () => {

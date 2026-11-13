@@ -41,13 +41,13 @@ vi.mock('./start-failures', () => ({
   readStartFailure: (id: string) => state.failures.get(id) ?? null,
 }));
 
-vi.mock('@main/lib/logger', () => ({
-  log: {
-    warn: (fields: Record<string, unknown>) => {
-      state.warnings.push(fields);
+vi.mock('@main/lib/logger', async () => ({
+  log: (await import('@tooling/utils/logger-mock')).createLoggerMock({
+    warn: (...args: unknown[]) => {
+      state.warnings.push(args[0] as Record<string, unknown>);
       state.warned.resolve();
     },
-  },
+  }),
 }));
 
 vi.mock('@main/db/client', () => {

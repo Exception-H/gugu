@@ -35,7 +35,7 @@ vi.mock('@gugu/session-wire', async (importOriginal) => ({
     }
   },
 }));
-vi.mock('@main/lib/logger', () => ({ log: { warn: vi.fn() } }));
+vi.mock('@main/lib/logger', async () => ({ log: (await import('@tooling/utils/logger-mock')).createLoggerMock() }));
 vi.mock('@main/core/acp/runtime-process/host', () => ({
   onAcpRuntimeSpawned: (listener: () => void) => { runtime.spawned = listener; return runtime.unlisten; },
   peekAcpRuntimeClient: async () => !runtime.available ? null : ({

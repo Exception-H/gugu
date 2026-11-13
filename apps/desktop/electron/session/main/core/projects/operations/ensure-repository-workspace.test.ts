@@ -49,9 +49,7 @@ vi.mock('@main/db/client', () => ({
   },
 }));
 
-vi.mock('@main/lib/logger', () => ({
-  log: { info: vi.fn(), warn: vi.fn(), error: vi.fn() },
-}));
+vi.mock('@main/lib/logger', async () => ({ log: (await import('@tooling/utils/logger-mock')).createLoggerMock() }));
 
 const localProject = {
   type: 'local' as const,

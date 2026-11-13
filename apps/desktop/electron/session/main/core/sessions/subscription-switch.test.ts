@@ -36,7 +36,7 @@ vi.mock('@main/db/client', () => ({ db: {
       ...((key as string[])[1] === 'codex' ? mocks.resting : [])].map((id) => ({ id })),
   }) }) }),
 } }));
-vi.mock('@main/lib/logger', () => ({ log: { warn: vi.fn() } }));
+vi.mock('@main/lib/logger', async () => ({ log: (await import('@tooling/utils/logger-mock')).createLoggerMock() }));
 vi.mock('@main/lib/events', () => ({
   events: {
     emit: (channel: { name: string }, data: { sessionId?: string; closed?: number; total?: number }) => {

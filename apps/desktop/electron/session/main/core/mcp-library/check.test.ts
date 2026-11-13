@@ -6,7 +6,7 @@ import * as path from 'node:path';
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 
 vi.mock('@main/utils/userEnv', () => ({ loginShellEnv: () => null }));
-vi.mock('@main/lib/logger', () => ({ log: { info: () => {}, warn: () => {}, error: () => {} } }));
+vi.mock('@main/lib/logger', async () => ({ log: (await import('@tooling/utils/logger-mock')).createLoggerMock() }));
 
 const { checkLibraryMcp } = await import('./check');
 

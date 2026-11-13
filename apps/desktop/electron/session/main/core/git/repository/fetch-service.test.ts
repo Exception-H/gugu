@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { GitRepositoryFetchService } from './fetch-service';
 
-vi.mock('@main/lib/logger', () => ({ log: { warn: vi.fn() } }));
+vi.mock('@main/lib/logger', async () => ({ log: (await import('@tooling/utils/logger-mock')).createLoggerMock() }));
 
 // The background loop forks git every 2 minutes; a repository with no remote has nothing to fetch, so it must not.
 function target(remotes: { name: string; url: string }[]) {

@@ -59,7 +59,7 @@ vi.mock('@main/core/extensions/app-files', () => ({
   resourceChatOf: (id: string) => review.resource(id),
   changedGroupFiles: async (chat: string, _reader: string | null, wanted: { ids: string[] }) => ({ entries: wanted.ids.map(id => ({ id, chat })), gone: [] }),
 }));
-vi.mock('@main/lib/logger', () => ({ log: { warn: vi.fn(), error: vi.fn(), info: vi.fn() } }));
+vi.mock('@main/lib/logger', async () => ({ log: (await import('@tooling/utils/logger-mock')).createLoggerMock() }));
 
 const { bindExtensionSurface, registerExtensionBridge, setExtensionBridgeHost, stopPageWatches, notifyGroupWorkspaceChanged } = await import('./extension-bridge');
 const { EXTENSION_BRIDGE_CHANNEL } = await import('@shared/extensions/bridge-protocol');

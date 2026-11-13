@@ -4,7 +4,7 @@ import { fileURLToPath } from 'node:url';
 import type { DrizzleSQLiteSnapshotJSON } from 'drizzle-kit/api';
 import { describe, expect, it, vi } from 'vitest';
 
-vi.mock('@main/lib/logger', () => ({ log: { warn: vi.fn() } }));
+vi.mock('@main/lib/logger', async () => ({ log: (await import('@tooling/utils/logger-mock')).createLoggerMock() }));
 
 import * as schema from './schema';
 

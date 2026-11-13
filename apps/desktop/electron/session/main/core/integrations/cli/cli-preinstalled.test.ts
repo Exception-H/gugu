@@ -4,7 +4,7 @@ import { tmpdir } from 'node:os';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 
 const warn = vi.hoisted(() => vi.fn());
-vi.mock('@main/lib/logger', () => ({ log: { warn, info: vi.fn(), error: vi.fn(), debug: vi.fn() } }));
+vi.mock('@main/lib/logger', async () => ({ log: (await import('@tooling/utils/logger-mock')).createLoggerMock({ warn }) }));
 import { ensureCliTool, installedCliTool, isCliToolInstalled } from './cli-tool-installer';
 import { cliToolRecipe, currentCliPlatform } from './cli-tools';
 

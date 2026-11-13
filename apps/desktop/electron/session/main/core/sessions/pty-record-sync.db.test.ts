@@ -5,7 +5,7 @@ import type Database from 'better-sqlite3';
 const state = vi.hoisted(() => ({ sqlite: null as Database.Database | null, sync: vi.fn(), watch: vi.fn(),
   status: null as ((change: { sessionId: string; reading: { running: boolean } }) => void) | null }));
 vi.mock('@main/db/client', () => ({ db: undefined, get sqlite() { return state.sqlite; } }));
-vi.mock('@main/lib/logger', () => ({ log: { info: vi.fn(), warn: vi.fn(), error: vi.fn() } }));
+vi.mock('@main/lib/logger', async () => ({ log: (await import('@tooling/utils/logger-mock')).createLoggerMock() }));
 vi.mock('./record-backfill', () => ({ syncStoredHistoryFromRecord: state.sync }));
 vi.mock('@main/core/session-timeline/service', () => ({ watchRecordSettled: state.watch }));
 vi.mock('../agent-status/agent-status-writer', () => ({ agentStatusWriter: { on: (_name: string, handler: typeof state.status) => {

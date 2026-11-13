@@ -21,7 +21,7 @@ vi.mock('@main/core/sessions/live-model-switch', () => ({
 vi.mock('@main/core/sessions/platform-model-selection', () => ({
   sessionPlatformModel: mocks.platform,
 }));
-vi.mock('@main/lib/logger', () => ({ log: { info: vi.fn(), warn: vi.fn(), error: vi.fn() } }));
+vi.mock('@main/lib/logger', async () => ({ log: (await import('@tooling/utils/logger-mock')).createLoggerMock() }));
 
 const { setSessionOption, setSessionOptionsIo } = await import('./live-options');
 

@@ -10,7 +10,7 @@ vi.mock('@main/db/client', () => ({
     return mocks.db;
   },
 }));
-vi.mock('@main/lib/logger', () => ({ log: { info: vi.fn(), warn: vi.fn(), error: vi.fn() } }));
+vi.mock('@main/lib/logger', async () => ({ log: (await import('@tooling/utils/logger-mock')).createLoggerMock() }));
 
 const { recordLiveModelSwitch } = await import('./live-model-switch');
 const { sessionPlatformModel } = await import('./platform-model-selection');

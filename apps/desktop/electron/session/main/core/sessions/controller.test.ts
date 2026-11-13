@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 // #7103 评审 r4:起任务失败的分层挂在 RPC 口上(controller 的 hydrateSession)。这里判的是接线 ——
 // 拆掉那一层,咕咕自己的错就会带着原文交回渲染层,下面两条都会红。
-vi.mock('@main/lib/logger', () => ({ log: { info: vi.fn(), warn: vi.fn(), error: vi.fn(), debug: vi.fn() } }));
+vi.mock('@main/lib/logger', async () => ({ log: (await import('@tooling/utils/logger-mock')).createLoggerMock() }));
 vi.mock('@main/core/agent-hooks/agent-hook-service', () => ({ agentHookService: { emitAgentEvent: vi.fn() } }));
 
 const hydrate = vi.fn();

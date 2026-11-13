@@ -6,14 +6,7 @@ import { WorkspaceTrustService } from './workspace-trust';
 
 const mockWarn = vi.hoisted(() => vi.fn());
 
-vi.mock('@main/lib/logger', () => ({
-  log: {
-    warn: mockWarn,
-    info: vi.fn(),
-    error: vi.fn(),
-    debug: vi.fn(),
-  },
-}));
+vi.mock('@main/lib/logger', async () => ({ log: (await import('@tooling/utils/logger-mock')).createLoggerMock({ warn: mockWarn }) }));
 
 // Mocked so importing the module (which wires the singleton) stays free of
 // DB and plugin-registry side effects; tests construct their own instances.

@@ -36,7 +36,7 @@ const programs = { callFromPage: vi.fn(async () => ({ content: [{ type: 'text', 
 vi.mock('@main/core/extensions/extension-programs', () => ({ extensionPrograms: programs, onExtensionProgramNotification: () => () => undefined }));
 // The roster: the agent that works the check's page, and its session (owner 10-14).
 vi.mock('@main/core/sessionpage/sessionpage-session-agent', () => ({ agentIdsBySession: async () => new Map([['session-agent', 'user:0a000000-0000-4000-8000-000000000069']]) }));
-vi.mock('@main/lib/logger', () => ({ log: { warn: vi.fn(), error: vi.fn(), info: vi.fn() } }));
+vi.mock('@main/lib/logger', async () => ({ log: (await import('@tooling/utils/logger-mock')).createLoggerMock() }));
 
 const CHAT = '0b000000-0000-4000-8000-000000000069';
 const TODAY = { id: '0c000000-0000-4000-8000-000000000001', chat: CHAT, name: 'today.board.json', displayName: 'today', contentType: 'application/json', type: 'json' };

@@ -6,7 +6,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 
 vi.mock('electron', () => ({ powerMonitor: { getSystemIdleTime: () => 999 } }));
 vi.mock('./extension-bridge-relay', () => ({ requestExtensionInstallConsent: vi.fn(), closeExtensionInstallConsent: vi.fn() }));
-vi.mock('@main/lib/logger', () => ({ log: { warn: vi.fn(), info: vi.fn(), error: vi.fn() } }));
+vi.mock('@main/lib/logger', async () => ({ log: (await import('@tooling/utils/logger-mock')).createLoggerMock() }));
 
 const { askInstallInSession, IN_USE_IDLE_SECONDS } = await import('./consent-in-session');
 

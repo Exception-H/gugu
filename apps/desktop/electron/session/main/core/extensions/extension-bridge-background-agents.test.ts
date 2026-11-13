@@ -76,7 +76,7 @@ vi.mock('@main/core/extensions/extension-send', () => ({
   dispatchForApp: (...args: unknown[]) => dispatchForApp(...(args as [])),
 }));
 const warn = vi.fn();
-vi.mock('@main/lib/logger', () => ({ log: { warn: (...args: unknown[]) => warn(...args), error: vi.fn(), info: vi.fn() } }));
+vi.mock('@main/lib/logger', async () => ({ log: (await import('@tooling/utils/logger-mock')).createLoggerMock({ warn: (...args: unknown[]) => warn(...args) }) }));
 
 const { bindExtensionSurface, registerExtensionBridge } = await import('./extension-bridge');
 const { EXTENSION_BRIDGE_CHANNEL } = await import('@shared/extensions/bridge-protocol');

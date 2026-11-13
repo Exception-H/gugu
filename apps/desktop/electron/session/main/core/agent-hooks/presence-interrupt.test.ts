@@ -12,7 +12,7 @@ vi.mock('@main/core/agent-status/agent-status-writer', () => ({
   agentStatusWriter: { reportStatusSourceFault: mocks.reportStatusSourceFault, isWorkingOrWaiting: mocks.isWorkingOrWaiting },
 }));
 vi.mock('./harness-config-roots', () => ({ harnessConfigRootOf: () => undefined }));
-vi.mock('@main/lib/logger', () => ({ log: { error: mocks.logError, warn: vi.fn(), info: vi.fn(), debug: vi.fn() } }));
+vi.mock('@main/lib/logger', async () => ({ log: (await import('@tooling/utils/logger-mock')).createLoggerMock({ error: mocks.logError }) }));
 
 const { watchPresenceInterrupt, startPresenceInterrupt, PRESENCE_POLL_MS, PRESENCE_APPEAR_WITHIN_MS } = await import('./presence-interrupt');
 /** 与 claude 那份同形的读者(真解析器的判据在 session-plugins 的 claude/presence.test.ts)。 */

@@ -46,7 +46,7 @@ vi.mock('@main/core/extensions/extensions-root', () => ({
   }),
 }));
 vi.mock('@main/core/extensions/app-files', () => ({ resourceChatOf: async (id: string) => id }));
-vi.mock('@main/lib/logger', () => ({ log: { warn: vi.fn(), error: vi.fn(), info: vi.fn() } }));
+vi.mock('@main/lib/logger', async () => ({ log: (await import('@tooling/utils/logger-mock')).createLoggerMock() }));
 // Whom it goes to, and what goes, is extension-send's (its own test); here: what the bridge brings it — the page's chat and
 // session, the window's sheet and composers — and what it does with the answer. The fake drives each effect as the real one.
 const dispatchForApp = vi.fn(async (_id: string, args: Record<string, unknown>, here: Record<string, unknown>, effects: {

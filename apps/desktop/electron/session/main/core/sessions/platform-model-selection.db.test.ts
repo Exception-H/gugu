@@ -13,7 +13,7 @@ vi.mock('@main/db/client', () => ({
     return mocks.db;
   },
 }));
-vi.mock('@main/lib/logger', () => ({ log: { info: vi.fn(), warn: vi.fn(), error: vi.fn() } }));
+vi.mock('@main/lib/logger', async () => ({ log: (await import('@tooling/utils/logger-mock')).createLoggerMock() }));
 /** The platform catalog the model menu reads (a network call each): what it was asked, and whether it answers. */
 const catalog = vi.hoisted(() => ({ queries: [] as unknown[], down: false, error: null as string | null, names: { 'glm-5.2': 'GLM 5.2', 'glm-5.3-flash': 'GLM 5.3 Flash' } as Record<string, string> }));
 vi.mock('@main/core/agents/platform-model-catalog-hook', () => ({

@@ -15,7 +15,7 @@ const bus = vi.hoisted(() => {
 });
 
 vi.mock('electron', () => ({ protocol: { isProtocolHandled: () => false, handle: vi.fn() } }));
-vi.mock('@main/lib/logger', () => ({ log: { info: vi.fn(), warn: vi.fn(), error: vi.fn(), debug: vi.fn() } }));
+vi.mock('@main/lib/logger', async () => ({ log: (await import('@tooling/utils/logger-mock')).createLoggerMock() }));
 vi.mock('../projects/utils', () => ({ resolveWorkspace: vi.fn(() => null) }));
 // The chat folder a document is in, as the signed-in person reads it (app-files.ts): one document and the files beside it.
 const folder = vi.hoisted(() => ({

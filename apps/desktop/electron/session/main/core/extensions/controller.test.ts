@@ -87,9 +87,7 @@ vi.mock('@main/core/extensions/extension-session', () => ({
   }),
 }));
 
-vi.mock('@main/lib/logger', () => ({
-  log: { error: vi.fn(), warn: vi.fn(), debug: vi.fn(), info: vi.fn() },
-}));
+vi.mock('@main/lib/logger', async () => ({ log: (await import('@tooling/utils/logger-mock')).createLoggerMock() }));
 
 // The chat card's Install: the download is stubbed and the consent relay records what it was asked, so a test reads
 // whether the card's click alone installs a package.

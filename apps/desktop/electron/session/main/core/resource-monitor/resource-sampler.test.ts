@@ -26,7 +26,7 @@ vi.mock('@main/core/settings/settings-service', () => ({
   appSettingsService: { get: () => settings() },
 }));
 vi.mock('@main/lib/events', () => ({ events: { emit } }));
-vi.mock('@main/lib/logger', () => ({ log: { warn: vi.fn() } }));
+vi.mock('@main/lib/logger', async () => ({ log: (await import('@tooling/utils/logger-mock')).createLoggerMock() }));
 vi.mock('./renderer-metrics', () => ({ collectRendererMetrics: collect }));
 vi.mock('./context', () => ({ collectResourceContext: async () => ({ windows: [] }) }));
 vi.mock('./history', () => ({ resourceHistory: { append } }));

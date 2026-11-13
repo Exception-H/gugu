@@ -17,7 +17,7 @@ vi.mock('electron', () => ({
       new Promise<{ response: number }>((resolve, reject) => state.boxes.push({ parent, options, resolve, reject })),
   },
 }));
-vi.mock('@main/lib/logger', () => ({ log: { warn: vi.fn(), info: vi.fn() } }));
+vi.mock('@main/lib/logger', async () => ({ log: (await import('@tooling/utils/logger-mock')).createLoggerMock() }));
 
 /** 照 Electron v44 的 WebContents:自带 `-run-dialog` / `-cancel-dialogs` 两个内部监听,外加 debugger。 */
 function fakeWebContents() {

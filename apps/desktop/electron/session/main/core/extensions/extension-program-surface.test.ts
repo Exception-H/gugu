@@ -27,7 +27,7 @@ vi.mock('electron', () => ({
   shell: { openExternal: vi.fn() },
   clipboard: { writeText: vi.fn() },
 }));
-vi.mock('@main/lib/logger', () => ({ log: { warn: vi.fn(), info: vi.fn(), error: vi.fn() } }));
+vi.mock('@main/lib/logger', async () => ({ log: (await import('@tooling/utils/logger-mock')).createLoggerMock() }));
 vi.mock('@main/core/extensions/extension-session', () => ({ extensionIdForSession: () => 'board', isExtensionSessionConfigured: () => true }));
 vi.mock('@main/core/extensions/extension-background', () => ({ extensionBackgroundWebContentsId: () => null, runningExtensionBackgrounds: () => [] }));
 vi.mock('./projection-task', () => ({ projectionTaskProject: async () => 'project-1' }));

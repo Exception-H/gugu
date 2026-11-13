@@ -20,7 +20,7 @@ import {
 
 const service = vi.hoisted(() => ({ installed: true, enabled: true, agentTools: true }));
 vi.mock('@main/utils/userEnv', () => ({ loginShellEnv: () => null }));
-vi.mock('@main/lib/logger', () => ({ log: { error: () => {}, warn: () => {}, info: () => {} } }));
+vi.mock('@main/lib/logger', async () => ({ log: (await import('@tooling/utils/logger-mock')).createLoggerMock() }));
 /** The agent's session as main knows it: its working copy and the model gugu runs it on (`agentSessionContext`). */
 const agentSession = vi.hoisted(() => ({ sessionId: 'task-f', projectId: 'p', workspaceRoot: '/work/f', model: 'gpt-6.1-sol' }));
 vi.mock('./extension-agent-context', () => ({ agentSessionContext: async (id: string) => (id === 'task-f' ? agentSession : null) }));

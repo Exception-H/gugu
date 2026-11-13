@@ -27,14 +27,7 @@ vi.mock('@main/core/agents/agent-home', () => ({
 vi.mock('./token-scan-worker/spawn', async () => ({
   spawnTokenScanWorker: (await import('./_support/in-process-worker')).createInProcessTokenScanWorker,
 }));
-vi.mock('@main/lib/logger', () => ({
-  log: {
-    info: () => {},
-    debug: () => {},
-    warn: (...args: unknown[]) => mocks.warnings.push(args),
-    error: (...args: unknown[]) => mocks.warnings.push(args),
-  },
-}));
+vi.mock('@main/lib/logger', async () => ({ log: (await import('@tooling/utils/logger-mock')).createLoggerMock({ warn: (...args: unknown[]) => mocks.warnings.push(args), error: (...args: unknown[]) => mocks.warnings.push(args) }) }));
 
 import { buildLocalUsageSnapshot } from './build-local-usage-snapshot';
 import { recordModelSource } from './model-source-recorder';

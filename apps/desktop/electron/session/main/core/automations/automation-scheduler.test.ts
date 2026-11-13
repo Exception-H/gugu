@@ -24,7 +24,7 @@ import {
 } from './repo';
 import { runQueuedAutomation } from './runtime';
 
-vi.mock('@main/lib/logger', () => ({ log: { error: vi.fn(), warn: vi.fn(), info: vi.fn() } }));
+vi.mock('@main/lib/logger', async () => ({ log: (await import('@tooling/utils/logger-mock')).createLoggerMock() }));
 
 vi.mock('./repo', () => ({
   enabledAutomationsWithoutQueuedRun: vi.fn(),

@@ -46,7 +46,7 @@ vi.mock('@main/core/extensions/gugu-links', async (original) => ({
   openLink: async (url: string) => { opened.push(url); return parseGuguLink(url) ? outcome : { kind: 'not-gugu-link' }; },
 }));
 vi.mock('@main/core/extensions/app-files', () => ({ resourceChatOf: async (id: string) => id === TOPIC ? CHAT : id }));
-vi.mock('@main/lib/logger', () => ({ log: { warn: vi.fn(), error: vi.fn(), info: vi.fn() } }));
+vi.mock('@main/lib/logger', async () => ({ log: (await import('@tooling/utils/logger-mock')).createLoggerMock() }));
 
 const { bindExtensionSurface, deliverToExtension, registerExtensionBridge } = await import('./extension-bridge');
 const { EXTENSION_BRIDGE_CHANNEL } = await import('@shared/extensions/bridge-protocol');

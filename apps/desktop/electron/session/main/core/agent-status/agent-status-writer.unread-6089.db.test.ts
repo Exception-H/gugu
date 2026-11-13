@@ -31,7 +31,7 @@ vi.mock('../agent-hooks/hook-server', () => ({
 vi.mock('../agent-hooks/event-enricher', () => ({ parseHookEvent: vi.fn() }));
 vi.mock('@main/core/sessions/set-session-id', () => ({ setProviderSessionId: vi.fn() }));
 vi.mock('@main/lib/events', () => ({ events: { emit: vi.fn(), on: vi.fn(() => () => {}) } }));
-vi.mock('@main/lib/logger', () => ({ log: { warn: vi.fn(), error: vi.fn(), info: vi.fn(), debug: vi.fn() } }));
+vi.mock('@main/lib/logger', async () => ({ log: (await import('@tooling/utils/logger-mock')).createLoggerMock() }));
 vi.mock('@main/core/agents/plugin-registry', () => ({
   getPlugin: vi.fn(() => ({ capabilities: { hooks: { kind: 'config', supportedEvents: ['start', 'stop', 'notification', 'error'] } }, behavior: {} })),
   isValidProviderId: vi.fn(() => true),

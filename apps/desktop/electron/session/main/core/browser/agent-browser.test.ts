@@ -11,7 +11,7 @@ const registry = vi.hoisted(() => ({
   preferred: undefined as string | undefined,
 }));
 vi.mock('@main/lib/events', () => ({ events: { emit: (_channel: unknown, payload: (typeof emitted)[number]) => emitted.push(payload) } }));
-vi.mock('@main/lib/logger', () => ({ log: { info: vi.fn(), warn: vi.fn(), error: vi.fn(), debug: vi.fn() } }));
+vi.mock('@main/lib/logger', async () => ({ log: (await import('@tooling/utils/logger-mock')).createLoggerMock() }));
 vi.mock('@main/core/extensions/extension-agent-context', () => ({ agentSessionContext: vi.fn(async () => null) }));
 vi.mock('@main/core/sessions/session-orchestration', () => ({ openAgentBrowserPane: vi.fn() }));
 vi.mock('./browser-page-runtime', () => ({ acquireBrowserPage: vi.fn() }));

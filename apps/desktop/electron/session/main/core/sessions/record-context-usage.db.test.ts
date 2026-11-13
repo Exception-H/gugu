@@ -25,7 +25,7 @@ vi.mock('@main/db/client', () => ({
   },
 }));
 vi.mock('@main/lib/events', () => ({ events: { emit: mocks.emit } }));
-vi.mock('@main/lib/logger', () => ({ log: { warn: mocks.warn, error: vi.fn() } }));
+vi.mock('@main/lib/logger', async () => ({ log: (await import('@tooling/utils/logger-mock')).createLoggerMock({ warn: mocks.warn }) }));
 
 import { applyContextUsageChange, contextUsageChange, readRecordedContextUsage } from './record-context-usage';
 

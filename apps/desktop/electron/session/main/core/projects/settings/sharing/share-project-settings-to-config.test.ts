@@ -31,11 +31,7 @@ vi.mock('../utils', () => ({
   resolveWorkspace: vi.fn().mockReturnValue(null),
 }));
 
-vi.mock('@main/lib/logger', () => ({
-  log: {
-    warn: vi.fn(),
-  },
-}));
+vi.mock('@main/lib/logger', async () => ({ log: (await import('@tooling/utils/logger-mock')).createLoggerMock() }));
 
 const repoPath = '/repo';
 const configPath = `${repoPath}/.gugu.json`;

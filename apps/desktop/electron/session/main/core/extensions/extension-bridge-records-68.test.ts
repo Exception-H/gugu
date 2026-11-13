@@ -34,7 +34,7 @@ vi.mock('@main/core/extensions/extensions-root', () => ({
   }),
 }));
 vi.mock('@main/core/extensions/app-files', () => ({ resourceChatOf: async (id: string) => id }));
-vi.mock('@main/lib/logger', () => ({ log: { warn: vi.fn(), error: vi.fn(), info: vi.fn() } }));
+vi.mock('@main/lib/logger', async () => ({ log: (await import('@tooling/utils/logger-mock')).createLoggerMock() }));
 
 const { bindExtensionSurface, registerExtensionBridge, setExtensionBridgeHost, recentExtensionErrors, watchExtensionSurfaceErrors } =
   await import('./extension-bridge');

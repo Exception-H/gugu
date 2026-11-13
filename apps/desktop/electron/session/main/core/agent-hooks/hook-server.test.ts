@@ -2,7 +2,7 @@ import { request } from 'node:http';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { HookServer, type RawHookRequest } from './hook-server';
 
-vi.mock('@main/lib/logger', () => ({ log: { debug: vi.fn(), info: vi.fn(), warn: vi.fn(), error: vi.fn() } }));
+vi.mock('@main/lib/logger', async () => ({ log: (await import('@tooling/utils/logger-mock')).createLoggerMock() }));
 
 function post(port: number, headers: Record<string, string>, body = '{}'): Promise<number> {
   return new Promise((resolve, reject) => {

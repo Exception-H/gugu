@@ -19,7 +19,7 @@ vi.mock('@main/core/sessionpage/sessionpage-session-agent', () => ({ agentIdsByS
 vi.mock('@main/core/sessions/getSessions', () => ({ getSessions: async () => [] }));
 vi.mock('@main/core/acp/session-summary-reader', () => ({ readAcpSessionSummaries: async () => ({}) }));
 vi.mock('@main/db/client', () => ({ db: {} }));
-vi.mock('@main/lib/logger', () => ({ log: { error: () => {}, warn: () => {}, info: () => {} } }));
+vi.mock('@main/lib/logger', async () => ({ log: (await import('@tooling/utils/logger-mock')).createLoggerMock() }));
 
 const { spawnAgentForExtension } = await import('./extension-agents');
 

@@ -19,7 +19,7 @@ vi.mock('@main/core/extensions/extension-background', () => ({ extensionBackgrou
 vi.mock('@main/core/extensions/extensions-root', () => ({
   extensionsService: () => ({ grantedCapabilities: () => [], hasCapability: () => true, get: () => ({ manifest: { name: 'Kanban' } }) }),
 }));
-vi.mock('@main/lib/logger', () => ({ log: { warn: vi.fn(), error: vi.fn(), info: vi.fn() } }));
+vi.mock('@main/lib/logger', async () => ({ log: (await import('@tooling/utils/logger-mock')).createLoggerMock() }));
 
 const CHAT = '0b000000-0000-4000-8000-0000000000a1';
 const file = { document: false, contentType: 'application/pdf', version: 3, size: 1024 };

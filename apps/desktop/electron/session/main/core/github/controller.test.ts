@@ -35,11 +35,7 @@ vi.mock('@main/lib/events', () => ({
   },
 }));
 
-vi.mock('@main/lib/logger', () => ({
-  log: {
-    error: mocks.logError,
-  },
-}));
+vi.mock('@main/lib/logger', async () => ({ log: (await import('@tooling/utils/logger-mock')).createLoggerMock({ error: mocks.logError }) }));
 
 describe('githubController auth', () => {
   beforeEach(() => {

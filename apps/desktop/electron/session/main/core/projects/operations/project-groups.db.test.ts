@@ -21,10 +21,7 @@ vi.mock('@main/lib/events', () => ({
     emit: (event: { name: string }, data: unknown) => mocks.emitted.push({ name: event.name, data }),
   },
 }));
-vi.mock('@main/lib/logger', () => {
-  const log = { warn: vi.fn(), info: vi.fn(), error: vi.fn(), debug: vi.fn() };
-  return { log };
-});
+vi.mock('@main/lib/logger', async () => ({ log: (await import('@tooling/utils/logger-mock')).createLoggerMock() }));
 
 import { setProjectGroupHost, type ProjectGroupHost, type ProjectGroupSubject } from '../project-group-host';
 import { onActivitySignal } from '../../activity/signals';

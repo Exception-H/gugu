@@ -31,7 +31,7 @@ vi.mock('@main/core/extensions/extensions-root', () => ({
     isEnabled: () => true, get: () => ({ manifest: { name: 'Workspace', version: '1.0.0' } }) }),
 }));
 vi.mock('@main/core/extensions/app-programs-elsewhere', () => ({ knownSessionMachine: () => ({ deviceId: 'actual-task-host' }), sessionMachine: async () => null }));
-vi.mock('@main/lib/logger', () => ({ log: { warn: vi.fn(), error: vi.fn(), info: vi.fn() } }));
+vi.mock('@main/lib/logger', async () => ({ log: (await import('@tooling/utils/logger-mock')).createLoggerMock() }));
 // A page in a group hears its context only with its chat (「在本群打开」): the chat is read before the first push.
 vi.mock('@main/core/extensions/app-files', () => ({
   resourceChatOf: resourceChat,

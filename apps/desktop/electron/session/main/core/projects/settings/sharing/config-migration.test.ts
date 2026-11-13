@@ -5,11 +5,7 @@ import {
   migrateProjectConfigFromProvider,
 } from './config-migration';
 
-vi.mock('@main/lib/logger', () => ({
-  log: {
-    warn: vi.fn(),
-  },
-}));
+vi.mock('@main/lib/logger', async () => ({ log: (await import('@tooling/utils/logger-mock')).createLoggerMock() }));
 
 const repoPath = '/repo';
 

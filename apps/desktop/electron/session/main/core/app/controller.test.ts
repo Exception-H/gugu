@@ -5,7 +5,7 @@ const clipboardWriteText = vi.hoisted(() => vi.fn());
 vi.mock('./service', () => ({ appService: { clipboardWriteText } }));
 vi.mock('@main/core/app/session-home-dir', () => ({ legacySessionHomeDir: vi.fn(), migrateLegacySessionHome: vi.fn(), sessionHomeDir: vi.fn() }));
 vi.mock('@main/lib/file-logger', () => ({ getDiagnosticLogAttachment: vi.fn() }));
-vi.mock('@main/lib/logger', () => ({ log: {} }));
+vi.mock('@main/lib/logger', async () => ({ log: (await import('@tooling/utils/logger-mock')).createLoggerMock() }));
 vi.mock('../projects/utils', () => ({ resolveWorkspace: vi.fn() }));
 vi.mock('./remote-downloads', () => ({ createRemoteDownloads: vi.fn() }));
 vi.mock('./user-library', () => ({ readUserLibrary: vi.fn(), readUserLibraryEntry: vi.fn(), readUserLibraryVolume: vi.fn(), writeUserLibraryEntry: vi.fn() }));

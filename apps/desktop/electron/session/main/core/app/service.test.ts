@@ -62,11 +62,7 @@ vi.mock('@main/lib/events', () => ({
   },
 }));
 
-vi.mock('@main/lib/logger', () => ({
-  log: {
-    error: vi.fn(),
-  },
-}));
+vi.mock('@main/lib/logger', async () => ({ log: (await import('@tooling/utils/logger-mock')).createLoggerMock() }));
 
 vi.mock('@main/utils/childProcessEnv', () => ({
   buildExternalToolEnv: () => ({}),

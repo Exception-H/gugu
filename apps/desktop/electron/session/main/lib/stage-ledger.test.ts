@@ -6,9 +6,7 @@ import { describe, expect, it, vi } from 'vitest';
 
 const infoMock = vi.hoisted(() => vi.fn());
 const warnMock = vi.hoisted(() => vi.fn());
-vi.mock('@main/lib/logger', () => ({
-  log: { info: infoMock, warn: warnMock, debug: vi.fn(), error: vi.fn() },
-}));
+vi.mock('@main/lib/logger', async () => ({ log: (await import('@tooling/utils/logger-mock')).createLoggerMock({ info: infoMock, warn: warnMock }) }));
 
 import { createStageLedger } from './stage-ledger';
 

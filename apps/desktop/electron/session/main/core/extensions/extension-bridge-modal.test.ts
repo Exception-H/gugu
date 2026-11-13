@@ -25,7 +25,7 @@ vi.mock('@main/core/extensions/extensions-root', () => ({ extensionsService: () 
   grantedCapabilities: () => [], hasCapability: () => false, get: () => ({ rootDir: root, manifest: { name: 'Board', defaultLocale: 'en' } }),
 }) }));
 vi.mock('@main/core/extensions/app-files', () => ({ resourceChatOf: async (id: string) => id, chatMembersOf: async () => [], surfaceChatOf: async () => ({ id: 'chat-one', name: 'Group', kind: 'group', groupId: 'chat-one' }) }));
-vi.mock('@main/lib/logger', () => ({ log: { warn: vi.fn(), error: vi.fn(), info: vi.fn() } }));
+vi.mock('@main/lib/logger', async () => ({ log: (await import('@tooling/utils/logger-mock')).createLoggerMock() }));
 
 const { bindExtensionSurface, registerExtensionBridge, setExtensionBridgeHost, unbindExtensionSurfaces } = await import('./extension-bridge');
 const { EXTENSION_BRIDGE_CHANNEL } = await import('@shared/extensions/bridge-protocol');

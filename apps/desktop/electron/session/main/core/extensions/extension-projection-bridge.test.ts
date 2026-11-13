@@ -5,7 +5,7 @@ import type { BridgeCaller } from './extension-bridge';
 import { revokeExtensionProgramAccess } from './extension-program-access';
 
 // Expected failure cases must not open the production file-log transport in Node.
-vi.mock('@main/lib/logger', () => ({ log: { warn: vi.fn() } }));
+vi.mock('@main/lib/logger', async () => ({ log: (await import('@tooling/utils/logger-mock')).createLoggerMock() }));
 vi.mock('./extensions-root', () => ({ extensionsService: () => ({ get() {}, isEnabled: () => true, hasCapability: () => true }) }));
 vi.mock('./app-programs-elsewhere', () => ({ knownSessionMachine: (id: string) => id === 'remote-task' ? { deviceId: 'remote' } : undefined }));
 const { ExtensionProjectionBridge } = await import('./extension-projection-bridge');

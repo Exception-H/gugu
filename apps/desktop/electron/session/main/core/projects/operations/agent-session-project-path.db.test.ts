@@ -20,7 +20,7 @@ vi.mock('@main/core/app/session-home-dir', () => ({ sessionHomeDir: () => mocks.
 vi.mock('@main/core/projects/project-manager', () => ({ projectManager: { openProject: vi.fn() } }));
 vi.mock('@main/core/projects/project-events', () => ({ projectEvents: { _emit: vi.fn() } }));
 vi.mock('@main/lib/events', () => ({ events: { emit: vi.fn() } }));
-vi.mock('@main/lib/logger', () => ({ log: { warn: vi.fn(), info: vi.fn(), error: vi.fn(), debug: vi.fn() } }));
+vi.mock('@main/lib/logger', async () => ({ log: (await import('@tooling/utils/logger-mock')).createLoggerMock() }));
 vi.mock('@main/core/runtime/runtime-manager', () => ({
   runtimeManager: {
     acquire: async () => ({

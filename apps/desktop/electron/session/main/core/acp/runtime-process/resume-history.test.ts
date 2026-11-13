@@ -3,7 +3,7 @@ import { describe, expect, it, vi } from 'vitest';
 import type { AcpRuntimeStartInput } from '@gugu/session-core/acp';
 import { resumeHistoryFacts } from './resume-history';
 
-vi.mock('@main/lib/logger', () => ({ log: { warn: vi.fn() } }));
+vi.mock('@main/lib/logger', async () => ({ log: (await import('@tooling/utils/logger-mock')).createLoggerMock() }));
 
 const input = (patch: Partial<AcpRuntimeStartInput> = {}) => ({
   sessionId: 's1', projectId: 'p', providerId: 'codex', workspaceId: 'w', cwd: '/w',

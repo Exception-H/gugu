@@ -16,10 +16,7 @@ vi.mock('@main/core/projects/project-manager', () => ({
 }));
 vi.mock('@main/core/runtime/runtime-manager', () => ({ runtimeManager: {} }));
 vi.mock('@main/core/sessions/session-builder', () => ({ buildSessionFromWorkspace: vi.fn(), emitSessionProvisionProgress: vi.fn() }));
-vi.mock('@main/lib/logger', () => {
-  const log = { warn: vi.fn(), info: vi.fn(), error: vi.fn(), debug: vi.fn(), child: () => log };
-  return { log };
-});
+vi.mock('@main/lib/logger', async () => ({ log: (await import('@tooling/utils/logger-mock')).createLoggerMock() }));
 
 const { WorkspaceBootstrapService } = await import('./workspace-bootstrap-service');
 

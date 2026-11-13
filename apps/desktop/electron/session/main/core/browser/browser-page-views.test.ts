@@ -140,7 +140,7 @@ function fakeWindow(name = '', zoom = 1) {
 let mainWindow = fakeWindow();
 vi.mock('@main/app/window', () => ({ getMainWindow: () => mainWindow }));
 vi.mock('@main/lib/events', () => ({ events: { emit: (_channel: unknown, payload: unknown) => state.emitted.push(payload) } }));
-vi.mock('@main/lib/logger', () => ({ log: { info: vi.fn(), warn: vi.fn(), error: vi.fn(), debug: vi.fn() } }));
+vi.mock('@main/lib/logger', async () => ({ log: (await import('@tooling/utils/logger-mock')).createLoggerMock() }));
 vi.mock('../../../../devtools-lock', () => ({ hardenWebPreferences: <T>(prefs: T) => prefs }));
 vi.mock('./browser-webcontents-registry', () => ({
   browserWebContentsRegistry: {
