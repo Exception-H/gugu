@@ -758,7 +758,8 @@ if (args[0] === 'pr') {
     expect(names).toContain('Renderer build (web target)')
     // #6270: linux 原生重编并进 desktop-build —— 清单里再出现它,PR 会一直等一个永远不会出现的检查。
     expect(names).not.toContain('Linux native addon rebuild (Electron headers)')
-    expect(names).toContain('Desktop app build (macos-15)')
+    // 本 fork 删除了 macOS 桌面构建 job，清单里再出现它会让 PR 等一个永远不会出现的检查。
+    expect(names).not.toContain('Desktop app build (macos-15)')
     expect(names).toContain('Desktop app build (ubuntu-24.04)')
     expect(names).toContain('Typecheck, lint, and test')
     // 共享那两片 2026-08-12 摘出了必过闸(见 ci.yml 的 matrix 注释与 ci-spec-coverage.json 的
@@ -791,7 +792,6 @@ if (args[0] === 'pr') {
 
   describe('builds that the changes job skipped by design (@@@path-filtered-jobs)', () => {
     const DECIDER = 'Detect changed areas'
-    const MAC = 'Desktop app build (macos-15)'
     const ANDROID = 'Android debug build'
 
     function realCiProfiles() {
@@ -829,7 +829,6 @@ if (args[0] === 'pr') {
       expect(profile.pathFiltered).toEqual({
         'Renderer build (web target)': { decider: DECIDER, output: 'build' },
         'Desktop app build (ubuntu-24.04)': { decider: DECIDER, output: 'build' },
-        [MAC]: { decider: DECIDER, output: 'desktop-mac' },
         [ANDROID]: { decider: DECIDER, output: 'android' }
       })
     })
@@ -838,14 +837,13 @@ if (args[0] === 'pr') {
       const profiles = realCiProfiles()
       const runs = snapshot(profiles, {
         [DECIDER]: { outputs: typicalSourcePr },
-        [MAC]: skipped,
         [ANDROID]: skipped
       })
 
       expect(evaluateCheckSnapshots(profiles, [runs, runs])).toMatchObject({
         verdict: 'GREEN',
         failed: [],
-        skippedNotDue: [`pull_request/${ANDROID}`, `pull_request/${MAC}`]
+        skippedNotDue: [`pull_request/${ANDROID}`]
       })
     })
 
@@ -858,15 +856,15 @@ if (args[0] === 'pr') {
 
       // Due, yet skipped.
       expect(
-        verdict({ [DECIDER]: { outputs: { ...typicalSourcePr, 'desktop-mac': 'true' } }, [MAC]: skipped })
+        verdict({ [DECIDER]: { outputs: { ...typicalSourcePr, android: 'true' } }, [ANDROID]: skipped })
       ).toMatchObject({
         verdict: 'RED',
-        failed: [`pull_request/${MAC} (skipped although ${DECIDER} reported desktop-mac=true)`]
+        failed: [`pull_request/${ANDROID} (skipped although ${DECIDER} reported android=true)`]
       })
       // The decider published no decision.
-      expect(verdict({ [MAC]: skipped })).toMatchObject({
+      expect(verdict({ [ANDROID]: skipped })).toMatchObject({
         verdict: 'RED',
-        failed: [`pull_request/${MAC} (skipped; ${DECIDER} published no ci-job-outputs desktop-mac)`]
+        failed: [`pull_request/${ANDROID} (skipped; ${DECIDER} published no ci-job-outputs android)`]
       })
       // The decider failed, so every build it gates was skipped.
       expect(
@@ -881,15 +879,15 @@ if (args[0] === 'pr') {
       ).toMatchObject({ verdict: 'RED', failed: ['pull_request/Unit tests (1/4) (skipped)'] })
       // Decider still running: not decided yet.
       expect(
-        verdict({ [DECIDER]: { status: 'in_progress', conclusion: null }, [MAC]: skipped })
-      ).toMatchObject({ verdict: 'WAIT', pending: [`pull_request/${MAC}`, `pull_request/${DECIDER}`] })
+        verdict({ [DECIDER]: { status: 'in_progress', conclusion: null }, [ANDROID]: skipped })
+      ).toMatchObject({ verdict: 'WAIT', pending: [`pull_request/${ANDROID}`, `pull_request/${DECIDER}`] })
     })
 
     it('reads the decision from the decider check run annotation, and only from a successful decider', () => {
       const profiles = realCiProfiles()
       const runs = [
         { id: 7, event: 'pull_request', name: DECIDER, status: 'completed', conclusion: 'success' },
-        { id: 8, event: 'pull_request', name: MAC, status: 'completed', conclusion: 'skipped' },
+        { id: 8, event: 'pull_request', name: ANDROID, status: 'completed', conclusion: 'skipped' },
         { id: 9, event: 'push', name: DECIDER, status: 'completed', conclusion: 'failure' }
       ] as Array<CheckRun & { outputs?: Record<string, string> }>
       const fetchAnnotations = vi.fn(() => [
