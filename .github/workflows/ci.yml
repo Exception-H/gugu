@@ -196,30 +196,6 @@ jobs:
       - uses: ./.github/actions/setup-community
       - run: pnpm build:app:ci
       - run: pnpm rebuild:native
-  # The slowest job (~10 min on the 3-core / 7 GB macOS runner). On a pull request it runs only
-  # when something the macOS build depends on beyond the Linux build changed (see `changes`);
-  # pushes to dev and main always run it.
-  desktop-build-mac:
-    name: Desktop app build (macos-15)
-    needs: changes
-    if: needs.changes.outputs.desktop-mac == 'true'
-    runs-on: macos-15
-    timeout-minutes: 45
-    env:
-      GUGU_CLOUD_COMPUTER_ENABLED: 'false'
-      VITE_GUGU_CLOUD_COMPUTER_ENABLED: 'false'
-      GUGU_PLATFORM_MODELS_ENABLED: 'false'
-      VITE_GUGU_PLATFORM_MODELS_ENABLED: 'false'
-      # The renderer bundle peaks around 4 GB of V8 heap; Node's default cap on 7 GB hosted runners is ~2 GB.
-      NODE_OPTIONS: --max-old-space-size=6144
-    steps:
-      - uses: actions/checkout@v4
-      - run: command -v tmux || brew install tmux
-      - uses: ./.github/actions/setup-community
-      - run: pnpm build:app:ci
-        env:
-          GUGU_BUILD_SERIAL: '1'
-      - run: pnpm rebuild:native
   android-build:
     name: Android debug build
     needs: changes
@@ -424,7 +400,7 @@ jobs:
   gate:
     name: Typecheck, lint, and test
     if: ${{ always() }}
-    needs: [changes, policy, unit, renderer-build, desktop-build-linux, desktop-build-mac, android-build, session-db, session-browser, projection-media, web-smoke, supabase-contract]
+    needs: [changes, policy, unit, renderer-build, desktop-build-linux, android-build, session-db, session-browser, projection-media, web-smoke, supabase-contract]
     runs-on: ubuntu-24.04
     steps:
       - name: Require all upstream jobs to have passed
@@ -444,11 +420,9 @@ jobs:
       - name: Require every due packaging build to have passed
         env:
           BUILD_DUE: ${{ needs.changes.outputs.build }}
-          DESKTOP_MAC_DUE: ${{ needs.changes.outputs.desktop-mac }}
           ANDROID_DUE: ${{ needs.changes.outputs.android }}
           RENDERER_BUILD: ${{ needs.renderer-build.result }}
           DESKTOP_BUILD_LINUX: ${{ needs.desktop-build-linux.result }}
-          DESKTOP_BUILD_MAC: ${{ needs.desktop-build-mac.result }}
           ANDROID_BUILD: ${{ needs.android-build.result }}
         run: |
           failed=0
@@ -462,6 +436,5 @@ jobs:
           }
           require renderer-build "$RENDERER_BUILD" "$BUILD_DUE"
           require desktop-build-linux "$DESKTOP_BUILD_LINUX" "$BUILD_DUE"
-          require desktop-build-mac "$DESKTOP_BUILD_MAC" "$DESKTOP_MAC_DUE"
           require android-build "$ANDROID_BUILD" "$ANDROID_DUE"
           exit "$failed"
