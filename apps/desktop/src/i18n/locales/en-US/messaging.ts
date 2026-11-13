@@ -293,13 +293,16 @@ export default {
     "markUnreadFailed": "Could not mark this chat unread. Try again.",
     "muted": "Notifications muted",
     "newMessage": "New message",
+    "newsNotCallingYou": "New messages, none calling you",
+    "sendPreview": "[{{count}} attachments]",
     "noResults": "No chats found",
     "searchMessagesTitle": "Search messages",
     "listLabel": "Chats",
     "pin": "Pin",
     "scan": "Scan",
     "search": "Search",
-    "unpin": "Unpin"
+    "unpin": "Unpin",
+    "unpinFromSidebar": "Unpin from sidebar"
   },
   "chatService": {
     "errors": {
@@ -464,7 +467,8 @@ export default {
       "unavailable": "The send did not finish. Try sending again later."
     },
     "verb": {
-      "task": "New task"
+      "task": "New task",
+      "agent": "New agent"
     },
     "whisperBanner": "Whisper to {{name}} · only visible to you both",
     "whisperPlaceholder": "Whisper to {{name}}…"
@@ -812,6 +816,8 @@ export default {
       "removed": "Recipient was removed. Not delivered.",
       "refused": "Not delivered.",
       "failed": "Failed to send",
+      "albumImagesFailed": "{{count}} not sent",
+      "albumFilesFailed": "{{count}} not sent",
       "failedActions": "Failed message actions",
       "failedHint": "Failed to send. View message actions.",
       "undelivered": "instance not running, not delivered",
@@ -867,6 +873,7 @@ export default {
   "outbox": {
     "selectFileAgain": "Upload interrupted. Select the file again.",
     "sourceNotSent": "The original message was not sent. Retry it before forwarding again.",
+    "followedNotSent": "The message this one follows was not sent. Resend that one first.",
     "sourceDiscarded": "The original message was discarded before it was sent",
     "deliveryTimeout": "Delivery timed out after {{seconds}}s because the network stopped responding",
     "discarded": "Discarded",

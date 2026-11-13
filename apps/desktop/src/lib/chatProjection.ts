@@ -63,7 +63,9 @@ import { chatDb, identityDb } from './supabase'
 import { composerCardLine } from './composerCardCopy'
 import { ingestMessages } from './messageIngest'
 import { messageAccessWrites } from './messageRevisionWrites'
+import { forgetArchivedGroups, noteGroupArchived } from './archivedGroupsRead'
 import { messagePreviewLines } from './messagePreviews'
+import { sendGroupPreview } from './sendGroupPreview'
 
 const log = rendererLogger('chat/projection')
 /** A stored value adopted at warm start: known, freshness unknown — older than any revision, so an operation naming it reads it. */
@@ -373,7 +375,7 @@ export function createChatProjection(viewerId: string, held?: HeldObjects): Chat
           chat_id: row.chat_id,
           created_at: String(row.created_at),
           // 只有带引用的行才有原文:先按同一份 AST 把引用块换成摘要再截;其它行照用库里截好的 preview。
-          preview: previews[index] == null ? null : composerCardLine(previews[index]),
+          preview: sendGroupPreview(row.send_group_size) ?? (previews[index] == null ? null : composerCardLine(previews[index])),
           // 最后一条是系统行:列表按看的人的语言说(systemNotice.ts),❌ 显示那句写进库里的原文。
           notice: parseSystemNotice(row),
         })
@@ -578,6 +580,12 @@ export function createChatProjection(viewerId: string, held?: HeldObjects): Chat
         return null
       }
       const { keys } = await runWaves(batch.head, batchSignal, { trigger, from: batch.from, requests: keysetRequests })
+      // #2548 a group read as archived leaves the list below; say so first, for whoever lists it from another source.
+      for (const key of keys) {
+        if (!key.startsWith('chat:')) continue
+        const chat = cache.get(key)?.value as { kind?: unknown; status?: unknown } | null | undefined
+        if (chat?.kind === 'group') noteGroupArchived(key.slice('chat:'.length), chat.status === 'archived')
+      }
       await ingestMessages(viewerId, { writes: messageAccessWrites(cache, viewerId, keys), revisions: [] })
       // A newer queued batch owns these unread keys. Publishing this older snapshot
       // would mistake an unobserved conversation for a removed one.
@@ -656,6 +664,7 @@ export function createChatProjection(viewerId: string, held?: HeldObjects): Chat
       })
     },
     reset() {
+      forgetArchivedGroups()
       confirmedDeletions.clear()
       cache = new Map()
       membersByChat.clear()

@@ -63,6 +63,7 @@ import { sessionListDelta } from '@gugu/session-core/session-record/session-list
 import { SessionOptionsError, readSessionOptions, setSessionOption } from './live-options';
 import { getPlugin, isValidProviderId } from '@main/core/agents/plugin-registry';
 import { sessionParentId, sessionSpawnerId, mapSessionRowToSession } from '@main/core/sessions/utils';
+import { sessionBornInChatId } from '@shared/core/sessions/sessions';
 import { taskName } from '@main/core/sessions/task-name';
 import { agentIdsBySession, sessionAgents } from '@main/core/sessionpage/sessionpage-session-agent';
 import { db } from '@main/db/client';
@@ -780,6 +781,7 @@ function summaryOf(
     // 更画不出子 agent 的谱系,而桌面侧栏三样都有。口径与 `sessions/utils.ts`
     // 逐字相同,❌ 不在这里另立一套(两套必然漂移)。
     isPinned: session.isPinned === 1,
+    isPinnedToSidebar: session.isPinnedToSidebar === 1,
     unseen: session.agentStatusSeen !== 1,
     parentConversationId: sessionParentId(session),
     spawnedByConversationId: sessionSpawnerId(session),
@@ -788,6 +790,7 @@ function summaryOf(
     // 这条会话的对话:主人和它的 agent 的私聊 —— 别的机器、手机都从这一行拿到它(任务页里 App 的 `ctx.chat`)。
     ...(agent?.chatId ? { chatId: agent.chatId } : {}),
     spawnedByExtensionId: session.spawnedByExtensionId ?? null,
+    bornInChatId: sessionBornInChatId(session.config),
     schedule: sessionScheduleDigest(schedules.get(session.id) ?? []),
     lastAnswered: answered.get(session.id) ?? null,
   };
@@ -1345,7 +1348,7 @@ const sessionsSubscriptions = new Map<string, { stop: () => void }>();
 const SESSIONS_PUSH_DEBOUNCE_MS = 200;
 
 /** 列表上看得见、又不经状态写入者的变化:会话增删、这几格元信息,以及会话给自己排的定时。 */
-const LISTED_FIELDS = ['title', 'isPinned', 'archivedAt', 'parentSessionId', 'nativeUnreadKeys', 'nativeLastMessage', 'nativeOwnerNotificationSeq', 'nativeOwnerNotificationEpoch', 'lastAnswered'];
+const LISTED_FIELDS = ['title', 'isPinned', 'isPinnedToSidebar', 'archivedAt', 'parentSessionId', 'nativeUnreadKeys', 'nativeLastMessage', 'nativeOwnerNotificationSeq', 'nativeOwnerNotificationEpoch', 'lastAnswered'];
 function changesSessionList(channel: string, data: unknown): boolean {
   if (channel === sessionCreatedChannel.name) {
     return true;

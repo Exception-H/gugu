@@ -7,6 +7,7 @@ import type { InitialSessionState } from '@renderer/features/sessions/session-co
 import type { NavigateFnTyped } from '@renderer/lib/layout/navigation-provider';
 import type { CreateSessionState } from './use-create-session-state';
 import { machineRegistry } from '@renderer/lib/machine-routing';
+import { ComposerDraft } from '../composer-drafts';
 
 const mocks = vi.hoisted(() => ({
   createSession: vi.fn(),
@@ -634,4 +635,49 @@ describe('useCreateSessionCallback ordinary messaging', () => {
     expect(initialSession.prompt).toBe('newer draft');
   });
 
+  // #2569 the sample's first message is handed to the project's new-task box with context the person does not see.
+  const handedOver = () => {
+    const draft = new ComposerDraft();
+    draft.setHandoff({
+      hiddenContext: 'the sample context',
+      picked: { provider: 'codex', model: null, platformModel: null, effort: null, permissionMode: 'full-access', sessionView: 'general' },
+      sendWhenReady: false,
+    });
+    initialSession.draft = draft;
+    return draft;
+  };
+
+  it('a handed-over first turn: its context rides beside the words in the ACP startup queue; the task made completes it', async () => {
+    const draft = handedOver();
+    try {
+      initialSession.promptCapability = { kind: 'none', startupDelivery: 'startup-prompt' };
+      await act(async () => root.render(React.createElement(Probe, { taskChatId: 'chat-1', openAfterCreate: false })));
+      await act(async () => latest?.handleCreateSession());
+      expect(mocks.createSession.mock.calls[0]?.[0].sessionConfig.initialSession.initialQueue).toEqual([
+        { text: 'make one task', hiddenContext: 'the sample context', origin: 'manual' },
+      ]);
+      expect(draft.handoff).toBeNull();
+    } finally { initialSession.draft = undefined; }
+  });
+
+  // #2589 review 4: a first turn with no channel for host context (a terminal leg, a local-session send) sends the person's
+  // words only — the hidden context is never put into the visible message. The sample's files are in the project folder.
+  it('a handed-over first turn on a terminal leg sends only the words; a failed create keeps the hand-off for the retry', async () => {
+    const draft = handedOver();
+    try {
+      initialSession.sessionView = 'code';
+      initialSession.sessionpage = { tui: { identity: 'addressable', messageTransport: 'local-session' } };
+      initialSession.promptCapability = { kind: 'argv', startupDelivery: 'startup-prompt' };
+      mocks.createSession.mockRejectedValueOnce(new Error('credits exhausted'));
+      await act(async () => root.render(React.createElement(Probe, { taskChatId: 'chat-1', openAfterCreate: false })));
+      await act(async () => latest?.handleCreateSession());
+      expect(mocks.createSession.mock.calls[0]?.[0].sessionConfig.initialSession.initialPrompt).toBe('make one task');
+      expect(mocks.logWarn).toHaveBeenCalledWith(expect.stringContaining('no channel for its hidden context'), expect.anything());
+      expect(draft.handoff?.hiddenContext).toBe('the sample context');
+      expect(draft.deliveryError).toMatchObject({ kind: 'raw', detail: 'credits exhausted' });
+      await act(async () => latest?.handleCreateSession());
+      expect(mocks.createSession).toHaveBeenCalledTimes(2);
+      expect(draft.handoff).toBeNull();
+    } finally { initialSession.draft = undefined; }
+  });
 });

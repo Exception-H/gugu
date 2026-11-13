@@ -52,6 +52,7 @@ import {
 } from 'electron'
 import { listAgents, listDevices, listReapedAgents, provisionSessionpageAgentOneTrip, resolveMachineHardwareId, type DeviceTableClient, type RuntimeAuthProvider } from '@gugu/core'
 import { claimDeviceFreeCredits, readDeviceClaimStatus } from './device-free-credits'
+import { askForCapability } from './device-actions/capability-ask'
 import { createDeviceActionsRuntime, nativeComponentsDir, type DeviceActionsRuntime } from './device-actions/runtime'
 import { captureReading, currentReading, historyReading } from './session/main/core/resource-monitor/reading'
 import { setMacFootprintReader } from './session/main/core/resource-monitor/footprint'
@@ -4907,6 +4908,8 @@ app.whenReady().then(async () => {
           ...(typeof record.timeout_ms === 'number' ? { timeoutMs: record.timeout_ms } : {}),
           ...(caller ? { caller } : {}),
           signal,
+          // Only this computer's actions are called (device_scope_mismatch otherwise): what it lacks is asked here.
+          askGrant: () => askForCapability({ sessionId: context.sessionId, action: call.name, requester: { name: who?.name ?? 'Agent', agentUserId: who?.agentUserId ?? null }, runtime: deviceActionsRuntime(), signal }),
         })
         if (record.name === 'recordings.read' || record.name === 'photos.read') {
           const args = record.args && typeof record.args === 'object' ? record.args as Record<string, unknown> : {}
