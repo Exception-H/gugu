@@ -134,6 +134,7 @@ async function world(): Promise<World> {
   }
 }
 function tools(w: World) {
+  const restRpc = ownerRpc(w.owner)
   const context = {
     supabaseUrl: '',
     anonKey: '',
@@ -141,9 +142,25 @@ function tools(w: World) {
     threadRootId: null,
     guguHome: '/tmp/gugu-6492-contract',
     getAccessToken: async () => `x.${Buffer.from(JSON.stringify({ sub: w.owner })).toString('base64url')}.x`,
+    // P0-2.1 之后,Agent 拉 Agent 只是意图:宿主先落待审记录、在会话时间线上问人,只有人点了「允许」才会真的调
+    // chat.add_group_agent —— 而且以这次会话登录的主人为 actor(auth.uid()),不再是 agent 自己。这里就顶替那个宿主:
+    // 回答固定为「允许」,成员调用仍是底层真 RPC,由库继续判角色/审批规则(被库拒绝时照样按库的原文抛)。
+    runHostAction: async (action: { action: string; chat_id?: string; agent_user_id?: string; as_task?: boolean }) => {
+      if (action.action !== 'group_join_confirm') throw new Error(`unexpected host action ${action.action}`)
+      const result = await restRpc('add_group_agent', {
+        p_chat_id: action.chat_id,
+        p_agent_user_id: action.agent_user_id,
+        p_message: null,
+        p_as_user_id: w.owner,
+        p_as_task: action.as_task === true,
+      }) as { status: string; chat_id?: string; request_id?: string }
+      // 只转发 chat.add_group_agent 自己的回答(status / chat_id,待审时还有 request_id):agent_user_id 由 handler 补,
+      // operation_id 之类宿主内部字段不进这层契约,否则 group_add_agent 的输出断言会被宿主实现细节带偏。
+      return result
+    },
   }
   const deps = {
-    restRpc: ownerRpc(w.owner),
+    restRpc,
     // 群能不能看见、在不在里面都只按 RPC 判;直读的只有主人自己那几行里置顶的(置顶是主人自己的状态),以主人的 JWT(RLS)读。
     restGet: (path: string, profile = 'chat') => oneAtATime(async () => {
       const identities = /^users\?id=in\.\(([^)]+)\)&select=id,type,owner_user_id$/.exec(path)
@@ -245,7 +262,8 @@ describe('#6492 group_add_agent against the migrated database', () => {
     const request = await db.query(
       `SELECT requester_user_id, requested_by_user_id, status FROM chat.group_join_requests WHERE id = $1`, [result.request_id],
     )
-    expect(request.rows).toEqual([{ requester_user_id: w.self, requested_by_user_id: w.self, status: 'pending' }])
+    // 发起人记的是替 agent 点「允许」的那个人(宿主以登录主人的身份调 RPC),requester 仍是这个 agent。
+    expect(request.rows).toEqual([{ requester_user_id: w.self, requested_by_user_id: w.owner, status: 'pending' }])
   })
 
   it('把主人名下的另一个 agent 拉进来(user: 地址)', async () => {
