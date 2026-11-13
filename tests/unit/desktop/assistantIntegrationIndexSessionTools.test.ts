@@ -11,7 +11,7 @@ vi.mock('../../../apps/desktop/electron/session/main/core/integrations/cli/cli-i
   ...await importOriginal<typeof import('../../../apps/desktop/electron/session/main/core/integrations/cli/cli-integrations')>(),
   connectedCliSkills: async () => [],
 }))
-vi.mock('@main/lib/logger', () => ({ log: { warn: vi.fn(), info: vi.fn(), error: vi.fn() } }))
+vi.mock('@main/lib/logger', async () => ({ log: (await import('@tooling/utils/logger-mock')).createLoggerMock() }))
 import { integrationPluginRegistry } from '@gugu/session-plugins/integrations'
 import { cliMethodOf } from '../../../apps/desktop/electron/session/main/core/integrations/cli/cli-integrations'
 import { integrationGivesSessionTools } from '../../../apps/desktop/electron/session/main/core/integrations/session-integrations'

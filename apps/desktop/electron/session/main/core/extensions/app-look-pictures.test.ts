@@ -42,7 +42,7 @@ vi.mock('electron', () => ({
 }));
 vi.mock('./app-runtime-dir', () => ({ appRuntimeDir: () => '/runtime' }));
 const warned = vi.hoisted(() => [] as string[]);
-vi.mock('@main/lib/logger', () => ({ log: { warn: (message: string) => void warned.push(message) } }));
+vi.mock('@main/lib/logger', async () => ({ log: (await import('@tooling/utils/logger-mock')).createLoggerMock({ warn: (...args: unknown[]) => void warned.push(String(args[0])) }) }));
 
 const { pictureOf, picturesOf, lookGalleryPicture, endPictures, PICTURE_MAX_HEIGHT, GROUP_PANEL, PHONE } = await import('./extension-look-picture');
 const SIZES = [GROUP_PANEL, PHONE];

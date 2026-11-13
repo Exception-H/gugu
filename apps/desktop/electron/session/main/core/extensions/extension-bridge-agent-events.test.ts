@@ -59,7 +59,7 @@ vi.mock('@main/core/extensions/extensions-root', async () => {
 
 const warn = vi.fn();
 vi.mock('@main/core/extensions/app-files', () => ({ resourceChatOf: async (id: string) => id }));
-vi.mock('@main/lib/logger', () => ({ log: { warn: (...a: unknown[]) => warn(...a), error: vi.fn(), info: vi.fn() } }));
+vi.mock('@main/lib/logger', async () => ({ log: (await import('@tooling/utils/logger-mock')).createLoggerMock({ warn: (...a: unknown[]) => warn(...a) }) }));
 
 /**
  * The scope filter, standing in for the real conversation read.

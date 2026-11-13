@@ -37,7 +37,7 @@ vi.mock('@main/core/extensions/extensions-root', () => ({
   extensionsService: () => ({ grantedCapabilities: () => ['files:read'], hasCapability: () => true, get: () => ({ manifest: { name: 'Office' } }) }),
 }));
 vi.mock('@main/core/extensions/app-files', () => ({ resourceChatOf: async (id: string) => id }));
-vi.mock('@main/lib/logger', () => ({ log: { warn: vi.fn(), error: vi.fn(), info: vi.fn() } }));
+vi.mock('@main/lib/logger', async () => ({ log: (await import('@tooling/utils/logger-mock')).createLoggerMock() }));
 
 const { bindExtensionSurface, deliverToOpeningPage, deliverToSessionFilePage, retargetExtensionSurface, unbindExtensionSurface } = await import('./extension-bridge');
 

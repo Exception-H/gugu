@@ -9,7 +9,7 @@ vi.mock('@main/core/agents/session-runtime-compatibility', () => ({ clearRuntime
 vi.mock('@main/core/agents/agent-run-context', () => ({ resolveLocalAgentSpawnEnv: vi.fn() }));
 vi.mock('@main/core/execution-context/local-execution-context', () => ({ LocalExecutionContext: vi.fn() }));
 vi.mock('@main/core/utils/exec', () => ({ setGitExecutableOverride: vi.fn() }));
-vi.mock('@main/lib/logger', () => ({ log: {} }));
+vi.mock('@main/lib/logger', async () => ({ log: (await import('@tooling/utils/logger-mock')).createLoggerMock() }));
 vi.mock('./agent-update-service', () => ({ agentUpdateService: { attach: vi.fn() } }));
 vi.mock('./host-dependency-ledger', () => ({
   hostDependencyLedgerFor: vi.fn(),

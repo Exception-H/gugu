@@ -100,7 +100,7 @@ vi.mock('@main/db/client', () => ({
   },
 }));
 
-vi.mock('@main/lib/logger', () => ({ log: { warn: vi.fn(), info: vi.fn(), error: vi.fn() } }));
+vi.mock('@main/lib/logger', async () => ({ log: (await import('@tooling/utils/logger-mock')).createLoggerMock() }));
 const openedOutputs = vi.hoisted(() => new Map<string, ({ kind: 'file'; path: string } | { kind: 'page'; url: string })[]>());
 vi.mock('../sessions/session-outputs', () => ({
   sessionOutputs: async (sessionId: string) => openedOutputs.get(sessionId) ?? [],

@@ -15,7 +15,7 @@ vi.mock('electron', () => ({
   ipcMain: { handle: () => undefined, on: () => undefined },
   webContents: { fromId: () => undefined },
 }));
-vi.mock('@main/lib/logger', () => ({ log: { error: vi.fn(), warn: vi.fn(), debug: vi.fn(), info: vi.fn() } }));
+vi.mock('@main/lib/logger', async () => ({ log: (await import('@tooling/utils/logger-mock')).createLoggerMock() }));
 
 const office = { extensionId: 'office', tabKind: 'office.main', tabTitle: 'Office', app: { name: '咕咕办公' }, onlyTab: true, suffix: '.pptx' };
 const board = { ...office, extensionId: 'board', tabKind: 'board.view', app: { name: 'Board' } };

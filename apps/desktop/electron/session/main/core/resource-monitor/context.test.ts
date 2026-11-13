@@ -2,7 +2,7 @@ import { beforeEach, expect, it, vi } from 'vitest';
 const mocks = vi.hoisted(() => ({ statuses: vi.fn(), windows: vi.fn(), send: vi.fn() }));
 vi.mock('electron', () => ({ BrowserWindow: { getAllWindows: mocks.windows } }));
 vi.mock('@main/core/agent-status/agent-status-writer', () => ({ agentStatusWriter: { snapshot: mocks.statuses } }));
-vi.mock('@main/lib/logger', () => ({ log: { warn: vi.fn() } }));
+vi.mock('@main/lib/logger', async () => ({ log: (await import('@tooling/utils/logger-mock')).createLoggerMock() }));
 import { collectResourceContext } from './context';
 beforeEach(() => {
   vi.clearAllMocks();

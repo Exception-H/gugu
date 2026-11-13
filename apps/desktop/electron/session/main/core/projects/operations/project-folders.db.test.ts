@@ -52,10 +52,7 @@ vi.mock('@main/lib/events', () => ({
     emit: (event: { name: string }, data: unknown) => mocks.emitted.push({ name: event.name, data }),
   },
 }));
-vi.mock('@main/lib/logger', () => {
-  const log = { warn: vi.fn(), info: vi.fn(), error: vi.fn(), debug: vi.fn() };
-  return { log };
-});
+vi.mock('@main/lib/logger', async () => ({ log: (await import('@tooling/utils/logger-mock')).createLoggerMock() }));
 // 分支读法本身在 read-folder-branch.test.ts 里用真 git 测;这里只看它读到的值有没有落到对的那张卡上。
 vi.mock('./read-folder-branch', () => ({
   readFolderBranch: async (folderPath: string) => mocks.branches.get(folderPath) ?? null,

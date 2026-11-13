@@ -25,7 +25,7 @@ vi.mock('electron', () => ({
 }));
 vi.mock('@main/core/extensions/extension-session', () => ({ extensionIdForSession: () => 'workspace', isExtensionSessionConfigured: () => true }));
 vi.mock('@main/core/extensions/extension-background', () => ({ extensionBackgroundWebContentsId: () => null }));
-vi.mock('@main/lib/logger', () => ({ log: { warn: vi.fn(), info: vi.fn(), error: vi.fn() } }));
+vi.mock('@main/lib/logger', async () => ({ log: (await import('@tooling/utils/logger-mock')).createLoggerMock() }));
 vi.mock('@main/core/extensions/extensions-root', () => ({ extensionsService: () => ({
   get: () => ({ manifest: { id: 'workspace', name: 'Folder', apiVersion: fixture.apiVersion, contributes: { tabs: [{ name: 'main' }] } } }),
   grantedCapabilities: () => ['files:read'], hasCapability: () => true, isEnabled: () => true,

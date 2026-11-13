@@ -34,7 +34,7 @@ vi.mock('@main/core/extensions/extension-background', () => ({ extensionBackgrou
 vi.mock('@main/core/extensions/extensions-root', () => ({
   extensionsService: () => ({ grantedCapabilities: () => ['files:read'], hasCapability: () => true, get: () => ({ manifest: { name: 'Workspace' } }) }),
 }));
-vi.mock('@main/lib/logger', () => ({ log: { warn: vi.fn(), error: vi.fn(), info: vi.fn() } }));
+vi.mock('@main/lib/logger', async () => ({ log: (await import('@tooling/utils/logger-mock')).createLoggerMock() }));
 // Every file of the chat, as it is now: one, claimed by the App just installed.
 vi.mock('@main/core/extensions/app-files', () => ({
   resourceChatOf: async (chatId: string) => chatId,

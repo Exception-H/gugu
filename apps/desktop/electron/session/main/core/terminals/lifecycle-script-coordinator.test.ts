@@ -23,11 +23,7 @@ vi.mock('@main/lib/events', () => ({
   },
 }));
 
-vi.mock('@main/lib/logger', () => ({
-  log: {
-    error: logError,
-  },
-}));
+vi.mock('@main/lib/logger', async () => ({ log: (await import('@tooling/utils/logger-mock')).createLoggerMock({ error: logError }) }));
 
 vi.mock('@main/lib/file-logger', () => ({
   redactDiagnosticLog: (value: string) => `redacted:${value}`,

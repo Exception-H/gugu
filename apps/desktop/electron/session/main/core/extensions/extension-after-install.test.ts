@@ -12,7 +12,7 @@ vi.mock('@main/core/extensions/extension-background', () => ({
 }));
 vi.mock('@main/core/extensions/extension-programs', () => ({ retireExtensionPrograms: effects.retire }));
 vi.mock('@main/core/extensions/extension-bridge', () => ({ notifyInstalledAppsChanged: effects.notify }));
-vi.mock('@main/lib/logger', () => ({ log: { warn: effects.warn } }));
+vi.mock('@main/lib/logger', async () => ({ log: (await import('@tooling/utils/logger-mock')).createLoggerMock({ warn: effects.warn }) }));
 const { applyInstalledExtension } = await import('./extension-after-install');
 afterEach(() => vi.clearAllMocks());
 

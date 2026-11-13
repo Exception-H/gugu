@@ -16,9 +16,7 @@ vi.mock('@main/lib/events', () => ({
     },
   },
 }));
-vi.mock('@main/lib/logger', () => ({
-  log: { error: f.logError, warn: vi.fn(), info: vi.fn(), debug: vi.fn(), child: vi.fn() },
-}));
+vi.mock('@main/lib/logger', async () => ({ log: (await import('@tooling/utils/logger-mock')).createLoggerMock({ error: f.logError }) }));
 
 const { PtySessionRegistry } = await import('./pty-session-registry');
 

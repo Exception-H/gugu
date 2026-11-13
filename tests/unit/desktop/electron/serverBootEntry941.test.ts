@@ -13,7 +13,7 @@ import type { Hold } from '../../../../packages/core/src/local/session-life/type
 import * as installs from '../../../../apps/desktop/electron/session/main/core/agents/install-progress-ledger'
 
 vi.mock('../../../../packages/core/src/cloud/remoteTunnel', () => ({ tunnelRelayUp: () => false, tunnelActiveAt: () => null }))
-vi.mock('@main/lib/logger', () => ({ log: { warn: vi.fn() } }))
+vi.mock('@main/lib/logger', async () => ({ log: (await import('@tooling/utils/logger-mock')).createLoggerMock() }))
 
 const requireBuiltin = createRequire(import.meta.url)
 const entry = path.resolve(__dirname, '../../../../apps/desktop/electron/session/main/embedded-boot.ts')

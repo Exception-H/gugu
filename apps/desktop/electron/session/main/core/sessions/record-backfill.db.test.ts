@@ -15,7 +15,7 @@ const state = vi.hoisted(() => ({ db: undefined as AppDb | undefined,
   turns: [] as TranscriptTurn[], committed: null as TranscriptTurn[] | null, complete: true, available: true, pick: vi.fn() }));
 vi.mock('@main/db/client', () => ({ get db() { return state.db; } }));
 vi.mock('@main/lib/events', () => ({ events: { emit: vi.fn() } }));
-vi.mock('@main/lib/logger', () => ({ log: { info: vi.fn(), warn: vi.fn(), error: vi.fn() } }));
+vi.mock('@main/lib/logger', async () => ({ log: (await import('@tooling/utils/logger-mock')).createLoggerMock() }));
 vi.mock('@main/core/session-timeline/service', () => ({
   readSessionRow: () => state.row,
   pickRecordTurns: state.pick,

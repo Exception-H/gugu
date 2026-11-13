@@ -31,7 +31,7 @@ vi.mock('@main/db/client', () => ({
   },
 }));
 vi.mock('@main/lib/events', () => ({ events: { emit: mocks.emit } }));
-vi.mock('@main/lib/logger', () => ({ log: { info: vi.fn(), warn: vi.fn(), error: vi.fn() } }));
+vi.mock('@main/lib/logger', async () => ({ log: (await import('@tooling/utils/logger-mock')).createLoggerMock() }));
 vi.mock('./session-life', () => ({ sessionLife: () => ({
   interrupt: async (sessionId: string, event: { reason: string }) => { mocks.stopSession({ sessionId, reason: event.reason }); },
   read: () => ({ kind: mocks.lifeKind }),

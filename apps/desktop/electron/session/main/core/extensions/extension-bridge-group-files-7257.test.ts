@@ -43,7 +43,7 @@ vi.mock('@main/core/extensions/extension-background', () => ({ extensionBackgrou
 vi.mock('@main/core/extensions/extensions-root', () => ({
   extensionsService: () => ({ grantedCapabilities: () => ['files:read'], hasCapability: () => true, get: () => ({ manifest: { name: 'Workspace' } }) }),
 }));
-vi.mock('@main/lib/logger', () => ({ log: { warn: vi.fn(), error: vi.fn(), info: vi.fn() } }));
+vi.mock('@main/lib/logger', async () => ({ log: (await import('@tooling/utils/logger-mock')).createLoggerMock() }));
 vi.mock('@main/core/extensions/app-files', () => ({
   resourceChatOf: async (chatId: string) => chatId === TOPIC ? CHAT : chatId,
   changedGroupFiles: async (chatId: string, reader: string | null, wanted: { ids: readonly string[]; all: boolean }) => {

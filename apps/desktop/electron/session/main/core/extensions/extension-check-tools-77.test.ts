@@ -29,7 +29,7 @@ vi.mock('electron', () => ({
     };
   },
 }));
-vi.mock('@main/lib/logger', () => ({ log: { warn: () => undefined } }));
+vi.mock('@main/lib/logger', async () => ({ log: (await import('@tooling/utils/logger-mock')).createLoggerMock() }));
 vi.mock('./bridge-preload-path', () => ({ resolveExtensionBridgePreload: () => '/preload.js' }));
 vi.mock('./extension-check-source', () => ({ sourceLine: () => null, staticHints: () => [] }));
 vi.mock('./extension-bridge', () => ({

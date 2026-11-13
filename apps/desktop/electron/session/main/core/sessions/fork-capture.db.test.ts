@@ -54,7 +54,7 @@ vi.mock('./session-workspace-manager', () => ({
   },
 }));
 
-vi.mock('@main/lib/logger', () => ({ log: { info: vi.fn(), warn: vi.fn(), error: vi.fn() } }));
+vi.mock('@main/lib/logger', async () => ({ log: (await import('@tooling/utils/logger-mock')).createLoggerMock() }));
 vi.mock('@main/lib/events', () => ({ events: { emit: vi.fn() } }));
 vi.mock('./session-events', () => ({ sessionEvents: { _emit: vi.fn() } }));
 

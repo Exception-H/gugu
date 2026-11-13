@@ -6,7 +6,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { EXTENSION_API_VERSION } from '@shared/extensions/manifest';
 
 vi.mock('electron', () => ({ app: { isPackaged: false, getAppPath: () => '/nowhere', getPath: () => '/nowhere' } }));
-vi.mock('@main/lib/logger', () => ({ log: { error: vi.fn(), warn: vi.fn(), debug: vi.fn(), info: vi.fn() } }));
+vi.mock('@main/lib/logger', async () => ({ log: (await import('@tooling/utils/logger-mock')).createLoggerMock() }));
 
 const { ExtensionsService } = await import('./extensions-service');
 const { ensurePreinstalledApps } = await import('./preinstalled-apps');

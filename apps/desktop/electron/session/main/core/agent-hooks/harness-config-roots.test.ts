@@ -9,7 +9,7 @@ vi.mock('@main/db/kv', () => ({
     async set(key: string, value: string[]) { saved.all[key] = value; }
   },
 }));
-vi.mock('@main/lib/logger', () => ({ log: { warn: vi.fn() } }));
+vi.mock('@main/lib/logger', async () => ({ log: (await import('@tooling/utils/logger-mock')).createLoggerMock() }));
 
 const roots = await import('./harness-config-roots');
 

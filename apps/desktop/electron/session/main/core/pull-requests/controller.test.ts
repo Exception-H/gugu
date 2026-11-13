@@ -25,13 +25,7 @@ vi.mock('@main/db/client', () => ({
   },
 }));
 
-vi.mock('@main/lib/logger', () => ({
-  log: {
-    error: vi.fn(),
-    info: vi.fn(),
-    warn: vi.fn(),
-  },
-}));
+vi.mock('@main/lib/logger', async () => ({ log: (await import('@tooling/utils/logger-mock')).createLoggerMock() }));
 
 vi.mock('./pr-query-service', () => ({
   prQueryService: {

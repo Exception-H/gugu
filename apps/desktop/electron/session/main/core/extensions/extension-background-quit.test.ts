@@ -29,7 +29,7 @@ vi.mock('electron', () => ({
     }
   },
 }));
-vi.mock('@main/lib/logger', () => ({ log: { info: vi.fn(), warn: vi.fn(), error: vi.fn() } }));
+vi.mock('@main/lib/logger', async () => ({ log: (await import('@tooling/utils/logger-mock')).createLoggerMock() }));
 vi.mock('./extension-session', () => ({ configureExtensionSession: () => undefined }));
 vi.mock('./bridge-preload-path', () => ({ resolveExtensionBridgePreload: () => '/preload.js' }));
 const enabled = new Set<string>();

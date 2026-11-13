@@ -9,7 +9,7 @@ vi.mock('@main/core/settings/settings-service', () => ({ appSettingsService: { g
 vi.mock('@main/db/client', () => ({ db: { select: () => ({ from: () => ({ where: () => ({ limit: async () => [{ id: 's1', config: { version: '1', type: 'acp', agentDisplayName: 'Review' }, provider: 'codex' }] }) }) }) } }));
 vi.mock('@main/core/agents/plugin-registry', () => ({ getPluginMetadata: () => ({ name: 'Codex' }) }));
 vi.mock('@main/app/window', () => ({ getMainWindow: () => null }));
-vi.mock('@main/lib/logger', () => ({ log: { warn: vi.fn(), error: vi.fn(), debug: vi.fn() } }));
+vi.mock('@main/lib/logger', async () => ({ log: (await import('@tooling/utils/logger-mock')).createLoggerMock() }));
 vi.mock('electron', () => ({ app: {}, BrowserWindow: class {}, Notification: class {
   constructor(options: { title: string; body: string; silent: boolean }) { h.banners.push(options); }
   on() {}

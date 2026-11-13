@@ -16,7 +16,7 @@ vi.mock('@main/db/client', () => ({
     return mocks.db;
   },
 }));
-vi.mock('@main/lib/logger', () => ({ log: { info: vi.fn(), warn: vi.fn(), error: vi.fn(), debug: vi.fn() } }));
+vi.mock('@main/lib/logger', async () => ({ log: (await import('@tooling/utils/logger-mock')).createLoggerMock() }));
 // session-life's queue is the real store; a start is only recorded (the start pipeline is not under test here).
 vi.mock('./session-life', async () => {
   const { enqueuePending } = await vi.importActual<typeof import('./session-pending')>('./session-pending');

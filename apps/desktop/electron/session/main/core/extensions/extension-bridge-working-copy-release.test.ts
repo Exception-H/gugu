@@ -30,7 +30,7 @@ vi.mock('@main/core/extensions/extensions-root', () => ({
 vi.mock('@main/core/extensions/extension-data', () => ({ writeExtensionData: vi.fn(), readExtensionData: vi.fn(), listExtensionData: vi.fn() }));
 vi.mock('@main/core/extensions/extension-programs', () => ({ extensionPrograms: { callFromPage: vi.fn() }, onExtensionProgramNotification: () => () => undefined }));
 vi.mock('@main/core/sessionpage/sessionpage-session-agent', () => ({ agentIdsBySession: async () => new Map() }));
-vi.mock('@main/lib/logger', () => ({ log: { warn: vi.fn(), error: vi.fn(), info: vi.fn() } }));
+vi.mock('@main/lib/logger', async () => ({ log: (await import('@tooling/utils/logger-mock')).createLoggerMock() }));
 
 let finishListing: (entries: unknown[]) => void = () => undefined;
 let failListing: (error: Error) => void = () => undefined;

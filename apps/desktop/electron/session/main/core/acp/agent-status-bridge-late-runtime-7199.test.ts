@@ -34,7 +34,7 @@ vi.mock('@main/core/agent-hooks/agent-hook-service', () => ({
 vi.mock('@main/core/agent-status/agent-status-writer', () => ({
   agentStatusWriter: { interrupt: async () => {} },
 }));
-vi.mock('@main/lib/logger', () => ({ log: { warn: vi.fn(), error: vi.fn() } }));
+vi.mock('@main/lib/logger', async () => ({ log: (await import('@tooling/utils/logger-mock')).createLoggerMock() }));
 vi.mock('../sessions/renameSession', () => ({ applyHarnessTitle: () => {} }));
 vi.mock('../sessions/record-context-usage', () => ({
   applyContextUsageChange: () => {},

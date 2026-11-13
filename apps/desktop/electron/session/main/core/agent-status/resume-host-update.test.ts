@@ -5,7 +5,7 @@ import { sessionBootTasks } from '../boot-tasks';
 
 const mocks = vi.hoisted(() => ({ send: vi.fn(async (..._args: unknown[]) => ({ id: 'notice' })) }));
 vi.mock('../sessions/session-orchestration', () => ({ messageSessionFrom: mocks.send }));
-vi.mock('@main/lib/logger', () => ({ log: { warn: vi.fn() } }));
+vi.mock('@main/lib/logger', async () => ({ log: (await import('@tooling/utils/logger-mock')).createLoggerMock() }));
 beforeEach(() => {
   mocks.send.mockClear();
   for (const failure of sessionBootTasks.snapshot()) sessionBootTasks.clear(failure.operation, failure.taskId);

@@ -33,7 +33,7 @@ vi.mock('@main/db/client', () => ({ db: {
   select: () => ({ from: () => ({ where: (id: string) => ({ get: () => state.rows.get(id) }) }) }),
 } }));
 vi.mock('@main/lib/events', () => ({ events: { emit: vi.fn() } }));
-vi.mock('@main/lib/logger', () => ({ log: { warn: vi.fn() } }));
+vi.mock('@main/lib/logger', async () => ({ log: (await import('@tooling/utils/logger-mock')).createLoggerMock() }));
 vi.mock('./session-orchestration', () => ({ stopExactSessionpageSession: vi.fn(async () => true) }));
 vi.mock('./sessions-on-screen', () => ({ sessionOnScreen: () => false }));
 vi.mock('./tui-resume-exactness', () => ({ tuiResumesExactly: () => true }));

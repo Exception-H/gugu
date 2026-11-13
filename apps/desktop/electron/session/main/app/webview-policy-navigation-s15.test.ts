@@ -12,7 +12,7 @@ vi.mock('electron', () => ({ app: { on: () => undefined }, webContents: { getAll
 vi.mock('@main/core/extensions/bridge-preload-path', () => ({ extensionBridgePreloadCandidates: () => [], resolveExtensionBridgePreload: () => null }));
 vi.mock('@main/core/extensions/extension-session', () => ({ extensionIdForSession: () => 'board', configuredExtensionIds: () => new Set(['board']) }));
 vi.mock('@main/core/extensions/extension-bridge', () => ({ reportBlockedNavigation: (...args: unknown[]) => void reported.push(args) }));
-vi.mock('@main/lib/logger', () => ({ log: { warn: () => undefined, error: () => undefined, info: () => undefined } }));
+vi.mock('@main/lib/logger', async () => ({ log: (await import('@tooling/utils/logger-mock')).createLoggerMock() }));
 
 const { governWebContents } = await import('./webview-policy');
 

@@ -23,10 +23,7 @@ vi.mock('./workspace-factory', () => ({ createWorkspaceFactory: mocks.createWork
 vi.mock('./workspace-registry', () => ({
   workspaceRegistry: { acquire: mocks.acquire, teardown: mocks.teardown },
 }));
-vi.mock('@main/lib/logger', () => {
-  const log = { warn: vi.fn(), info: vi.fn(), error: vi.fn(), debug: vi.fn(), child: () => log };
-  return { log };
-});
+vi.mock('@main/lib/logger', async () => ({ log: (await import('@tooling/utils/logger-mock')).createLoggerMock() }));
 
 const { WorkspaceBootstrapService } = await import('./workspace-bootstrap-service');
 

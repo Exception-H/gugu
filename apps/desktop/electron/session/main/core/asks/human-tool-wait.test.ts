@@ -8,7 +8,7 @@ vi.mock('electron', () => ({ app: { getPath: () => '/tmp' }, safeStorage: {}, po
 vi.mock('@main/core/extensions/extension-agent-context', () => ({ agentSessionContext: vi.fn(async () => null) }));
 vi.mock('../extensions/extension-bridge-relay', () => ({ requestExtensionInstallConsent: vi.fn(), closeExtensionInstallConsent: vi.fn() }));
 vi.mock('@gugu/core/local/state/paths', () => ({ resolveGuguHome: () => fixture.root }));
-vi.mock('@main/lib/logger', () => ({ log: { error: vi.fn(), warn: vi.fn() } }));
+vi.mock('@main/lib/logger', async () => ({ log: (await import('@tooling/utils/logger-mock')).createLoggerMock() }));
 vi.mock('@main/core/agent-status/agent-status-writer', () => ({ agentStatusWriter: { reportHostWait: vi.fn(), on: vi.fn() } }));
 vi.mock('../sessions/agent-question-store', () => ({ readAgentQuestionRecords: () => [], rememberAgentQuestion: vi.fn(), settleAgentQuestionRecord: vi.fn() }));
 vi.mock('../session-timeline/service', () => ({ readSessionRow: () => ({ projectId: 'project' }), syncAsked: vi.fn() }));

@@ -19,9 +19,7 @@ vi.mock('node:fs', async (importOriginal) => {
   return { ...patched, default: patched };
 });
 
-vi.mock('@main/lib/logger', () => ({
-  log: { warn: vi.fn(), error: vi.fn(), info: vi.fn() },
-}));
+vi.mock('@main/lib/logger', async () => ({ log: (await import('@tooling/utils/logger-mock')).createLoggerMock() }));
 
 const {
   resolveAgentExecutable,

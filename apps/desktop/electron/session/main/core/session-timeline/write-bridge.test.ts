@@ -29,7 +29,7 @@ const state = vi.hoisted(() => ({
 vi.mock('@main/core/sessions/session-life', () => ({
   sessionLife: () => ({ enqueue: (input: unknown) => { state.enqueued.push(input); return { seq: 1, state: 'queued' }; } }),
 }));
-vi.mock('@main/lib/logger', () => ({ log: { warn: (_msg: string, data: unknown) => state.warnings.push(data), info: () => {}, error: () => {} } }));
+vi.mock('@main/lib/logger', async () => ({ log: (await import('@tooling/utils/logger-mock')).createLoggerMock({ warn: (_msg: unknown, data: unknown) => state.warnings.push(data) }) }));
 
 // 附件那几行由 turn-files 拼(它自己的测试钉格式);这里只看它们怎么接进这一轮。
 vi.mock('./turn-files', () => ({

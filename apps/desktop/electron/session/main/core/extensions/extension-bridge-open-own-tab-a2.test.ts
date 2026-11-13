@@ -32,7 +32,7 @@ vi.mock('@main/core/extensions/extension-background', () => ({ extensionBackgrou
 vi.mock('@main/core/extensions/extensions-root', () => ({
   extensionsService: () => ({ grantedCapabilities: () => [], hasCapability: () => true, get: () => ({ manifest: { name: 'Data Lens' } }) }),
 }));
-vi.mock('@main/lib/logger', () => ({ log: { warn: vi.fn(), error: vi.fn(), info: vi.fn() } }));
+vi.mock('@main/lib/logger', async () => ({ log: (await import('@tooling/utils/logger-mock')).createLoggerMock() }));
 
 const CHAT = '0b000000-0000-4000-8000-0000000000a2';
 const file = { document: false, contentType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', version: 2, size: 4096 };

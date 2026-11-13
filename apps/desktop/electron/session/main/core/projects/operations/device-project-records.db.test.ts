@@ -22,10 +22,7 @@ vi.mock('@main/lib/events', () => ({
     return () => mocks.taps.delete(tap);
   },
 }));
-vi.mock('@main/lib/logger', () => {
-  const log = { warn: vi.fn(), info: vi.fn(), error: vi.fn(), debug: vi.fn() };
-  return { log };
-});
+vi.mock('@main/lib/logger', async () => ({ log: (await import('@tooling/utils/logger-mock')).createLoggerMock() }));
 
 import { setProjectGroupHost, type ProjectGroupHost } from '../project-group-host';
 import { isoFromProjectTimestamp, listDeviceProjectRecords, onDeviceProjectsMaybeChanged } from './device-project-records';

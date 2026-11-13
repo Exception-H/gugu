@@ -35,7 +35,7 @@ vi.mock('electron', () => ({
   },
 }));
 const warned = vi.hoisted(() => [] as unknown[]);
-vi.mock('@main/lib/logger', () => ({ log: { warn: (...args: unknown[]) => void warned.push(args) } }));
+vi.mock('@main/lib/logger', async () => ({ log: (await import('@tooling/utils/logger-mock')).createLoggerMock({ warn: (...args: unknown[]) => void warned.push(args) }) }));
 vi.mock('./bridge-preload-path', () => ({ resolveExtensionBridgePreload: () => '/preload.js' }));
 vi.mock('./extension-check-source', () => ({ sourceLine: () => null, staticHints: () => [] }));
 vi.mock('./extension-bridge', () => ({

@@ -6,7 +6,7 @@ import type { TaskExchangePage } from '@shared/core/sessions/task-collaboration'
 
 const state = vi.hoisted(() => ({ db: undefined as AppDb | undefined }));
 vi.mock('@main/db/client', () => ({ get db() { if (!state.db) throw new Error('Missing test database'); return state.db; } }));
-vi.mock('@main/lib/logger', () => ({ log: { warn: vi.fn() } }));
+vi.mock('@main/lib/logger', async () => ({ log: (await import('@tooling/utils/logger-mock')).createLoggerMock() }));
 vi.mock('../sessions/session-life', async () => {
   const { enqueuePending } = await vi.importActual<typeof import('../sessions/session-pending')>('../sessions/session-pending');
   return { sessionLife: () => ({ enqueue: (input: Parameters<typeof enqueuePending>[0]) => enqueuePending(input), start: vi.fn() }) };

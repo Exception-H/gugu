@@ -110,9 +110,7 @@ vi.mock('@main/db/client', async () => {
 });
 
 vi.mock('./migrate-lifecycle-outbox', () => ({ migrateStrandedLifecycleOutbox: () => 0 }));
-vi.mock('@main/lib/logger', () => ({
-  log: { warn: vi.fn(), error: vi.fn() },
-}));
+vi.mock('@main/lib/logger', async () => ({ log: (await import('@tooling/utils/logger-mock')).createLoggerMock() }));
 
 vi.mock('@main/lib/events', () => ({
   events: { emit: state.emit },

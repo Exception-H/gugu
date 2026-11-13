@@ -20,7 +20,7 @@ const store = vi.hoisted(() => ({
 }));
 
 vi.mock('electron', () => ({ app: { getApplicationNameForProtocol: () => electron.defaultBrowserName } }));
-vi.mock('@main/lib/logger', () => ({ log: { info: vi.fn(), warn: vi.fn(), error: vi.fn(), debug: vi.fn() } }));
+vi.mock('@main/lib/logger', async () => ({ log: (await import('@tooling/utils/logger-mock')).createLoggerMock() }));
 vi.mock('./browser-profile-session', () => ({
   configureBrowserProfileSession: (partition: string) => {
     store.partitions.push(partition);

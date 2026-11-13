@@ -16,7 +16,7 @@ vi.mock('@main/core/provider-accounts/provider-account-registry-instance', () =>
   },
 }));
 vi.mock('electron', () => ({ app: { getPath: () => state.home } }));
-vi.mock('@main/lib/logger', () => ({ log: { info: vi.fn(), warn: vi.fn() } }));
+vi.mock('@main/lib/logger', async () => ({ log: (await import('@tooling/utils/logger-mock')).createLoggerMock() }));
 // Claude 凭据一律走文件:❌ 让测试读写跑测试那台机器的登录钥匙串。
 vi.mock('./claude-credential-store', async (importOriginal) => {
   const actual = await importOriginal<typeof import('./claude-credential-store')>();

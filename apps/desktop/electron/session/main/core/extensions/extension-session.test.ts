@@ -91,9 +91,7 @@ vi.mock('electron', () => ({
   net: { fetch: vi.fn(async (url: string) => new Response(url, { status: 200 })) },
 }));
 
-vi.mock('@main/lib/logger', () => ({
-  log: { warn: vi.fn(), debug: vi.fn(), error: vi.fn(), info: vi.fn() },
-}));
+vi.mock('@main/lib/logger', async () => ({ log: (await import('@tooling/utils/logger-mock')).createLoggerMock() }));
 
 import { extensionPartition } from '@shared/extensions/partition';
 import { log } from '@main/lib/logger';

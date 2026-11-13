@@ -11,7 +11,7 @@ vi.mock('@main/db/client', () => ({
     return mocks.db
   },
 }))
-vi.mock('@main/lib/logger', () => ({ log: { warn: vi.fn() } }))
+vi.mock('@main/lib/logger', async () => ({ log: (await import('@tooling/utils/logger-mock')).createLoggerMock() }))
 
 import { log } from '@main/lib/logger'
 import { migrateStrandedLifecycleOutbox } from './migrate-lifecycle-outbox'

@@ -64,7 +64,7 @@ vi.mock('@main/core/sessions/platform-model-selection', () => ({
   // The name kept with the decision (filled once per session and model, platform-model-selection.db.test).
   sessionModelLabel: async (_id: string, decision: { modelId: string } | undefined) => (decision ? 'GLM 5.3 Flash' : null),
 }));
-vi.mock('@main/lib/logger', () => ({ log: { error: () => {}, warn: () => {}, info: () => {} } }));
+vi.mock('@main/lib/logger', async () => ({ log: (await import('@tooling/utils/logger-mock')).createLoggerMock() }));
 vi.mock('@main/core/sessions/getSessions', () => ({
   getSessions: () => Promise.resolve(rows.map((row) => ({ ...row }))),
 }));

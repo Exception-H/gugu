@@ -134,7 +134,7 @@ const client = {
 vi.mock('@gugu/core/cloud/supabase', () => ({ createGuguSupabaseClient: () => client }))
 vi.mock('@main/core/extensions/account-token', () => ({ currentAccountAccessToken: async () => `h.${Buffer.from(JSON.stringify({ sub: current!.owner })).toString('base64url')}.s` }))
 vi.mock('@main/core/extensions/file-sync', () => ({ fileSync: { ensureFor: () => undefined } }))
-vi.mock('@main/lib/logger', () => ({ log: { warn: () => undefined } }))
+vi.mock('@main/lib/logger', async () => ({ log: (await import('@tooling/utils/logger-mock')).createLoggerMock() }))
 const { handedChatsAs } = await import('../../../apps/desktop/electron/session/main/core/extensions/extension-program-surface')
 
 /** Staged uploads (the bytes the attachments function would read back from OSS), by staging key. */

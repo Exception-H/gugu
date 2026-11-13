@@ -3,7 +3,7 @@ import type { AskAnswer } from '../../../apps/desktop/electron/session/main/core
 const mocks = vi.hoisted(() => ({ ask: vi.fn(), send: vi.fn(), error: vi.fn() }))
 vi.mock('../../../apps/desktop/electron/session/main/core/asks', () => ({ ask: mocks.ask }))
 vi.mock('../../../apps/desktop/electron/session/main/core/sessions/sendMessage', () => ({ sendMessage: mocks.send }))
-vi.mock('@main/lib/logger', () => ({ log: { error: mocks.error } }))
+vi.mock('@main/lib/logger', async () => ({ log: (await import('@tooling/utils/logger-mock')).createLoggerMock({ error: mocks.error }) }))
 import { postAgentQuestion } from '../../../apps/desktop/electron/session/main/core/sessions/agent-question'
 import { readQuestionAnswerDelivery } from '../../../packages/session-core/src/session-record/question-answer'
 

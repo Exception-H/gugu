@@ -39,7 +39,7 @@ vi.mock('@main/core/extensions/extensions-root', () => ({
     get: () => ({ manifest: { name: '随手记' } }),
   }),
 }));
-vi.mock('@main/lib/logger', () => ({ log: { warn: vi.fn(), error: vi.fn(), info: vi.fn() } }));
+vi.mock('@main/lib/logger', async () => ({ log: (await import('@tooling/utils/logger-mock')).createLoggerMock() }));
 // The session the tab is in is named to the App as its agent (F35), and main reads its own facts (真源原则 13).
 vi.mock('@main/core/sessionpage/sessionpage-session-agent', () => ({ agentIdsBySession: async () => new Map([['task-1', 'user:agent-1']]) }));
 const workingCopy = fs.mkdtempSync(path.join(os.tmpdir(), 'ext-relay-'));
