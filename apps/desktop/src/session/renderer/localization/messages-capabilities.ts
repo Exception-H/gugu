@@ -68,8 +68,6 @@ export const enUSCapabilityMessages = {
   'terminal.optionAsMeta': 'Use Option as Meta key',
 
   // ── settings · left sidebar metadata ───────────────────────────────────────
-  'sidebarMeta.stateGroups': 'Group tasks by status',
-  'sidebarMeta.stateGroupsToggle': 'Group left sidebar tasks by status',
   'sidebarMeta.agentNameOnHover': 'Show the identity card on hover',
   'sidebarMeta.agentNameOnHoverToggle': 'Show the identity card on hover',
 
@@ -441,6 +439,9 @@ export const enUSCapabilityMessages = {
   'agentsPage.connectionGroup': 'Connections',
   'agentsPage.currentConnection': 'Current connection',
   'agentsPage.connectionAddHint': 'Account sign-in or API Key',
+  'agentsPage.connectionAddHintApiKey': 'API Key',
+  'agentsPage.connectionAddHintAccount': 'Account sign-in',
+  'agentsPage.noConnection': 'None',
   'agentsPage.canUseGuguModels': 'Gugu models are available',
   'agentsPage.sourceHeading': 'Source',
   'agentsPage.sourceLocal': 'Installed on this computer',
@@ -1008,8 +1009,6 @@ export const zhCNCapabilityMessages: Record<CapabilityMessageKey, string> = {
   'terminal.optionAsMeta': '把 Option 作为 Meta 键',
 
   // ── 设置 · 左侧栏信息 ───────────────────────────────────────────────────────
-  'sidebarMeta.stateGroups': '二级分类',
-  'sidebarMeta.stateGroupsToggle': '左侧栏按状态分二级分类',
   'sidebarMeta.agentNameOnHover': '悬浮显示身份卡',
   'sidebarMeta.agentNameOnHoverToggle': '悬浮时显示身份卡',
 
@@ -1371,6 +1370,9 @@ export const zhCNCapabilityMessages: Record<CapabilityMessageKey, string> = {
   'agentsPage.connectionGroup': '连接',
   'agentsPage.currentConnection': '当前连接',
   'agentsPage.connectionAddHint': '账号登录或 API Key',
+  'agentsPage.connectionAddHintApiKey': 'API Key',
+  'agentsPage.connectionAddHintAccount': '账号登录',
+  'agentsPage.noConnection': '没有',
   'agentsPage.canUseGuguModels': '可使用咕咕模型',
   'agentsPage.sourceHeading': '程序来源',
   'agentsPage.sourceLocal': '本机已安装',

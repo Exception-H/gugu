@@ -90,11 +90,6 @@ function waitingOn(messages: readonly WaitLine[], memberReadSeqs: Readonly<Recor
   return waiting
 }
 
-/** What to look up in `chat.message_agent_wakes` before `deliveryWaits` can answer. */
-export function pendingDeliveryMessageIds(messages: readonly WaitLine[], memberReadSeqs: Readonly<Record<string, number>>): string[] {
-  return [...new Set(waitingOn(messages, memberReadSeqs).map((wait) => wait.message.id))].sort()
-}
-
 /**
  * My messages still waiting on an agent: it has a pending-delivery row in their line that still holds one of its unread
  * messages from before the row, and this message wakes it (`wakes` = chat.message_agent_wakes, the host's own answer).

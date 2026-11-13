@@ -17,7 +17,7 @@ import {
   sessionChangedChannel,
   sessionCreatedChannel,
 } from '@shared/core/sessions/sessionEvents';
-import type { Session } from '@shared/core/sessions/sessions';
+import { sessionBornInChatId, type Session } from '@shared/core/sessions/sessions';
 import { firstUtteranceOf, initialAgentStatus } from '@shared/core/sessions/initial-agent-status';
 import { gitWorktreeUpdateChannel } from '@shared/core/git/events';
 import { prSyncProgressChannel, prUpdatedChannel } from '@shared/core/pull-requests/prEvents';
@@ -348,7 +348,7 @@ export class ProjectSessionsStore {
     return this._loadPromise;
   }
 
-  async createSession(params: CreateSessionParams, options?: { deferFirstTurn?: boolean; onOptimistic?: () => void }) {
+  async createSession(params: CreateSessionParams, options?: { placingFiles?: boolean; onOptimistic?: () => void }) {
     const ic = params.sessionConfig.initialSession;
     if (!ic) throw new Error('createSession: a session is created together with its initial agent config');
     const id = ic.id;
@@ -373,6 +373,10 @@ export class ProjectSessionsStore {
       startupOrigin: ic.startupOrigin,
       initialMessageId: ic.initialMessageId,
       taskChatId: ic.taskChatId,
+      // #2599 where this agent lives, by the row's own rule: this object stays the session's data after the host's
+      // `session:created` arrives (acceptCreatedSession keeps the one it holds), so leaving it out would show a just-created
+      // agent nowhere until the next restart.
+      bornInChatId: sessionBornInChatId({ birthChatId: params.birthGroup?.chatId, taskChatId: ic.taskChatId }),
       // spec session-resume：创建 = 带着第一句话开一件活，那句话此刻就在手上。漏掉它，面板会在
       // 首轮落进 transcript 之前把这条会话读成「空白会话」，于是「今天我们做点什么？」这块占位页
       // 闪一下再消失，输入框也跟着从「随心输入」切成「要求后续变更」—— 一次纯粹的假状态。
@@ -402,10 +406,10 @@ export class ProjectSessionsStore {
     }
   }
 
-  private async _completeCreateSession(params: CreateSessionParams, optimistic: Session, options?: { deferFirstTurn?: boolean }) {
+  private async _completeCreateSession(params: CreateSessionParams, optimistic: Session, options?: { placingFiles?: boolean }) {
     const id = optimistic.id;
     const outcome = await rpc.sessionCreate
-      .createAndProvisionSession(JSON.parse(JSON.stringify(toJS(params))) as typeof params, options?.deferFirstTurn ? { deferFirstTurn: true } : undefined)
+      .createAndProvisionSession(JSON.parse(JSON.stringify(toJS(params))) as typeof params, options?.placingFiles ? { placingFiles: true } : undefined)
       .catch((e: unknown) => {
         // 抛出来的是未知错误：原文逐字存进 store，渲染时原样呈现、永不翻译。
         const message = e instanceof Error ? e.message : String(e);
@@ -458,13 +462,13 @@ export class ProjectSessionsStore {
     this._settingsStore.pageData.invalidate();
 
     // The host already prepared the workspace in the same call; its answer goes through the one provision path.
-    await this._doProvision(id, options, async () => {
+    await this._doProvision(id, async () => {
       if (outcome.stage === 'provision-error') throw new Error(outcome.message);
       return outcome.result;
     });
   }
 
-  async provisionSession(sessionId: string, options?: { deferFirstTurn?: boolean }): Promise<void> {
+  async provisionSession(sessionId: string): Promise<void> {
     // An open of a task still being created or prepared joins that one host operation before any device read.
     const inFlight = this._provisionPromises.get(sessionId);
     if (inFlight) return inFlight;
@@ -484,7 +488,7 @@ export class ProjectSessionsStore {
       session.phase = 'provision';
     });
 
-    const promise = this._doProvision(sessionId, options).finally(() => {
+    const promise = this._doProvision(sessionId).finally(() => {
       this._provisionPromises.delete(sessionId);
     });
 
@@ -492,8 +496,8 @@ export class ProjectSessionsStore {
     return promise;
   }
 
-  private async _doProvision(sessionId: string, options?: { deferFirstTurn?: boolean },
-    provision = () => rpc.sessionCreate.provisionWorkspace(sessionId, options)): Promise<void> {
+  private async _doProvision(sessionId: string,
+    provision = () => rpc.sessionCreate.provisionWorkspace(sessionId)): Promise<void> {
     const session = this.sessions.get(sessionId);
     if (!session || !isUnprovisioned(session)) return;
 

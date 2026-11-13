@@ -134,6 +134,10 @@ export interface MessageItem {
   file_metadata?: FileMetadata | null
   /** Local sending preview only; committed dimensions come from the verified file metadata. */
   image_dimensions?: { width: number; height: number }
+  /** #2581 Files sent at once: the rows of one send share this id and are one message on screen. */
+  send_group_id?: string | null
+  /** #2581 How many files that send holds (2–10), so a reader knows when it has them all. */
+  send_group_size?: number | null
   seq: number
   content: string | null
   content_type: MessageContentType
@@ -327,6 +331,11 @@ export interface Device {
    */
   projects?: DeviceProject[]
   /**
+   * 这一端上一次读这台机器的 `projects` 没读到(原因)。`projects` 仍是更早读到的那份,画它的地方标「上次的」;
+   * 读到了 = 缺席。由设备 store 记(withProjectsRead),库里没有这一列。
+   */
+  projects_error?: string
+  /**
    * #7199 这一行是这个账号的云电脑时,它此刻的样子(休眠中 / 正在唤醒 / 运行中)。库里没有这一列:客户端按云电脑管家
    * 的 /state 补上(管家给的 deviceId 认是哪一行)。睡着时 `is_online` 照实为 false,但 ❌ 按离线处理 —— 见
    * `deviceAcceptsWork`。不是云电脑 = 缺席。
@@ -358,6 +367,8 @@ export interface DeviceSessionSummary {
    * 手机端见到 undefined 画中性态，❌ 不补默认值冒充事实。
    */
   isPinned?: boolean
+  /** #2548 固定到左侧栏(桌面左侧栏另有一行);同上,缺席 = 老宿主不报。 */
+  isPinnedToSidebar?: boolean
   unseen?: boolean
   parentConversationId?: string | null
   /**

@@ -59,7 +59,7 @@ describe('落库的权限档必须能读回来(#5597)', () => {
       },
     );
 
-    // 阴控:没写档的行(迁移 0051 漏下的坏行)读回来必须**仍然没有** permissionMode —— 映射器❌不许替它补一个档,
+    // 阴控:没写档的行(迁移 0052 漏下的坏行)读回来必须**仍然没有** permissionMode —— 映射器❌不许替它补一个档,
     // 读取端(resolveSessionPermissionMode,只有一处)响亮报错。
     it(`${runtime} 会话:没写档的行不得凭空长出一个档,读档时报错`, () => {
       const stored = row({ ...base, runtime, permissionMode: 'edit' }) as { config: { permissionMode?: unknown } };
@@ -91,7 +91,7 @@ describe('终端腿只收得到这一家档位表里的档(#6221)', () => {
     expect(argv('qwen', 'full-access')).toContain('--approval-mode=yolo');
   });
 
-  it('没有档位的会话不起:读档报错,❌ 按默认档猜(每条会话都记着档,迁移 0051 补齐存量)', () => {
+  it('没有档位的会话不起:读档报错,❌ 按默认档猜(每条会话都记着档,迁移 0052 补齐存量)', () => {
     expect(() => argv('qwen', undefined)).toThrow('no permission tier');
   });
 

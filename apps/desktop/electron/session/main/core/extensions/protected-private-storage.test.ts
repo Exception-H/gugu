@@ -12,7 +12,7 @@ import { packExtensionArchive } from './extension-archive';
 import { importProjectFile } from '../../../../projectFileImport';
 
 const fixture = vi.hoisted(() => ({ root: '' }));
-vi.mock('./app-files', () => ({ localRootOf: async () => ({ workspaceRoot: fixture.root }) }));
+vi.mock('./app-files', () => ({ localRootOf: async () => ({ workspaceRoot: fixture.root, recordedRoot: fixture.root }) }));
 let root: string;
 let secret: string;
 let surface: LocalSurface;

@@ -73,6 +73,7 @@ import { openChatOnScreen } from './features/chats/open-chat';
 import { showGroupParticipant } from './features/chats/group-participant-actions';
 import { groupParticipantRequests } from './features/chats/group-participant-requests';
 import { wireGroupParticipantAccount } from './features/chats/group-participant-account';
+import { openSidebarPin, unpinSessionFromSidebar } from './features/sidebar/sidebar-pin-actions';
 import { installSessionTabViews, prewarmSessionTabViews } from './features/sessions/session-tab-views';
 import { appState } from './lib/stores/app-state';
 import { restoreSavedScreenSessionLocations, savedScreenSessionIds } from './features/sessions/restore-session-projects';
@@ -125,6 +126,10 @@ function renderSessionTree(container: HTMLElement, mountEl: HTMLElement | undefi
           <App />
         </ErrorBoundary>
       </SessionLocalizationProvider>
+      {/* @@@root-stays-put: this page's popups portal into the mount element, after the tree above. With this fixed
+          sibling the page is never :last-child of the mount, so opening a popup does not re-style every table cell,
+          list item and paragraph on the page (same reason as the element after #root in index.html). */}
+      <div data-root-sibling hidden />
     </UiPortalContainerProvider>
   );
 }
@@ -159,6 +164,8 @@ async function bootstrap() {
     openChatResource,
     openGroupChat: (sourceChatId, chatId) => showGroupParticipant(sourceChatId, { kind: 'chat', chatId }),
     prepareGroupSession: (sourceChatId, target) => groupParticipantRequests.prepare(sourceChatId, target),
+    unpinFromSidebar: unpinSessionFromSidebar,
+    openSidebarPin,
   });
   installRemoteHostSessionpageBridges(window, () => appState.navigation.navigate('new-session'));
   if (hasEntryRoot(container)) {

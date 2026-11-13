@@ -114,7 +114,7 @@ interface SurfaceBinding {
   filePath: string | null;
   /**
    * A person opened `filePath`, named absolute, from the host's UI (`@@@outside-file`): its machine lets the page read it,
-   * read-only, even outside its working copy. Not for the host opening it for an agent or an App, nor a page an agent works.
+   * read-only, even outside its working copy. Not for the host opening it for an App, nor a page an agent works.
    */
   personOpened?: true;
   /** The chat file the host handed this surface (`ctx.file`). */
@@ -587,16 +587,13 @@ async function workspaceRelativeFile(place: WorkspacePlace | null, filePath?: st
   if (!path.isAbsolute(filePath)) return filePath.split(path.sep).join('/');
   if (!place) return null;
   const { localRootOf } = await import('@main/core/extensions/app-files');
-  const root = await localRootOf(place).then((found) => found.workspaceRoot, () => null);
-  if (!root) return filePath;
-  // Gone from the disk: a restored tab still names it, and the page says so when it reads it.
-  const real = await fs.promises.realpath(filePath).catch(() => filePath);
-  const relative = path.relative(root, real);
-  if (!relative || relative.startsWith('..') || path.isAbsolute(relative)) return filePath;
-  return relative.split(path.sep).join('/');
+  const found = await localRootOf(place).catch(() => null);
+  if (!found) return filePath;
+  const { pathInWorkingCopy } = await import('@main/core/extensions/working-copy-files');
+  return pathInWorkingCopy(found, filePath) ?? filePath;
 }
 
-/** @@@outside-file - a page bound to a file named absolute that a person opened, not the host for an agent or an App. */
+/** @@@outside-file - a page bound to a file named absolute that a person opened, not the host for an App. */
 function personOpened(filePath: string | null, byHost: boolean | undefined, operator: ExtensionOperator | undefined): { personOpened?: true } {
   return filePath && path.isAbsolute(filePath) && !byHost && operator?.kind !== 'agent' ? { personOpened: true } : {};
 }
@@ -653,7 +650,7 @@ export async function bindExtensionSurface(input: {
   tabKind: string;
   /** Set only when the tab was opened for a file of its workspace this extension claimed. */
   filePath?: string;
-  /** The host opened `filePath` for an agent or an App (`open_in_tab`, `files.openWith`, an App's link), not a person. */
+  /** The host opened `filePath` for an App (`files.openWith`, an App's link), not a person or an agent of theirs. */
   byHost?: boolean;
   itemId?: string;
   /** Who works it: the person unless main binds it for an agent (`app_check`); never the renderer's to say. */

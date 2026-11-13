@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react'
+import { useCallback, useEffect, useMemo, useState, useSyncExternalStore, type ReactNode } from 'react'
 import { useTranslation } from 'react-i18next'
 import type { ContactGroupChat, ContactUser } from '@gugu/core/shared/types/contacts'
 import { AddFriendSearch } from '@/components/AddFriendSearch'
@@ -28,6 +28,7 @@ import { deviceSessionsOf, useLiveDeviceSessions } from '@/session/shared/remote
 import type { AuthUser } from '@/store/auth'
 import { useContactsStore } from '@/store/contactsContext'
 import { useDevicesStore } from '@/store/devicesContext'
+import { accountProjectsStore } from '@/session/renderer/features/projects/stores/account-projects-store'
 import { useToast } from '@/components/toastContext'
 import { messageForUser } from '@/lib/userFacingError'
 import { projectRpcOn } from './projectRpc'
@@ -35,6 +36,7 @@ import { matchesQuery, partnerFriends, partnerGroupAgents, partnerProjects, proj
 import { PhoneNewProjectPage, type CreatedProject } from './PhoneNewProjectPage'
 import { PhoneProjectContacts } from './PhoneProjectContacts'
 import { ProjectFolderAvatar } from './ProjectFolderAvatar'
+import { ChatGroupAvatar } from '@/components/chat/ChatGroupAvatar'
 import './partners.css'
 
 /** 推在「伙伴」首页上的一页:整屏、没有底栏,返回一步回到下面那一页。 */
@@ -128,7 +130,8 @@ export function PhonePartnersPage({
   }, [newProjectRequest])
 
   const machines = useMemo(() => directoryMachines(devices, isHome), [devices, isHome])
-  const projects = useMemo(() => partnerProjects(machines), [machines])
+  const accountList = useSyncExternalStore(accountProjectsStore.subscribe, () => accountProjectsStore.projects)
+  const projects = useMemo(() => partnerProjects(accountList, machines, isHome), [accountList, machines, isHome])
   const sessionsOf = useCallback((deviceId: string) => {
     const device = machines.find((row) => row.device_id === deviceId)
     return device ? deviceSessionsOf(device, liveSessions) : { sessions: [], hostOnline: false }
@@ -257,7 +260,9 @@ export function PhonePartnersPage({
                 const open = () => push({ kind: 'project', key: project.key })
                 return (
                   <ListRow key={project.key} mobile role="button" tabIndex={0} data-testid="phone-partners-project"
-                    leading={<ProjectFolderAvatar coverId={project.coverId} running={runningCount(projectSessions(project, id => sessionsOf(id).sessions, id => sessionsOf(id).hostOnline))} />}
+                    leading={project.chatId
+                      ? <ChatGroupAvatar chatId={project.chatId} name={project.name} size={40} />
+                      : <ProjectFolderAvatar coverId={project.coverId} running={runningCount(projectSessions(project, id => sessionsOf(id).sessions, id => sessionsOf(id).hostOnline))} />}
                     title={project.name} onClick={open} onKeyDown={rowKeyActivate(open)} />
                 )
               })}

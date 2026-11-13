@@ -165,6 +165,21 @@ async function outsideFile(place: WorkspacePlace, file: string, handed: HandedFi
 }
 
 /**
+ * @@@working-copy-place - an absolute path's place in a working copy: relative, POSIX separators; null outside it. Placed by
+ * its name under either spelling of the root (`localRootOf`): the real one, and the one its record names (a server's task
+ * folder through `accounts/<id>` → `account`) — or every file an agent names there is outside its own working copy. By
+ * name, never by following the file: a link in the working copy to a file outside stays a link in it, which no read follows.
+ * The one answer for what a tab is bound to (`workspaceRelativeFile`) and for what its reads reach (`fileRootOf`).
+ */
+export function pathInWorkingCopy(root: { workspaceRoot: string; recordedRoot: string }, file: string): string | null {
+  for (const base of new Set([root.workspaceRoot, path.resolve(root.recordedRoot)])) {
+    const relative = path.relative(base, path.resolve(file));
+    if (relative && relative !== '..' && !relative.startsWith(`..${path.sep}`) && !path.isAbsolute(relative)) return relative.split(path.sep).join('/');
+  }
+  return null;
+}
+
+/**
  * Where the chunked transfer finds a file a call names: by its path in the working copy (named absolute or not), or, to read, the file
  * outside it a person opened (`outsideFile`), in its real folder. Both then go through the same reads and writes, on
  * the machine the file is on, with the working copy's bound and private storage shut.
@@ -177,10 +192,11 @@ export async function fileRootOf(place: WorkspacePlace, file: string, handed: Ha
     await requireAgentFileTreeAccess(root);
     return { root, path: file };
   }
-  const root = await localRootOf(place).then((found) => found.workspaceRoot, () => null);
-  if (root !== null && file.startsWith(root + path.sep)) {
-    await requireAgentFileTreeAccess(root);
-    return { root, path: file.slice(root.length + 1) };
+  const found = await localRootOf(place).catch(() => null);
+  const inside = found === null ? null : pathInWorkingCopy(found, file);
+  if (found !== null && inside !== null) {
+    await requireAgentFileTreeAccess(found.workspaceRoot);
+    return { root: found.workspaceRoot, path: inside };
   }
   const real = await outsideFile(place, file, handed);
   return { root: path.dirname(real), path: path.basename(real) };

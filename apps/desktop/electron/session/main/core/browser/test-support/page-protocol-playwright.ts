@@ -1,3 +1,4 @@
+import '../../test-support/headless-electron';
 import { app, BrowserWindow, WebContentsView } from 'electron';
 import '../../../../../page-navigation-bootstrap';
 import { createServer } from 'node:http';
@@ -49,7 +50,9 @@ async function run() {
     socket.write(`HTTP/1.1 101 Switching Protocols\r\nUpgrade: websocket\r\nConnection: Upgrade\r\nSec-WebSocket-Accept: ${accept}\r\n\r\n`);
     socket.once('data', () => socket.end(Buffer.from([0x88, 0])));
   });
-  await new Promise<void>(resolve => server.listen(0, resolve));
+  // Bind the address the pages load from. A wildcard port 0 can be one another process already holds on
+  // 127.0.0.1, and 127.0.0.1 then reaches that process instead of this server.
+  await new Promise<void>(resolve => server.listen(0, '127.0.0.1', resolve));
   port = (server.address() as { port: number }).port;
   const window = new BrowserWindow({ width: 1100, height: 800, show: false });
   const view = new WebContentsView({ webPreferences: { sandbox: true, partition: 'persist:page-protocol-probe' } });

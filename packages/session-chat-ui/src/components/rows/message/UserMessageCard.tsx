@@ -43,7 +43,6 @@ import {
   userMessageRoot,
   card,
   cardFadeOverlay,
-  cardRoot,
   cardVars,
   stopButtonOverlay,
   userCardGroup,
@@ -197,7 +196,7 @@ export function UserMessageCard(props: { data: ChatMessage; ctx: RenderCtx; vars
       class={userMessageRoot}
       style={{
         position: 'relative',
-        ...assignInlineVars(cardVars, pxTokens({ ...styleVars(), height: 0 })),
+        ...assignInlineVars(cardVars, pxTokens(styleVars())),
         // `base`:整条右对齐到与气泡同一条边(owner 给的参考是 Kimi 那个形状)。
         ...(isDoubleColumnLayout(layout())
           ? { width: `${availableWidth()}px`, 'margin-left': props.conversation && props.data.role === 'assistant' ? '0' : 'auto' }
@@ -228,9 +227,10 @@ export function UserMessageCard(props: { data: ChatMessage; ctx: RenderCtx; vars
       data-user-card={props.data.id}
       data-conversation-bubble-key={props.conversation ? conversationBubbleKey(props.data) : undefined}
       data-user-card-expandable={props.conversation && !isExpanded() && isOverflowing() ? 'true' : undefined}
-      class={`${card({ state: isOverflowing() && !isExpanded() ? 'overflowing' : 'static', current: isGenerating() })} ${cardRoot} ${userCardGroup}`}
+      class={`${card({ state: isOverflowing() && !isExpanded() ? 'overflowing' : 'static', current: isGenerating() })} ${userCardGroup}`}
       style={{
-        ...assignInlineVars(cardVars, pxTokens({ ...styleVars(), height: cardH() + (destination()?.height ?? 0) })),
+        ...assignInlineVars(cardVars, pxTokens(styleVars())),
+        height: `${cardH() + (destination()?.height ?? 0)}px`,
         // 对话布局里人那一侧的字色由 conversation-message.css 给(跟着气泡底色反色),这里只管 agent 那一侧。
         ...(props.conversation && props.data.role !== 'assistant' ? {} : assignInlineVars({ [themeVars.fgBody]: props.conversation ? themeVars.fg : themeVars.bubbleUserFg, [themeVars.link]: props.conversation ? themeVars.fg : themeVars.bubbleUserFg })),
         // `base` pill: explicit hug width + right alignment. Left as-is in

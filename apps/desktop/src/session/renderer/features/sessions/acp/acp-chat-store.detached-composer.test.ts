@@ -159,7 +159,7 @@ describe('#7342 停下后的权限那一格', () => {
     expect(invoke.mock.calls.some((call) => JSON.stringify(call).includes('"dimension":"permission","modeId":":danger-full-access"'))).toBe(true);
   });
 
-  it('没记档位的记录(迁移 0051 之前的旧宿主):不显示档,❌ 猜一档', () => {
+  it('没记档位的记录(迁移 0052 之前的旧宿主):不显示档,❌ 猜一档', () => {
     const off = attached({ record: { ...record, permissionMode: undefined }, liveModel: 'gpt-5.5', liveUsage: null });
     off.close();
     expect(off.store.detachedPermissionTier).toBeNull();

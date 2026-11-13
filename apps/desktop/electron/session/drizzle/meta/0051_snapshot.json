@@ -2876,6 +2876,14 @@
           "autoincrement": false,
           "default": 0
         },
+        "is_pinned_to_sidebar": {
+          "name": "is_pinned_to_sidebar",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": 0
+        },
         "parent_session_id": {
           "name": "parent_session_id",
           "type": "text",
@@ -3449,6 +3457,6 @@
   "internal": {
     "indexes": {}
   },
-  "id": "3489fb80-7df4-45fc-9d51-e3cb056e5c2e",
+  "id": "1f849db1-9824-4308-bfd9-9376064ccd29",
   "prevId": "8bbf4ada-d82e-41ad-9908-9ede283d95dd"
 }

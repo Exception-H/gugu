@@ -8,7 +8,6 @@ import { X } from '@/lib/icons'
 import type { ChatItem, MessageItem } from '@gugu/core/shared/types/chat'
 import { visibleDeliveryMessages } from '@gugu/core/shared/ui/systemNotice'
 import { projectTurnFailureMessages } from '../../lib/projectTurnFailureMessages'
-import { useDeliveryWaits } from '../../hooks/useDeliveryWaits'
 import type { GroupRosterCandidate } from '@/lib/mention'
 import type { AgentStatusById } from './agentMentionStatusModels'
 import type { MemberProfileCardModel } from '../MemberProfileCard'
@@ -35,6 +34,7 @@ import {
 import { ResizablePane } from '@/layouts/ResizablePane'
 import { prioritizeTopicParticipants } from './topicMentionModels'
 import { useReadReceiptPanel } from '@/hooks/useReadReceiptPanel'
+import { useMessageDelivery } from '@/hooks/useMessageDelivery'
 import { ReadReceiptPopover } from '../ReadReceiptPopover'
 import { ChatBottomDock } from './ChatBottomDock'
 import type { ChatConversation } from '@/store/useChatConversation'
@@ -88,9 +88,9 @@ export type TopicSplitPaneProps = {
    * ⚠️ ❌ 不许拿来源线那份顶上:画出来的是另一条线的读数,而错的环比没有环更坏。
    */
   memberReadSeqs: Record<string, number>
-  onSend: (text: string, toUserIds: readonly string[] | null, replyToMessageId: string | null, isWhisper?: boolean, submittedAt?: number) => Promise<void>
+  onSend: (text: string, toUserIds: readonly string[] | null, replyToMessageId: string | null, isWhisper?: boolean, submittedAt?: number, dependsOn?: string) => Promise<void>
   /** 发附件。回形针在 ChatMessageComposer 里是无条件画的,不接这一口 = 挂得上发不出去。 */
-  onSendAttachments: (files: File[], opts?: { toUserIds?: string[] | null; replyToMessageId?: string | null; isWhisper?: boolean; caption?: string; onSent?: (file: File, index: number) => void }) => Promise<void>
+  onSendAttachments: (files: File[], opts?: { toUserIds?: string[] | null; replyToMessageId?: string | null; isWhisper?: boolean; caption?: string }) => Promise<string | undefined | void>
   /**
    * 能在这一栏里 @ 到的人 = **来源线**的名册。spec:「招 agent 同理——建完之后 @ 它,它就进来了」,
    * 而服务端只放行来源线的成员,所以候选集就取来源线的,❌ 不取话题当前那几个(那样永远拉不进新人)。
@@ -136,7 +136,7 @@ export type TopicSplitPaneProps = {
   /** 气泡里的文件卡点开 —— 与主线同一个处理器。不接 = 分栏里的文件卡点了什么都不发生(#6375)。 */
   onOpenAttachment?: (meta: ParsedAttachment, message?: MessageItem) => void
   onReaction?: (messageId: string, emoji: string) => void
-  onForward?: (msg: MessageItem) => void
+  onForward?: (msg: MessageItem | readonly MessageItem[]) => void
   onDelete?: (messageId: string) => void
 }
 
@@ -232,8 +232,9 @@ export function TopicSplitPane({ viewportKey = 'topic', navigationTarget = false
     [mentionMembers, participantIds],
   )
   const [mentionToInsert, setMentionToInsert] = useState<{ id: string; name: string } | null>(null)
+  const { recipientFacts, deliveryWaits } = useMessageDelivery(messages, memberReadSeqs, memberProfiles)
   const { readReceiptHandle, receiptOf } = useReadReceiptPanel({
-    chatId: topic.chatId, messages, memberReadSeqs, memberProfiles,
+    chatId: topic.chatId, messages, memberReadSeqs, memberProfiles, recipientFacts,
   })
   // 宽度记在本机:拖过一次之后下次打开还是那个宽度(与会话列表同口径)。
   const [width, setWidth] = useState(() => readStoredTopicSplitWidth())
@@ -261,7 +262,6 @@ export function TopicSplitPane({ viewportKey = 'topic', navigationTarget = false
   // 列表行与主线共用历史窗口和分页;分栏没有多选。
   // 已读环有 —— 水位由 useChatConversation 按**这条话题**自己拉,拉不到时是空表(空表就不出环)。
   useChatSearch(topic.chatId, visible !== false, paneRef)
-  const deliveryWaits = useDeliveryWaits(messages, memberReadSeqs)
   const rows = useMemo<ChatListRowItem[]>(
     () => projectTurnFailureMessages(visibleDeliveryMessages(messages)).map((message) => ({ type: 'message' as const, message })),
     [messages],
@@ -310,7 +310,7 @@ export function TopicSplitPane({ viewportKey = 'topic', navigationTarget = false
     rows,
     messages,
     mobile,
-    memberReadSeqs, deliveryWaits,
+    memberReadSeqs, deliveryWaits, recipientFacts,
     // 话题是多人线 ⇒ 与群同口径,收到的气泡上方显发送者名。
     isGroupChat: true,
     memberProfiles,
@@ -336,7 +336,7 @@ export function TopicSplitPane({ viewportKey = 'topic', navigationTarget = false
     onToggleSelect: noop,
     onEnterSelectMode: undefined,
     flashMessageId,
-  }), [showMessage, rows, messages, mobile, memberReadSeqs, deliveryWaits, memberProfiles, memberProfileOpener, onOpenAttachment, readReceiptHandle, onReaction, onForward, onDelete, onQuote, flashMessageId, history, visible])
+  }), [showMessage, rows, messages, mobile, memberReadSeqs, deliveryWaits, recipientFacts, memberProfiles, memberProfileOpener, onOpenAttachment, readReceiptHandle, onReaction, onForward, onDelete, onQuote, flashMessageId, history, visible])
 
   // 手机上话题是来源页的一枚页签:在前面时,返回先回到来源那一枚。
   useBackLayer(onClose, mobile && visible !== false)
@@ -441,11 +441,9 @@ export function TopicSplitPane({ viewportKey = 'topic', navigationTarget = false
           mentionToInsert={mentionToInsert}
           onMentionInserted={() => setMentionToInsert(null)}
           onSend={async (content, opts) => {
-            await onSend(content, opts?.toUserIds ?? null, opts?.replyToMessageId ?? null, opts?.isWhisper, opts?.submittedAt)
+            await onSend(content, opts?.toUserIds ?? null, opts?.replyToMessageId ?? null, opts?.isWhisper, opts?.submittedAt, opts?.dependsOn)
           }}
-          onSendAttachments={async (files, opts) => {
-            await onSendAttachments(files, opts)
-          }}
+          onSendAttachments={onSendAttachments}
           placeholder={t('topic.pane.composerPlaceholder')}
           quoteContent={activeQuote}
           onQuoteConsumed={() => setQuoted(null)}

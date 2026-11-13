@@ -153,7 +153,7 @@ export const NEW_SESSION_PERMISSION_MODE: GuguPermissionMode = 'edit';
 
 /**
  * 一条会话记录的有效档位 —— 界面、聊天面板腿、终端腿**同一个答案**。每条会话都记着档(新建、导入、分叉写进记录;
- * 更早的存量由迁移 0051 补成它们一直实际在用的 'edit')。缺档 = 记录坏了,抛 —— ❌ 按默认值猜:猜出来的档照样会
+ * 更早的存量由迁移 0052 补成它们一直实际在用的 'edit')。缺档 = 记录坏了,抛 —— ❌ 按默认值猜:猜出来的档照样会
  * 显式传给 harness(「不加旗标」不是任何一档,是 harness 自己挑,#7366)。
  */
 export function resolveSessionPermissionMode(session: { permissionMode?: GuguPermissionMode }): GuguPermissionMode {

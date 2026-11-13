@@ -63,7 +63,7 @@ describe('a message link into another chat', () => {
         setChat('b')
         globalThis.window.dispatchEvent(new CustomEvent(UI_EVENTS.chatAsked))
       }
-      const rowProps: MessageListRowProps = { rows, messages, mobile: false, memberReadSeqs: {}, deliveryWaits: new Map(), memberProfiles: {},
+      const rowProps: MessageListRowProps = { rows, messages, mobile: false, memberReadSeqs: {}, deliveryWaits: new Map(), recipientFacts: { agentIds: new Set(), wakes: new Map() }, memberProfiles: {},
         isGroupChat: true, onReaction: noop, onQuote: noop, onForward: noop, onDelete: noop, onVisible: noop, selectMode: false,
         selectedIds: new Set(), onToggleSelect: noop, onEnterSelectMode: noop, flashMessageId, threeParty: undefined,
         readReceiptHandle: undefined, memberProfileOpener: undefined, onOpenTopic: undefined, topicAnchors: undefined, onOpenTopicAnchor: undefined,

@@ -189,7 +189,7 @@ export const extensionsController = createRPCController({
           hiddenTabs: extensionsService().hiddenTabs(),
           disclosure: disclosureOf(extensions.map((entry) => entry.manifest)),
           // Where each came from (E-05): the session page keeps the preinstalled ones out of every session's tabs, and a
-          // chat's card offers an update only of one that came from a chat — the only kind a package from chat may replace.
+          // chat's card offers no update of those — the only kind a package from chat may not replace.
           origins: extensionsService().origins(),
           // 「始终用它」 for the host's open paths. Unreadable is logged and read as none — the
           // person is asked again — rather than taking the whole list down with it.
@@ -280,7 +280,7 @@ export const extensionsController = createRPCController({
     tabKind: string;
     /** The file of its workspace this tab was opened for (an extension claimed its type). */
     filePath?: string;
-    /** The host opened that file for an agent or an App, not a person: a file outside is not read through it (`@@@outside-file`). */
+    /** The host opened that file for an App, not a person or an agent of theirs: a file outside is not read through it (`@@@outside-file`). */
     byHost?: boolean;
     /** The chat file it was opened for (L3). */
     itemId?: string;

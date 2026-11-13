@@ -351,8 +351,8 @@ export const ExtensionBundleCard = observer(function ExtensionBundleCard({ meta,
                 <InstallTarget selectedId={machineId} onSelect={setMachineId} />
                 <span className="flex-1" />
                 {offer?.action === 'elsewhere' && !machine ? (
-                  // E-05: what is here did not come from a chat, so this card cannot update it — said, with the way to the
-                  // App page where it is managed; whether there is a newer one there is for its own source to say.
+                  // E-05: what is here comes with gugu, so this card cannot update it — said, with the way to the App page
+                  // where it is managed.
                   <>
                     <span data-testid="extension-bundle-card-installed-elsewhere" data-from={offer.from ?? 'unknown'} className={`text-[var(--font-caption)] ${muted}`}>
                       {installedHereLine(offer.from, offer.installedVersion)}
